@@ -61,6 +61,7 @@ function createNewTab() {
       preload: join(__dirname, 'preload.js') // 添加 preload 脚本
     }
   })
+
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
@@ -241,3 +242,16 @@ app.on('activate', () => {
 })
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
+
+// ipcMain.on('open-dev-tools-in-new-window', (event) => {
+//   const mainWindow = BrowserWindow.fromWebContents(event.sender)
+//   const devToolsWindow = new BrowserWindow({ width: 800, height: 600 })
+
+//   // 将 DevTools 从主窗口移动到新窗口
+//   mainWindow.webContents.devToolsWebContents.executeJavaScript(`
+//       InspectorFrontendHost.setInspectedWindowTab(null);
+//       InspectorFrontendHost.showWindow();
+//   `)
+//   mainWindow.webContents.devToolsWebContents.setDevToolsWebContents(devToolsWindow.webContents)
+//   devToolsWindow.focus()
+// })

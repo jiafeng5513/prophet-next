@@ -261,3 +261,8 @@ window.electronAPI.onTabTitleUpdated((viewId, title) => {
     titleElement.textContent = `${title} (${tabNumber})`
   }
 })
+
+// window.electronAPI.
+
+// const { ipcRenderer } = require('electron');
+// ipcRenderer.send('open-dev-tools-in-new-window');
