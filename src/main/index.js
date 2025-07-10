@@ -1,6 +1,6 @@
-import { app, shell, BrowserView, WebContentsView, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, WebContentsView, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 // 全局的变量参数
@@ -61,9 +61,18 @@ function createNewTab() {
       preload: join(__dirname, 'preload.js') // 添加 preload 脚本
     }
   })
-
+  updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
+  // 监听窗口移动事件（如果需要）
+  mainWindow.on('move', () => {
+    updateWebViewBounds(mainWindow, view)
+  })
+
+  // 监听窗口大小变化事件
+  mainWindow.on('resize', () => {
+    updateWebViewBounds(mainWindow, view)
+  })
 
   // ��置视图的边界
   const [width, height] = mainWindow.getContentSize()
@@ -101,6 +110,20 @@ function createNewTab() {
   // join(__dirname, '../renderer/index.html')
   setActiveTab(viewId)
   return viewId
+}
+
+// 更新 WebContentsView 边界的函数
+function updateWebViewBounds(window, webView) {
+  // 设置 WebContentsView 填充整个内容区域
+  webView.setBounds({
+    x: 0,
+    y: 40,
+    width: window.getBounds().width,
+    height: window.getBounds().height - 40
+  })
+
+  // 可选：设置缩放因子以适应内容
+  // webView.webContents.setZoomFactor(0.95)
 }
 
 // 重置可视窗口
@@ -160,6 +183,7 @@ ipcMain.on('message-from-tab', (event, message) => {
   // 获取发送消息的标签ID
   const sender = event.sender
   const senderView = Array.from(views.entries()).find(
+    // eslint-disable-next-line no-unused-vars
     ([_, view]) => view.webContents.id === sender.id
   )
 
