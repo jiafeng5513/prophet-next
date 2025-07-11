@@ -1,6 +1,6 @@
 import { app, shell, WebContentsView, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
-import { is } from '@electron-toolkit/utils'
+import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 // 全局的变量参数
@@ -14,6 +14,7 @@ function createWindow() {
     width: 900,
     height: 670,
     show: false,
+    title: 'Prophet-Next',
     autoHideMenuBar: false,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -41,6 +42,7 @@ function createWindow() {
 
   // 创建第一个标签页
   createNewTab()
+  // mainWindow.webContents.openDevTools({ mode: 'left' })
 }
 
 // 创建一个tab
@@ -105,9 +107,16 @@ function createNewTab() {
   view.webContents.on('did-fail-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
+  if (views.size % 2 == 0) {
+    view.webContents.loadURL('https://www.baidu.com')
+  } else {
+    view.webContents.loadURL('https://www.bilibili.com')
+  }
+  // 关键：为 WebContentsView 打开独立的 DevTools
+  // WebContentsView 和mainWindow的DevTools是独立的
+  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立
 
-  // view.webContents.loadURL('https://www.baidu.com')
-  view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  // view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
   // join(__dirname, '../renderer/index.html')
   setActiveTab(viewId)
   return viewId
@@ -131,12 +140,13 @@ function updateWebViewBounds(window, webView) {
 function setActiveTab(viewId) {
   views.forEach((view, id) => {
     if (id === viewId) {
-      view.setBounds({
-        x: 0,
-        y: 40,
-        width: mainWindow.getBounds().width,
-        height: mainWindow.getBounds().height - 40
-      })
+      updateWebViewBounds(mainWindow, view)
+      // view.setBounds({
+      //   x: 0,
+      //   y: 40,
+      //   width: mainWindow.getBounds().width,
+      //   height: mainWindow.getBounds().height - 40
+      // })
     } else {
       view.setBounds({ x: 0, y: 40, width: 0, height: 0 })
     }
@@ -198,33 +208,33 @@ ipcMain.on('message-from-tab', (event, message) => {
   }
 })
 
-app.whenReady().then(createWindow)
+// app.whenReady().then(createWindow)
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-// app.whenReady().then(() => {
-//   // Set app user model id for windows
-//   electronApp.setAppUserModelId('com.electron')
+app.whenReady().then(() => {
+  // Set app user model id for windows
+  electronApp.setAppUserModelId('com.electron')
 
-//   // Default open or close DevTools by F12 in development
-//   // and ignore CommandOrControl + R in production.
-//   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-//   app.on('browser-window-created', (_, window) => {
-//     optimizer.watchWindowShortcuts(window)
-//   })
+  // Default open or close DevTools by F12 in development
+  // and ignore CommandOrControl + R in production.
+  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
 
-//   // IPC test
-//   ipcMain.on('ping', () => console.log('pong'))
+  // IPC test
+  ipcMain.on('ping', () => console.log('pong'))
 
-//   createWindow()
+  createWindow()
 
-//   app.on('activate', function () {
-//     // On macOS it's common to re-create a window in the app when the
-//     // dock icon is clicked and there are no other windows open.
-//     if (BrowserWindow.getAllWindows().length === 0) createWindow()
-//   })
-// })
+  app.on('activate', function () {
+    // On macOS it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -243,15 +253,19 @@ app.on('activate', () => {
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
 
-// ipcMain.on('open-dev-tools-in-new-window', (event) => {
-//   const mainWindow = BrowserWindow.fromWebContents(event.sender)
-//   const devToolsWindow = new BrowserWindow({ width: 800, height: 600 })
+ipcMain.on('open-dev-tools-in-new-window', (event) => {
+  // const mainWindow = BrowserWindow.fromWebContents(event.sender)
+  const devToolsWindow = new BrowserWindow({ width: 800, height: 600, title: 'DevTool' })
 
-//   // 将 DevTools 从主窗口移动到新窗口
-//   mainWindow.webContents.devToolsWebContents.executeJavaScript(`
-//       InspectorFrontendHost.setInspectedWindowTab(null);
-//       InspectorFrontendHost.showWindow();
-//   `)
-//   mainWindow.webContents.devToolsWebContents.setDevToolsWebContents(devToolsWindow.webContents)
-//   devToolsWindow.focus()
-// })
+  // 将 DevTools 从主窗口移动到新窗口
+  mainWindow.webContents.devToolsWebContents.executeJavaScript(`
+      InspectorFrontendHost.setInspectedWindowTab(null);
+      InspectorFrontendHost.showWindow();
+  `)
+  mainWindow.webContents.devToolsWebContents.setDevToolsWebContents(devToolsWindow.webContents)
+
+  const mainPos = mainWindow.getPosition()
+  devToolsWindow.setPosition(mainPos[0] + mainWindow.getSize()[0] + 10, mainPos[1])
+
+  devToolsWindow.focus()
+})

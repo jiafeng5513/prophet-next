@@ -264,5 +264,20 @@ window.electronAPI.onTabTitleUpdated((viewId, title) => {
 
 // window.electronAPI.
 
-// const { ipcRenderer } = require('electron');
+const { ipcRenderer } = require('electron')
 // ipcRenderer.send('open-dev-tools-in-new-window');
+
+window.addEventListener('keydown', (e) => {
+  // 检测 Ctrl+Shift+I / Cmd+Option+I</span>
+  if ((e.ctrlKey && e.shiftKey && e.key === 'I') || (e.metaKey && e.altKey && e.key === 'I')) {
+    e.preventDefault()
+    ipcRenderer.send('open-dev-tools-in-new-window')
+    console.log('open-dev-tools-in-new-window for Ctrl+Shift+I')
+  }
+
+  // 检测 F12</span>
+  if (e.key === 'F12') {
+    e.preventDefault()
+    ipcRenderer.send('open-dev-tools-in-new-window')
+  }
+})

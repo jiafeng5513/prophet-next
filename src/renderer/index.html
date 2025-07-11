@@ -2,7 +2,6 @@
 <html>
 
 <head>
-  <title>多标签浏览器</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self';
              script-src 'self';
              style-src 'self' 'unsafe-inline';
@@ -202,11 +201,36 @@
       color: #202124;
     }
 
+    /*菜单按钮*/
+    #menu-btn {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      background: rgba(241, 243, 244, 0.8);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #5f6368;
+      font-size: 18px;
+      margin: 0 8px;
+      margin-bottom: 3px;
+      transition: all 0.1s ease-out;
+      -webkit-app-region: no-drag;
+    }
+
+    #menu-btn:hover {
+      background: #e8eaed;
+      color: #202124;
+    }
+
     /* 滚动按钮样式优化 */
     .scroll-button {
       position: absolute;
-      width: 24px;
-      height: 24px;
+      width: 30px;
+      height: 30px;
       background: rgba(255, 255, 255, 0.9);
       border: none;
       border-radius: 50%;
@@ -331,6 +355,9 @@
     <button class="scroll-button left" id="scroll-left">‹</button>
     <div class="tabs-scroll">
       <div id="tabs">
+        <button id="menu-btn">
+          <img src="/menu.svg" alt="图标" width="16" height="16">
+        </button>
         <!-- 将新建标签按钮移到这里，作为 tabs 的子元素 -->
         <button id="new-tab-btn">+</button>
       </div>
