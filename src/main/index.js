@@ -7,6 +7,7 @@ import icon from '../../resources/icon.png?asset'
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象
 let activeViewId = null // 活动的view对象
+let homeViewId // home的viewId
 
 function createWindow() {
   // Create the browser window.
@@ -41,20 +42,44 @@ function createWindow() {
   }
 
   // 创建第一个标签页
-  createNewTab()
+  // createHomeTab()
   // mainWindow.webContents.openDevTools({ mode: 'left' })
 }
 
-// 创建一个tab
-function createNewTab() {
-  // 如果已经有10个标签，则不再创建
-  if (views.size >= 10) {
-    // 通知渲染进程显示提示
-    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
-    return null
+function getUUID() {
+  if (typeof crypto === 'object') {
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+    if (typeof crypto.getRandomValues === 'function' && typeof Uint8Array === 'function') {
+      const callback = (c) => {
+        const num = Number(c)
+        return (num ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (num / 4)))).toString(
+          16
+        )
+      }
+      return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, callback)
+    }
   }
+  let timestamp = new Date().getTime()
+  let perforNow =
+    (typeof performance !== 'undefined' && performance.now && performance.now() * 1000) || 0
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    let random = Math.random() * 16
+    if (timestamp > 0) {
+      random = (timestamp + random) % 16 | 0
+      timestamp = Math.floor(timestamp / 16)
+    } else {
+      random = (perforNow + random) % 16 | 0
+      perforNow = Math.floor(perforNow / 16)
+    }
+    return (c === 'x' ? random : (random & 0x3) | 0x8).toString(16)
+  })
+}
 
-  const viewId = Date.now().toString()
+// 创建 HomeTab
+function createHomeTab() {
+  const viewId = getUUID() // Date.now().toString()
   const view = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
@@ -77,7 +102,79 @@ function createNewTab() {
     updateWebViewBounds(mainWindow, view)
   })
 
-  // ��置视图的边界
+  // 视图的边界
+  const [width, height] = mainWindow.getContentSize()
+  view.setBounds({ x: 0, y: 40, width, height: height - 40 })
+
+  // 发送新标签页信息给渲染进程
+  mainWindow.webContents.send('home-created', viewId)
+
+  // 监听页面标题变化
+  view.webContents.on('page-title-updated', (event, title) => {
+    mainWindow.webContents.send('tab-title-updated', viewId, title)
+  })
+
+  // 监听页面加载状态
+  view.webContents.on('did-start-loading', () => {
+    mainWindow.webContents.send('tab-loading', viewId, true)
+  })
+
+  view.webContents.on('did-stop-loading', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+
+  // 添加导航完成事件监听，确保页面完全加载后移除加载状态
+  view.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+
+  // 添加加载失败事件监听
+  view.webContents.on('did-fail-load', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+
+  // home页面
+  view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+
+  setActiveTab(viewId)
+  homeViewId = viewId
+  return viewId
+}
+
+// 创建一个tab
+function createNewTab() {
+  // 如果已经有10个标签，则不再创建
+  if (views.size >= 10) {
+    // 通知渲染进程显示提示
+    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
+    return null
+  }
+
+  const viewId = getUUID() // Date.now().toString()
+  const view = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      partition: `persist:${viewId}`, // 实现存储隔离
+      preload: join(__dirname, 'preload.js') // 添加 preload 脚本
+    }
+  })
+
+  updateWebViewBounds(mainWindow, view)
+  mainWindow.contentView.addChildView(view)
+  views.set(viewId, view)
+  // 监听窗口移动事件（如果需要）
+  mainWindow.on('move', () => {
+    updateWebViewBounds(mainWindow, view)
+  })
+
+  // 监听窗口大小变化事件
+  mainWindow.on('resize', () => {
+    updateWebViewBounds(mainWindow, view)
+  })
+
+  // 视图的边界
   const [width, height] = mainWindow.getContentSize()
   view.setBounds({ x: 0, y: 40, width, height: height - 40 })
 
@@ -107,16 +204,20 @@ function createNewTab() {
   view.webContents.on('did-fail-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
-  if (views.size % 2 == 0) {
-    view.webContents.loadURL('https://www.baidu.com')
+
+  // 第一个页面时home页面，其他页面是tv
+  if (views.size <= 1) {
+    view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
   } else {
-    view.webContents.loadURL('https://www.bilibili.com')
+    view.webContents.loadURL('https://www.baidu.com')
+    // view.webContents.loadURL('https://www.bilibili.com')
   }
+  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+  console.log.apply(`views.size = ${views.size}`)
   // 关键：为 WebContentsView 打开独立的 DevTools
   // WebContentsView 和mainWindow的DevTools是独立的
-  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立
 
-  // view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  //
   // join(__dirname, '../renderer/index.html')
   setActiveTab(viewId)
   return viewId
@@ -155,6 +256,10 @@ function setActiveTab(viewId) {
 }
 
 // 监听标签页相关的事件
+ipcMain.on('home-tab', () => {
+  createHomeTab()
+})
+
 ipcMain.on('new-tab', () => {
   createNewTab()
 })
@@ -167,7 +272,8 @@ ipcMain.on('close-tab', (event, viewId) => {
   const view = views.get(viewId)
   // 修改判断条件，添加标签数量检查
   if (view && views.size > 1) {
-    mainWindow.removeBrowserView(view)
+    // mainWindow.removeBrowserView(view)
+    mainWindow.contentView.removeChildView(view)
     views.delete(viewId)
 
     if (activeViewId === viewId) {

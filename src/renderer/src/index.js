@@ -3,6 +3,7 @@ const sendBtn = document.getElementById('send-btn')
 const messagesDiv = document.getElementById('messages')
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
+const menuBtn = document.getElementById('menu-btn')
 const tabLimitToast = document.getElementById('tab-limit-toast')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
@@ -10,7 +11,7 @@ const scrollRightBtn = document.getElementById('scroll-right')
 let activeTabId = null
 let views = new Set() // 用于跟踪标签数量
 let tabCounter = 0 // 用于跟踪标签序号
-
+let homeViewId
 // 添加一个 Map 来跟踪每个标签页的加载状态
 const loadingStates = new Map()
 
@@ -21,6 +22,41 @@ function addMessage(message) {
   messagesDiv.scrollTop = messagesDiv.scrollHeight
 }
 
+// 创建主页tab
+function createHomeElement(viewId) {
+  const tab = document.createElement('div')
+  tab.className = 'tab'
+  tab.setAttribute('data-view-id', viewId)
+
+  tabCounter++
+
+  tab.innerHTML = `
+    <span class="tab-title">Home</span>
+    <span class="close-btn">×</span>
+    <div class="tab-loading"></div>
+  `
+  // 初始化加载状态
+  loadingStates.set(viewId, false)
+
+  tab.addEventListener('click', () => {
+    setActiveTab(viewId)
+    window.electronAPI.switchTab(viewId)
+  })
+  // 只有当标签数量大于1时才允许关闭
+  const closeBtn = tab.querySelector('.close-btn')
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (views.size > 1) {
+      window.electronAPI.closeTab(viewId)
+    } else {
+      showToast('至少需要保留1个标签页')
+    }
+  })
+
+  return tab
+}
+
+// 创建非主页tab
 function createTabElement(viewId) {
   const tab = document.createElement('div')
   tab.className = 'tab'
@@ -56,6 +92,7 @@ function createTabElement(viewId) {
   return tab
 }
 
+// 将viewId设为焦点
 function setActiveTab(viewId) {
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.classList.remove('active')
@@ -76,7 +113,7 @@ function showToast(message) {
   }, 2000)
 }
 
-// 事件监听
+// 按 send message 按钮
 sendBtn.addEventListener('click', () => {
   const message = messageInput.value.trim()
   if (message) {
@@ -85,12 +122,18 @@ sendBtn.addEventListener('click', () => {
   }
 })
 
+// 按 新页面 按钮
 newTabBtn.addEventListener('click', () => {
   if (views.size < 10) {
     window.electronAPI.createNewTab()
   } else {
     showToast('最多只能创建10个标签页')
   }
+})
+
+// 按 菜单 按钮，创建home tab
+menuBtn.addEventListener('click', () => {
+  window.electronAPI.createHomeTab()
 })
 
 // API 回调设置
@@ -100,6 +143,19 @@ window.electronAPI.onMessageResponse((response) => {
 
 window.electronAPI.onBroadcastMessage((message) => {
   addMessage(message)
+})
+// 响应 主页创建
+window.electronAPI.onHomeCreated((event, viewId) => {
+  views.add(viewId)
+  const tab = createHomeElement(viewId)
+  homeViewId = viewId
+  // 将新标签插入到新建按钮之前
+  const newTabBtn = document.getElementById('new-tab-btn')
+  tabsContainer.insertBefore(tab, newTabBtn)
+
+  setActiveTab(viewId)
+  updateNewTabButtonVisibility() // 更新新建按钮显示状态
+  setTimeout(updateScrollButtons, 0)
 })
 
 window.electronAPI.onTabCreated((event, viewId) => {
@@ -136,7 +192,8 @@ window.addEventListener('beforeunload', () => {
 })
 
 // 初始化时请求创建第一个标签并设置新建按钮状态
-window.electronAPI.createNewTab()
+window.electronAPI.createHomeTab()
+
 updateNewTabButtonVisibility()
 
 function updateScrollButtons() {
@@ -191,7 +248,7 @@ window.electronAPI.onTabClosed = (event, viewId) => {
   setTimeout(updateScrollButtons, 0)
 }
 
-// 添加更新标签序号的函数
+// 更新标签序号
 function updateTabNumbers() {
   document.querySelectorAll('.tab').forEach((tab, index) => {
     const titleElement = tab.querySelector('.tab-title')
@@ -202,18 +259,19 @@ function updateTabNumbers() {
       // 如果是默认标题，只更新序号
       if (currentTitle.startsWith('新标签页')) {
         titleElement.textContent = `新标签页 ${tabNumber}`
-      } else {
-        // 更新带有网站标题的序号
-        const match = currentTitle.match(/(.*?)\s*\(\d+\)$/)
-        const baseTitle = match ? match[1] : currentTitle
-        titleElement.textContent = `${baseTitle} (${tabNumber})`
       }
+      // } else {
+      //   // 更新带有网站标题的序号
+      //   const match = currentTitle.match(/(.*?)\s*\(\d+\)$/)
+      //   const baseTitle = match ? match[1] : currentTitle
+      //   titleElement.textContent = `${baseTitle} (${tabNumber})`
+      // }
     }
   })
   tabCounter = document.querySelectorAll('.tab').length
 }
 
-// 添加更新新建按钮显示状态的函数
+// 更新新建按钮显示状态
 function updateNewTabButtonVisibility() {
   newTabBtn.style.display = views.size >= 10 ? 'none' : 'flex'
 }
