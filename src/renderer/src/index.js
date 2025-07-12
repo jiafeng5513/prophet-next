@@ -3,7 +3,7 @@ const sendBtn = document.getElementById('send-btn')
 const messagesDiv = document.getElementById('messages')
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
-const menuBtn = document.getElementById('menu-btn')
+const homeBtn = document.getElementById('home-btn')
 const tabLimitToast = document.getElementById('tab-limit-toast')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
@@ -131,8 +131,8 @@ newTabBtn.addEventListener('click', () => {
   }
 })
 
-// 按 菜单 按钮，创建home tab
-menuBtn.addEventListener('click', () => {
+// 按home按钮，创建home tab
+homeBtn.addEventListener('click', () => {
   window.electronAPI.createHomeTab()
 })
 
