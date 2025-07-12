@@ -1,5 +1,6 @@
 <script setup>
-import Versions from './components/Versions.vue'
+import Versions from '@renderer/components/Versions.vue'
+import { version } from '@public/charting_library'
 
 const ipcHandle = () => window.electron.ipcRenderer.send('ping')
 </script>
@@ -20,5 +21,6 @@ const ipcHandle = () => window.electron.ipcRenderer.send('ping')
       <a target="_blank" rel="noreferrer" @click="ipcHandle">Send IPC</a>
     </div>
   </div>
+  <el-text class="mx-1">charting library version : {{ version() }}</el-text>
   <Versions />
 </template>

@@ -12,8 +12,8 @@ let homeViewId // home的viewId
 function createWindow() {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1600,
+    height: 1000,
     show: false,
     title: 'Prophet-Next',
     autoHideMenuBar: false,
@@ -85,7 +85,7 @@ function createHomeTab() {
       nodeIntegration: false,
       contextIsolation: true,
       partition: `persist:${viewId}`, // 实现存储隔离
-      preload: join(__dirname, 'preload.js') // 添加 preload 脚本
+      preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
     }
   })
 
@@ -135,7 +135,7 @@ function createHomeTab() {
 
   // home页面
   view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
-  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+  view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
 
   setActiveTab(viewId)
   homeViewId = viewId
@@ -157,7 +157,7 @@ function createNewTab() {
       nodeIntegration: false,
       contextIsolation: true,
       partition: `persist:${viewId}`, // 实现存储隔离
-      preload: join(__dirname, 'preload.js') // 添加 preload 脚本
+      preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
     }
   })
 
@@ -205,20 +205,16 @@ function createNewTab() {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
 
-  // 第一个页面时home页面，其他页面是tv
-  if (views.size <= 1) {
-    view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/chart.html`)
   } else {
-    view.webContents.loadURL('https://www.baidu.com')
-    // view.webContents.loadURL('https://www.bilibili.com')
+    view.webContents.loadFile(join(__dirname, '../renderer/chart.html'))
   }
-  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
-  console.log.apply(`views.size = ${views.size}`)
-  // 关键：为 WebContentsView 打开独立的 DevTools
-  // WebContentsView 和mainWindow的DevTools是独立的
 
-  //
-  // join(__dirname, '../renderer/index.html')
+  // view.webContents.loadURL(join(__dirname, '../renderer/chart.html'))
+  
+  view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+
   setActiveTab(viewId)
   return viewId
 }
@@ -229,8 +225,8 @@ function updateWebViewBounds(window, webView) {
   webView.setBounds({
     x: 0,
     y: 40,
-    width: window.getBounds().width,
-    height: window.getBounds().height - 40
+    width: window.getBounds().width - 10,
+    height: window.getBounds().height - 20
   })
 
   // 可选：设置缩放因子以适应内容

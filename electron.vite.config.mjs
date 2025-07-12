@@ -14,8 +14,16 @@ export default defineConfig({
       rollupOptions: {
         input: {
           browser: resolve(__dirname, 'src/renderer/index.html'),
-          webview: resolve(__dirname, 'src/renderer/home.html')
+          webview: resolve(__dirname, 'src/renderer/home.html'),
+          chart: resolve(__dirname, 'src/renderer/chart.html')
         }
+      }
+    },
+    resolve: {
+      alias: {
+        '@renderer': resolve(__dirname, 'src/renderer/src'),
+        '@public': resolve(__dirname, 'src/renderer/public'),
+        '@services': resolve(__dirname, 'src/renderer/src/services')
       }
     },
     plugins: [vue()]
