@@ -38,19 +38,30 @@ function createHomeElement(viewId) {
   // 初始化加载状态
   loadingStates.set(viewId, false)
 
+  // 点击标签页，激活当前页面
   tab.addEventListener('click', () => {
     setActiveTab(viewId)
     window.electronAPI.switchTab(viewId)
   })
-  // 只有当标签数量大于1时才允许关闭
+  // 点击关闭按钮
   const closeBtn = tab.querySelector('.close-btn')
   closeBtn.addEventListener('click', (e) => {
+    console.log(`close-btn pushed`)
     e.stopPropagation()
     if (views.size > 1) {
+      // 只有当标签数量大于1时才允许关闭
       window.electronAPI.closeTab(viewId)
     } else {
       showToast('至少需要保留1个标签页')
     }
+  })
+  // 右键菜单
+  tab.addEventListener('contextmenu', (e) => {
+    e.preventDefault() // 阻止默认右键菜单
+    // 可在此处传递元素信息（如ID）
+    window.electronAPI.openContextMenu(viewId)
+    // 保存事件目标（可选）
+    window.selectedElement = e.target
   })
 
   return tab
@@ -87,6 +98,15 @@ function createTabElement(viewId) {
     } else {
       showToast('至少需要保留1个标签页')
     }
+  })
+
+  // 右键菜单
+  tab.addEventListener('contextmenu', (e) => {
+    e.preventDefault() // 阻止默认右键菜单
+    // 可在此处传递元素信息（如ID）
+    window.electronAPI.openContextMenu(viewId)
+    // 保存事件目标（可选）
+    window.selectedElement = e.target
   })
 
   return tab
@@ -320,10 +340,37 @@ window.electronAPI.onTabTitleUpdated((viewId, title) => {
   }
 })
 
+window.electronAPI.onContextMenuPushed((data) => {
+  // const element = window.selectedElement
+  const viewId = data.viewId
+  const action = data.action
+  console.info(`onContextMenuPushed ${viewId}`)
+  switch (action) {
+    case 'copy':
+      console.log(`复制操作 ${viewId}`)
+      // 执行复制逻辑
+      break
+    case 'paste':
+      console.log(`粘贴操作 ${viewId}`)
+      // 执行粘贴逻辑
+      break
+    case 'custom':
+      console.log(`自定义操作 ${viewId}`)
+      // 自定义业务逻辑
+      break
+    default:
+      console.log(`hello ${action} ${viewId}`)
+      break
+  }
+})
+
 // window.electronAPI.
 
-const { ipcRenderer } = require('electron')
+// const { ipcRenderer } = require('electron')
 // ipcRenderer.send('open-dev-tools-in-new-window');
+
+// 监听菜单操作反馈
+const { ipcRenderer } = require('electron')
 
 window.addEventListener('keydown', (e) => {
   // 检测 Ctrl+Shift+I / Cmd+Option+I</span>

@@ -18,14 +18,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('broadcast-message')
   },
 
+  // openContextMenu: (viewId) => ipcRenderer.invoke('show-context-menu', viewId),
+
   // 添加标签页相关 API
   createHomeTab: () => ipcRenderer.send('home-tab'),
   createNewTab: () => ipcRenderer.send('new-tab'),
   switchTab: (viewId) => ipcRenderer.send('switch-tab', viewId),
   closeTab: (viewId) => ipcRenderer.send('close-tab', viewId),
+  openContextMenu: (viewId) => ipcRenderer.send('show-context-menu', viewId),
   onHomeCreated: (callback) => ipcRenderer.on('home-created', callback),
   onTabCreated: (callback) => ipcRenderer.on('tab-created', callback),
   onTabClosed: (callback) => ipcRenderer.on('tab-closed', callback),
+  onContextMenuPushed: (callback) =>
+    ipcRenderer.on('context-menu-action', (event, data) => callback(data)),
 
   // 添加标签限制提示的监听器
   onTabLimit: (callback) => ipcRenderer.on('tab-limit', (event, message) => callback(message)),

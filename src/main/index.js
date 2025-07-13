@@ -1,4 +1,4 @@
-import { app, shell, WebContentsView, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, WebContentsView, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -88,7 +88,7 @@ function createHomeTab() {
       preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
     }
   })
-
+  view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
@@ -135,7 +135,7 @@ function createHomeTab() {
 
   // home页面
   view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
-  view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立
 
   setActiveTab(viewId)
   homeViewId = viewId
@@ -160,7 +160,7 @@ function createNewTab() {
       preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
     }
   })
-
+  view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
@@ -213,7 +213,7 @@ function createNewTab() {
 
   // view.webContents.loadURL(join(__dirname, '../renderer/chart.html'))
   
-  view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
+  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
 
   setActiveTab(viewId)
   return viewId
@@ -282,6 +282,34 @@ ipcMain.on('close-tab', (event, viewId) => {
     // 通知渲染进程显示提示
     mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
   }
+})
+
+// 监听右键菜单请求
+ipcMain.on('show-context-menu', (event, viewId) => {
+  console.log(`open context menu ${viewId}`)
+  const view = views.get(viewId)
+  const template = [
+    {
+      label: '打开DevTools',
+      click: () => {
+        mainWindow.send('context-menu-action', { action: 'copy', viewId: viewId })
+        view.webContents.openDevTools({ mode: 'detach' })
+        console.log(`on menu item open DevTools for ${viewId}`)
+      }
+    },
+    {
+      label: '粘贴',
+      click: () => mainWindow.send('context-menu-action', { action: 'paste', viewId: viewId })
+    },
+    { type: 'separator' },
+    {
+      label: '自定义动作',
+      click: () => mainWindow.send('context-menu-action', { action: 'custom', viewId: viewId })
+    }
+  ]
+  const menu = Menu.buildFromTemplate(template)
+  // const view = views.get(viewId)
+  menu.popup({ window: mainWindow })
 })
 
 // 添加以下函数来广播消息给所有标签
