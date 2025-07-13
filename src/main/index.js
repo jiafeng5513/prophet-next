@@ -16,7 +16,7 @@ function createWindow() {
     height: 1000,
     show: false,
     title: 'Prophet-Next',
-    autoHideMenuBar: false,
+    autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
