@@ -134,7 +134,11 @@ function createHomeTab() {
   })
 
   // home页面
-  view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/home.html`)
+  } else {
+    view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  }
   // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立
 
   setActiveTab(viewId)
