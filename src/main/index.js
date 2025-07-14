@@ -102,10 +102,6 @@ function createHomeTab() {
     updateWebViewBounds(mainWindow, view)
   })
 
-  // 视图的边界
-  const [width, height] = mainWindow.getContentSize()
-  view.setBounds({ x: 0, y: 40, width, height: height - 40 })
-
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('home-created', viewId)
 
@@ -178,10 +174,6 @@ function createNewTab() {
     updateWebViewBounds(mainWindow, view)
   })
 
-  // 视图的边界
-  const [width, height] = mainWindow.getContentSize()
-  view.setBounds({ x: 0, y: 40, width, height: height - 40 })
-
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('tab-created', viewId)
 
@@ -225,12 +217,16 @@ function createNewTab() {
 
 // 更新 WebContentsView 边界的函数
 function updateWebViewBounds(window, webView) {
-  // 设置 WebContentsView 填充整个内容区域
+  // 这种方法取得的尺寸会受到窗口外边框的影响
+  // const mainwin_content_width = window.getBounds().width - 10,
+  // const mainwin_content_height = window.getBounds().height - 80
+  // 这种方法取得的尺寸是实际可使用区域的尺寸
+  const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
   webView.setBounds({
     x: 0,
     y: 40,
-    width: window.getBounds().width - 10,
-    height: window.getBounds().height - 20
+    width: mainwin_content_width,
+    height: mainwin_content_height - 40
   })
 
   // 可选：设置缩放因子以适应内容
@@ -242,12 +238,6 @@ function setActiveTab(viewId) {
   views.forEach((view, id) => {
     if (id === viewId) {
       updateWebViewBounds(mainWindow, view)
-      // view.setBounds({
-      //   x: 0,
-      //   y: 40,
-      //   width: mainWindow.getBounds().width,
-      //   height: mainWindow.getBounds().height - 40
-      // })
     } else {
       view.setBounds({ x: 0, y: 40, width: 0, height: 0 })
     }
