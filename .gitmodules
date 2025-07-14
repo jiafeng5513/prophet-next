@@ -1,0 +1,3 @@
+[submodule "src/renderer/public/tradingview"]
+	path = src/renderer/public/tradingview
+	url = https://github.com/jiafeng5513/tradingview.git

@@ -4,8 +4,3 @@ out
 .DS_Store
 .eslintcache
 *.log*
-src/renderer/public/tradingview
-src/renderer/public/charting_library
-src/renderer/public/datafeeds
-src/renderer/public/broker-sample
-src/renderer/public/custom-dialogs
