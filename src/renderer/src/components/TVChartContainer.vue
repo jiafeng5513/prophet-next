@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, onUnmounted } from 'vue'
-import { widget } from '@public/charting_library'
-import { UDFCompatibleDatafeed } from '@public/datafeeds/udf/src/udf-compatible-datafeed'
+import { widget } from '@tradingview/trading_platform/charting_library'
+import { UDFCompatibleDatafeed } from '@tradingview/trading_platform/datafeeds/udf/src/udf-compatible-datafeed'
 
 function getLanguageFromURL() {
   const regex = new RegExp('[\\?&]lang=([^&#]*)')
@@ -23,7 +23,7 @@ const props = defineProps({
     type: String
   },
   libraryPath: {
-    default: 'charting_library/',
+    default: 'tradingview/trading_platform/charting_library/',
     type: String
   },
   chartsStorageUrl: {

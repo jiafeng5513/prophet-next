@@ -33,6 +33,7 @@ export default defineConfig({
       alias: {
         '@renderer': resolve(__dirname, 'src/renderer/src'),
         '@public': resolve(__dirname, 'src/renderer/public'),
+        '@tradingview': resolve(__dirname, 'src/renderer/public/tradingview'),
         '@services': resolve(__dirname, 'src/renderer/src/services')
       }
     },

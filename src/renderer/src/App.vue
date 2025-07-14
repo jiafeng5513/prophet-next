@@ -1,11 +1,11 @@
 <script setup>
 import Versions from '@renderer/components/Versions.vue'
-import { version } from '@public/charting_library'
+import { version } from '@tradingview/trading_platform/charting_library'
 
 const ipcHandle = () => window.electron.ipcRenderer.send('ping')
 </script>
 
-<template>
+<template>1
   <img alt="logo" class="logo" src="./assets/electron.svg" />
   <div class="creator">Powered by electron-vite</div>
   <div class="text">
