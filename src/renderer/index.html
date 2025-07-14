@@ -262,65 +262,6 @@
       right: 4px;
     }
 
-    /* 消息容器样式优化 */
-    #message-container {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.95);
-      border-top: 1px solid #e8eaed;
-      backdrop-filter: blur(10px);
-    }
-
-    #messages {
-      margin-bottom: 12px;
-      max-height: 120px;
-      overflow-y: auto;
-      font-size: 13px;
-      color: #5f6368;
-    }
-
-    #message-input {
-      width: calc(100% - 100px);
-      padding: 8px 12px;
-      border: 1px solid #e8eaed;
-      border-radius: 4px;
-      margin-right: 8px;
-      font-size: 13px;
-    }
-
-    #send-btn {
-      padding: 8px 16px;
-      background: #1a73e8;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: background-color 0.2s;
-    }
-
-    #send-btn:hover {
-      background: #1557b0;
-    }
-
-    /* 添加提示消息的样式 */
-    #tab-limit-toast {
-      position: fixed;
-      top: 50px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 4px;
-      font-size: 13px;
-      display: none;
-      z-index: 1000;
-    }
-
     /* 添加加载动画样式 */
     .tab-loading {
       position: absolute;
@@ -365,17 +306,7 @@
     <button class="scroll-button right" id="scroll-right">›</button>
   </div>
 
-  <div id="message-container">
-    <div id="messages"></div>
-    <input type="text" id="message-input" placeholder="输入消息...">
-    <button id="send-btn">发送</button>
-  </div>
-
-  <!-- 添加提示消息元素 -->
-  <div id="tab-limit-toast"></div>
-
   <!-- 使用外部脚本文件 -->
-  <!-- <script src="src/main.js"></script> -->
   <script type="module" src="/src/index.js"></script>
 </body>
 

@@ -1,25 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // 发送消息到主进程
-  sendMessage: (message) => ipcRenderer.send('message-from-tab', message),
-
-  // 监听来自主进程的直接回复
-  onMessageResponse: (callback) =>
-    ipcRenderer.on('message-response', (event, response) => callback(response)),
-
-  // 监听来自主进程的广播消息
-  onBroadcastMessage: (callback) =>
-    ipcRenderer.on('broadcast-message', (event, message) => callback(message)),
-
-  // 移除事件监听器
-  removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('message-response')
-    ipcRenderer.removeAllListeners('broadcast-message')
-  },
-
-  // openContextMenu: (viewId) => ipcRenderer.invoke('show-context-menu', viewId),
-
   // 添加标签页相关 API
   createHomeTab: () => ipcRenderer.send('home-tab'),
   createNewTab: () => ipcRenderer.send('new-tab'),

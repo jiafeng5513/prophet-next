@@ -316,31 +316,14 @@ ipcMain.on('show-context-menu', (event, viewId) => {
   menu.popup({ window: mainWindow })
 })
 
-// 添加以下函数来广播消息给所有标签
-function broadcastToAllTabs(channel, ...args) {
-  views.forEach((view) => {
-    view.webContents.send(channel, ...args)
-  })
-}
+// // 添加以下函数来广播消息给所有标签
+// function broadcastToAllTabs(channel, ...args) {
+//   views.forEach((view) => {
+//     view.webContents.send(channel, ...args)
+//   })
+// }
 
-// 示例：主进程向所有标签发送消息
-ipcMain.on('message-from-tab', (event, message) => {
-  // 获取发送消息的标签ID
-  const sender = event.sender
-  const senderView = Array.from(views.entries()).find(
-    // eslint-disable-next-line no-unused-vars
-    ([_, view]) => view.webContents.id === sender.id
-  )
 
-  if (senderView) {
-    const [viewId] = senderView
-    // 只回复发送消息的标签
-    sender.send('message-response', `回复标签 ${viewId}: 收到消息 "${message}"`)
-
-    // 向所有标签广播通知
-    broadcastToAllTabs('broadcast-message', `标签 ${viewId} 发送了消息: "${message}"`)
-  }
-})
 
 // app.whenReady().then(createWindow)
 

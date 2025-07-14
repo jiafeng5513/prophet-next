@@ -1,10 +1,6 @@
-const messageInput = document.getElementById('message-input')
-const sendBtn = document.getElementById('send-btn')
-const messagesDiv = document.getElementById('messages')
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
 const homeBtn = document.getElementById('home-btn')
-const tabLimitToast = document.getElementById('tab-limit-toast')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
@@ -14,13 +10,6 @@ let tabCounter = 0 // 用于跟踪标签序号
 let homeViewId
 // 添加一个 Map 来跟踪每个标签页的加载状态
 const loadingStates = new Map()
-
-function addMessage(message) {
-  const messageElement = document.createElement('div')
-  messageElement.textContent = message
-  messagesDiv.appendChild(messageElement)
-  messagesDiv.scrollTop = messagesDiv.scrollHeight
-}
 
 // 创建主页tab
 function createHomeElement(viewId) {
@@ -125,23 +114,6 @@ function setActiveTab(viewId) {
   updateScrollButtons()
 }
 
-function showToast(message) {
-  tabLimitToast.textContent = message
-  tabLimitToast.style.display = 'block'
-  setTimeout(() => {
-    tabLimitToast.style.display = 'none'
-  }, 2000)
-}
-
-// 按 send message 按钮
-sendBtn.addEventListener('click', () => {
-  const message = messageInput.value.trim()
-  if (message) {
-    window.electronAPI.sendMessage(message)
-    messageInput.value = ''
-  }
-})
-
 // 按 新页面 按钮
 newTabBtn.addEventListener('click', () => {
   if (views.size < 10) {
@@ -156,14 +128,6 @@ homeBtn.addEventListener('click', () => {
   window.electronAPI.createHomeTab()
 })
 
-// API 回调设置
-window.electronAPI.onMessageResponse((response) => {
-  addMessage(response)
-})
-
-window.electronAPI.onBroadcastMessage((message) => {
-  addMessage(message)
-})
 // 响应 主页创建
 window.electronAPI.onHomeCreated((event, viewId) => {
   views.add(viewId)
@@ -363,11 +327,6 @@ window.electronAPI.onContextMenuPushed((data) => {
       break
   }
 })
-
-// window.electronAPI.
-
-// const { ipcRenderer } = require('electron')
-// ipcRenderer.send('open-dev-tools-in-new-window');
 
 // 监听菜单操作反馈
 const { ipcRenderer } = require('electron')
