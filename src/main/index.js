@@ -1,7 +1,7 @@
 import { app, shell, WebContentsView, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
 import { join } from 'path'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../resources/prophet_logo.png?asset'
 
 // 全局的变量参数
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
@@ -17,7 +17,7 @@ function createWindow() {
     show: false,
     title: 'Prophet-Next',
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' ? { icon } : { icon }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

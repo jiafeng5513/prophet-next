@@ -3,10 +3,10 @@ import Versions from '@renderer/components/Versions.vue'
 </script>
 
 <template>
-  <img alt="logo" class="logo" src="./assets/electron.svg" />
-  <div class="creator">Powered by electron-vite</div>
+  <img alt="logo" class="logo" src="./assets/prophet_logo.png" />
+  <div class="creator">Prophet-Next</div>
   <div class="text">
-    Build an Electron app with
+    Build With Electron-Vite and
     <span class="vue">Vue</span>
   </div>
 

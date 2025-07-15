@@ -103,3 +103,6 @@ $ npm run build:linux
 8. [CCXT: 跨交易所的交易API封装库，为各种交易所提供统一的上层接口，支持python和js](https://docs.ccxt.com/#/README?id=social)
 9. [wondertreader](https://wtdocs.readthedocs.io/zh/latest/)
 10. [install-redis-on-linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/)
+
+## 已知bug
+1. 打开多个标签页的情况下移动和缩放页面会导致原来的标签页失去焦点
