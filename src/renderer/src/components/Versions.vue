@@ -1,13 +1,27 @@
 <script setup>
-import { reactive } from 'vue'
+import { ref, onMounted } from 'vue'
+import { version } from '@tradingview/trading_platform/charting_library'
+const nodeVersion = ref('')
+const chromeVersion = ref('')
+const electronVersion = ref('')
+const chartingLibraryVersion = ref('')
+onMounted(() => {
+  if (window.electronAPI) {
+    nodeVersion.value = window.electronAPI.getVersion().node
+    chromeVersion.value = window.electronAPI.getVersion().chrome
+    electronVersion.value = window.electronAPI.getVersion().electron
+  }
 
-const versions = reactive({ ...window.electron.process.versions })
+  var array = version().match(/(\d+)[.](\d+)[.](\d+)/g);
+  chartingLibraryVersion.value = array[0]
+})
 </script>
 
 <template>
   <ul class="versions">
-    <li class="electron-version">Electron v{{ versions.electron }}</li>
-    <li class="chrome-version">Chromium v{{ versions.chrome }}</li>
-    <li class="node-version">Node v{{ versions.node }}</li>
+    <li class="electron-version">Electron v{{ electronVersion }}</li>
+    <li class="chrome-version">Chromium v{{ chromeVersion }}</li>
+    <li class="node-version">Node v{{ nodeVersion }}</li>
+    <li class="node-version">charting library v{{ chartingLibraryVersion }}</li>
   </ul>
 </template>

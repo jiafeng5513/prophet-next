@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getVersion: () => process.versions,
   // 添加标签页相关 API
   createHomeTab: () => ipcRenderer.send('home-tab'),
   createNewTab: () => ipcRenderer.send('new-tab'),
