@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 添加标签页相关 API
   createHomeTab: () => ipcRenderer.send('home-tab'),
   createNewTab: () => ipcRenderer.send('new-tab'),
+  createPythonTab: () => ipcRenderer.send('python-tab'),
   switchTab: (viewId) => ipcRenderer.send('switch-tab', viewId),
   closeTab: (viewId) => ipcRenderer.send('close-tab', viewId),
   openContextMenu: (viewId) => ipcRenderer.send('show-context-menu', viewId),

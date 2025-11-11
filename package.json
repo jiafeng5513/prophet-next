@@ -23,7 +23,9 @@
     "axios": "^1.10.0",
     "electron-updater": "^6.3.9",
     "element-plus": "^2.10.4",
-    "or": "^0.2.0"
+    "monaco-editor": "^0.52.2",
+    "or": "^0.2.0",
+    "vite-plugin-monaco-editor": "^1.1.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.0.0",

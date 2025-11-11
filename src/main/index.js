@@ -214,7 +214,54 @@ function createNewTab() {
   setActiveTab(viewId)
   return viewId
 }
+// 创建编辑器页面
+function createPythonTab() {
+  if (views.size >= 10) {
+    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
+    return null
+  }
 
+  const viewId = getUUID()
+  const view = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      partition: `persist:${viewId}`,
+      preload: join(__dirname, '../preload/index.js')
+    }
+  })
+  view.setBackgroundColor('#2e2c29')
+  updateWebViewBounds(mainWindow, view)
+  mainWindow.contentView.addChildView(view)
+  views.set(viewId, view)
+
+  mainWindow.webContents.send('tab-created', viewId)
+
+  view.webContents.on('page-title-updated', (event, title) => {
+    mainWindow.webContents.send('tab-title-updated', viewId, title)
+  })
+  view.webContents.on('did-start-loading', () => {
+    mainWindow.webContents.send('tab-loading', viewId, true)
+  })
+  view.webContents.on('did-stop-loading', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+  view.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+  view.webContents.on('did-fail-load', () => {
+    mainWindow.webContents.send('tab-loading', viewId, false)
+  })
+
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/python.html`)
+  } else {
+    view.webContents.loadFile(join(__dirname, '../renderer/python.html'))
+  }
+
+  setActiveTab(viewId)
+  return viewId
+}
 // 更新 WebContentsView 边界的函数
 function updateWebViewBounds(window, webView) {
   // 这种方法取得的尺寸会受到窗口外边框的影响
@@ -252,6 +299,10 @@ ipcMain.on('home-tab', () => {
 
 ipcMain.on('new-tab', () => {
   createNewTab()
+})
+
+ipcMain.on('python-tab', () => {
+  createPythonTab()
 })
 
 ipcMain.on('switch-tab', (event, viewId) => {

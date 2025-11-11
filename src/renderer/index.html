@@ -226,6 +226,30 @@
       color: #202124;
     }
 
+        #hash-btn {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      background: rgba(241, 243, 244, 0.8);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #5f6368;
+      font-size: 18px;
+      margin: 0 8px;
+      margin-bottom: 3px;
+      transition: all 0.1s ease-out;
+      -webkit-app-region: no-drag;
+    }
+
+    #hash-btn:hover {
+      background: #e8eaed;
+      color: #202124;
+    }
+    
     /* 滚动按钮样式优化 */
     .scroll-button {
       position: absolute;
@@ -299,6 +323,7 @@
         <button id="home-btn">
           <img src="/home.svg" alt="图标" width="16" height="16">
         </button>
+        <button id="hash-btn">#</button>
         <!-- 将新建标签按钮移到这里，作为 tabs 的子元素 -->
         <button id="new-tab-btn">+</button>
       </div>

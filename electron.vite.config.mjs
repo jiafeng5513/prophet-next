@@ -1,6 +1,11 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
+import MonacoEditorPluginCjs from 'vite-plugin-monaco-editor'
+const monacoEditorPlugin =
+  MonacoEditorPluginCjs && MonacoEditorPluginCjs.default
+    ? MonacoEditorPluginCjs.default
+    : MonacoEditorPluginCjs
 
 console.log('✅ 配置文件已加载 -', new Date().toLocaleTimeString())
 
@@ -25,7 +30,8 @@ export default defineConfig({
         input: {
           browser: resolve(__dirname, 'src/renderer/index.html'),
           webview: resolve(__dirname, 'src/renderer/home.html'),
-          chart: resolve(__dirname, 'src/renderer/chart.html')
+          chart: resolve(__dirname, 'src/renderer/chart.html'),
+          python: resolve(__dirname, 'src/renderer/python.html')
         }
       }
     },
@@ -39,6 +45,8 @@ export default defineConfig({
     },
     plugins: [
       vue(),
+      // MonacoEditorPlugin({ languages: ['python'] }),
+      monacoEditorPlugin({ languages: ['python'] }),
       {
         name: 'debug-plugin',
         // 使用更早的钩子

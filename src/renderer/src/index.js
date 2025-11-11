@@ -1,6 +1,7 @@
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
 const homeBtn = document.getElementById('home-btn')
+const hashBtn = document.getElementById('hash-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
@@ -126,6 +127,10 @@ newTabBtn.addEventListener('click', () => {
 // 按home按钮，创建home tab
 homeBtn.addEventListener('click', () => {
   window.electronAPI.createHomeTab()
+})
+
+hashBtn.addEventListener('click', () => {
+  window.electronAPI.createPythonTab()
 })
 
 // 响应 主页创建
