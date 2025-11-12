@@ -33,6 +33,17 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  const handleWindowBoundsChange = () => {
+    if (!mainWindow || !activeViewId) return
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView)
+    }
+  }
+
+  mainWindow.on('move', handleWindowBoundsChange)
+  mainWindow.on('resize', handleWindowBoundsChange)
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -92,15 +103,6 @@ function createHomeTab() {
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
-  // 监听窗口移动事件（如果需要）
-  mainWindow.on('move', () => {
-    updateWebViewBounds(mainWindow, view)
-  })
-
-  // 监听窗口大小变化事件
-  mainWindow.on('resize', () => {
-    updateWebViewBounds(mainWindow, view)
-  })
 
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('home-created', viewId)
@@ -164,15 +166,6 @@ function createNewTab() {
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
   views.set(viewId, view)
-  // 监听窗口移动事件（如果需要）
-  mainWindow.on('move', () => {
-    updateWebViewBounds(mainWindow, view)
-  })
-
-  // 监听窗口大小变化事件
-  mainWindow.on('resize', () => {
-    updateWebViewBounds(mainWindow, view)
-  })
 
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('tab-created', viewId)
