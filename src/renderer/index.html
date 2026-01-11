@@ -132,6 +132,11 @@
       margin-left: 0;
     }
 
+    /* 调整python按钮和第一个动态标签页之间的距离 */
+    #hash-btn + .tab {
+      margin-left: 6px; /* 可以根据需要调整这个值 */
+    }
+
     /* 标签标题样式优化 */
     .tab-title {
       white-space: nowrap;
@@ -202,6 +207,14 @@
     }
 
     /*菜单按钮*/
+    /* 统一设置固定标签按钮的间距 */
+    #home-btn,
+    #settings-btn,
+    #hash-btn {
+      margin: 0 8px;
+      margin-bottom: 3px;
+    }
+
     #home-btn {
       width: 28px;
       height: 28px;
@@ -215,13 +228,33 @@
       justify-content: center;
       color: #5f6368;
       font-size: 18px;
-      margin: 0 8px;
-      margin-bottom: 3px;
       transition: all 0.1s ease-out;
       -webkit-app-region: no-drag;
     }
 
     #home-btn:hover {
+      background: #e8eaed;
+      color: #202124;
+    }
+
+    #settings-btn {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      background: rgba(241, 243, 244, 0.8);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #5f6368;
+      font-size: 18px;
+      transition: all 0.1s ease-out;
+      -webkit-app-region: no-drag;
+    }
+
+    #settings-btn:hover {
       background: #e8eaed;
       color: #202124;
     }
@@ -239,8 +272,6 @@
       justify-content: center;
       color: #5f6368;
       font-size: 18px;
-      margin: 0 8px;
-      margin-bottom: 3px;
       transition: all 0.1s ease-out;
       -webkit-app-region: no-drag;
     }
@@ -322,6 +353,9 @@
       <div id="tabs">
         <button id="home-btn">
           <img src="/home.svg" alt="图标" width="16" height="16">
+        </button>
+        <button id="settings-btn">
+          <img src="/settings.svg" alt="图标" width="16" height="16">
         </button>
         <button id="hash-btn">
           <img src="/python.svg" alt="图标" width="16" height="16">

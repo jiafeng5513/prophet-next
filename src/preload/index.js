@@ -5,11 +5,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 添加标签页相关 API
   createHomeTab: () => ipcRenderer.send('home-tab'),
   createNewTab: () => ipcRenderer.send('new-tab'),
+  createSettingsTab: () => ipcRenderer.send('settings-tab'),
   createPythonTab: () => ipcRenderer.send('python-tab'),
   switchTab: (viewId) => ipcRenderer.send('switch-tab', viewId),
   closeTab: (viewId) => ipcRenderer.send('close-tab', viewId),
   openContextMenu: (viewId) => ipcRenderer.send('show-context-menu', viewId),
   onHomeCreated: (callback) => ipcRenderer.on('home-created', callback),
+  onSettingsCreated: (callback) => ipcRenderer.on('settings-created', callback),
   onTabCreated: (callback) => ipcRenderer.on('tab-created', callback),
   onTabClosed: (callback) => ipcRenderer.on('tab-closed', callback),
   onContextMenuPushed: (callback) =>

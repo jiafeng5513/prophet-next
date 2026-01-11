@@ -1,6 +1,7 @@
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
 const homeBtn = document.getElementById('home-btn')
+const settingsBtn = document.getElementById('settings-btn')
 const hashBtn = document.getElementById('hash-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
@@ -22,6 +23,51 @@ function createHomeElement(viewId) {
 
   tab.innerHTML = `
     <span class="tab-title">Home</span>
+    <span class="close-btn">×</span>
+    <div class="tab-loading"></div>
+  `
+  // 初始化加载状态
+  loadingStates.set(viewId, false)
+
+  // 点击标签页，激活当前页面
+  tab.addEventListener('click', () => {
+    setActiveTab(viewId)
+    window.electronAPI.switchTab(viewId)
+  })
+  // 点击关闭按钮
+  const closeBtn = tab.querySelector('.close-btn')
+  closeBtn.addEventListener('click', (e) => {
+    console.log(`close-btn pushed`)
+    e.stopPropagation()
+    if (views.size > 1) {
+      // 只有当标签数量大于1时才允许关闭
+      window.electronAPI.closeTab(viewId)
+    } else {
+      showToast('至少需要保留1个标签页')
+    }
+  })
+  // 右键菜单
+  tab.addEventListener('contextmenu', (e) => {
+    e.preventDefault() // 阻止默认右键菜单
+    // 可在此处传递元素信息（如ID）
+    window.electronAPI.openContextMenu(viewId)
+    // 保存事件目标（可选）
+    window.selectedElement = e.target
+  })
+
+  return tab
+}
+
+// 创建设置tab
+function createSettingsElement(viewId) {
+  const tab = document.createElement('div')
+  tab.className = 'tab'
+  tab.setAttribute('data-view-id', viewId)
+
+  tabCounter++
+
+  tab.innerHTML = `
+    <span class="tab-title">设置</span>
     <span class="close-btn">×</span>
     <div class="tab-loading"></div>
   `
@@ -129,6 +175,11 @@ homeBtn.addEventListener('click', () => {
   window.electronAPI.createHomeTab()
 })
 
+// 按settings按钮，创建设置 tab
+settingsBtn.addEventListener('click', () => {
+  window.electronAPI.createSettingsTab()
+})
+
 hashBtn.addEventListener('click', () => {
   window.electronAPI.createPythonTab()
 })
@@ -138,6 +189,19 @@ window.electronAPI.onHomeCreated((event, viewId) => {
   views.add(viewId)
   const tab = createHomeElement(viewId)
   homeViewId = viewId
+  // 将新标签插入到新建按钮之前
+  const newTabBtn = document.getElementById('new-tab-btn')
+  tabsContainer.insertBefore(tab, newTabBtn)
+
+  setActiveTab(viewId)
+  updateNewTabButtonVisibility() // 更新新建按钮显示状态
+  setTimeout(updateScrollButtons, 0)
+})
+
+// 响应 设置页创建
+window.electronAPI.onSettingsCreated((event, viewId) => {
+  views.add(viewId)
+  const tab = createSettingsElement(viewId)
   // 将新标签插入到新建按钮之前
   const newTabBtn = document.getElementById('new-tab-btn')
   tabsContainer.insertBefore(tab, newTabBtn)
