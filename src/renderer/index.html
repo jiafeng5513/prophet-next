@@ -368,7 +368,30 @@
   </div>
 
   <!-- 使用外部脚本文件 -->
-  <script type="module" src="/src/index.js"></script>
+  <!-- 浏览器模式：加载模拟的 Electron API -->
+  <script type="module">
+    // 检测是否在浏览器环境中（非 Electron）
+    // Electron 环境会有 process.versions.electron，浏览器环境没有
+    const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron
+    
+    if (!isElectron && typeof window.electronAPI === 'undefined') {
+      // 浏览器模式：先加载模拟 API，再加载主脚本
+      import('/src/browser-mock.js').then(() => {
+        console.log('🌐 浏览器模式已启用 - Electron API 模拟已加载')
+        // 延迟加载主脚本，确保 electronAPI 已初始化
+        setTimeout(() => {
+          import('/src/index.js')
+        }, 100)
+      }).catch(err => {
+        console.error('加载浏览器模拟 API 失败:', err)
+        // 即使失败也尝试加载主脚本
+        import('/src/index.js')
+      })
+    } else {
+      // Electron 模式，直接加载主脚本
+      import('/src/index.js')
+    }
+  </script>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ServerTimeCallback } from '../../../../public/charting_library/charting_library'
+/// <reference types="@tradingview/trading_platform/charting_library/datafeed-api" />
 import { generateSymbol, makeApiRequest, makeBinanceRequest, parseFullSymbol, priceScale } from './helpers'
 import SocketClient, { BINANCE_RESOLUSION } from './streaming'
 
@@ -56,11 +56,12 @@ export default class DataFeed
   private lastBarsCache: Map<string, TradingView.Bar>
   private socket!: SocketClient
 
-  constructor(options: DataFeedOptions) {
-    this.options = options
+  constructor(options?: DataFeedOptions) {
     this.lastBarsCache = new Map()
     if (!options) {
-      this.options.DatafeedConfiguration = configurationData
+      this.options = { DatafeedConfiguration: configurationData }
+    } else {
+      this.options = options
     }
   }
 
@@ -143,17 +144,38 @@ export default class DataFeed
     onResolveErrorCallback: TradingView.DatafeedErrorCallback,
     extension: TradingView.SymbolResolveExtension
   ) {
+    console.log('[resolveSymbol]: Resolving symbol:', symbolName)
     const symbols = await this.getAllSymbols()
-    const symbolItem = symbols.find(({ full_name }) => full_name === symbolName)
+    
+    // 首先尝试精确匹配
+    let symbolItem = symbols.find(({ full_name }) => full_name === symbolName)
+    
+    // 如果找不到，尝试规范化 symbolName
     if (!symbolItem) {
-      console.log('[resolveSymbol]: Cannot resolve symbol', symbolName)
-      onResolveErrorCallback(`Cannot resolve symbol, symbolName = ${symbolName},`)
+      // 如果 symbolName 不包含 ":"，尝试添加 "Binance:" 前缀
+      if (!symbolName.includes(':')) {
+        const normalizedName = `Binance:${symbolName}`
+        console.log('[resolveSymbol]: Trying normalized name:', normalizedName)
+        symbolItem = symbols.find(({ full_name }) => full_name === normalizedName)
+      }
+      
+      // 如果还是找不到，尝试通过 symbol (short name) 匹配
+      if (!symbolItem) {
+        console.log('[resolveSymbol]: Trying to match by short name:', symbolName)
+        symbolItem = symbols.find(({ symbol }) => symbol === symbolName)
+      }
+    }
+    
+    if (!symbolItem) {
+      console.error('[resolveSymbol]: Cannot resolve symbol', symbolName)
+      onResolveErrorCallback(`Cannot resolve symbol: ${symbolName}`)
       return
     }
+    
     // Symbol information object
     const symbolInfo: Partial<TradingView.LibrarySymbolInfo> = {
-      ticker: symbolItem.full_name,
-      name: symbolItem.symbol,
+      ticker: symbolItem.full_name, // 始终使用完整格式 "Binance:BTC/USDT"
+      name: symbolItem.symbol, // 短名称 "BTC/USDT"
       description: symbolItem.description,
       type: symbolItem.type,
       session: '24x7',
@@ -169,7 +191,7 @@ export default class DataFeed
       volume_precision: 2,
       data_status: 'streaming'
     }
-    console.log('[resolveSymbol]: Symbol resolved', symbolItem.full_name)
+    console.log('[resolveSymbol]: Symbol resolved successfully:', symbolItem.full_name)
     onSymbolResolvedCallback(symbolInfo as TradingView.LibrarySymbolInfo)
   }
 
@@ -201,64 +223,96 @@ export default class DataFeed
     )
     const { from, to, firstDataRequest } = periodParams
 
-    const parsedSymbol = parseFullSymbol(symbolInfo.ticker!)  // parsedSymbol maybe null or undefined
+    // 使用 ticker 或 name，确保能正确解析
+    const symbolToParse = symbolInfo.ticker || symbolInfo.name || ''
+    console.log(`[getBars]: Parsing symbol - ticker: ${symbolInfo.ticker}, name: ${symbolInfo.name}`)
+    const parsedSymbol = parseFullSymbol(symbolToParse)
     console.log(`[getBars]: parsedSymbol = ${parsedSymbol}`)
-    if (parsedSymbol) {
-      const urlParameters = {
-        symbol: parsedSymbol.symbol,
-        interval: BINANCE_RESOLUSION[resolution as keyof typeof BINANCE_RESOLUSION],
-        // startTime: from * 1000,
-        endTime: to * 1000,
-        limit: 1000
+    if (!parsedSymbol) {
+      onErrorCallback(`Failed to parse symbol: ${symbolToParse}`)
+      return
+    }
+
+    const interval = BINANCE_RESOLUSION[resolution as keyof typeof BINANCE_RESOLUSION]
+    if (!interval) {
+      onErrorCallback(`Unsupported resolution: ${resolution}`)
+      return
+    }
+
+    // Binance API 使用毫秒时间戳，TradingView 传入的 from/to 是秒时间戳
+    const urlParameters: Record<string, string | number> = {
+      symbol: parsedSymbol.symbol,
+      interval: interval,
+      limit: 1000
+    }
+
+    // 添加时间范围参数（可选，但有助于获取准确的数据）
+    if (from) {
+      urlParameters.startTime = from * 1000
+    }
+    if (to) {
+      urlParameters.endTime = to * 1000
+    }
+
+    const query = Object.keys(urlParameters)
+      .map(
+        (name) =>
+          `${name}=${encodeURIComponent(urlParameters[name])}`
+      )
+      .join('&')
+
+    try {
+      console.log(`[getBars]: Requesting ${parsedSymbol.symbol} ${interval} from ${new Date(from * 1000).toISOString()} to ${new Date(to * 1000).toISOString()}`)
+      console.log(`[getBars]: URL: api/v3/klines?${query}`)
+      const data = await makeBinanceRequest(`api/v3/klines?${query}`)
+      
+      if (!data || data.length === 0) {
+        console.log('[getBars]: No data returned')
+        onHistoryCallback([], { noData: true })
+        return
       }
-      const query = Object.keys(urlParameters)
-        .map(
-          (name) =>
-            `${name}=${encodeURIComponent(urlParameters[name as keyof typeof urlParameters])}`
-        )
-        .join('&')
-      try {
-        console.log(`[getBars]: makeApiRequest with ${query}`)
-        const data = await makeBinanceRequest(`api/v3/klines?${query}`)
-        if (!data || data.length === 0) {
-          // "noData" should be set if there is no data in the requested period
-          onHistoryCallback([], { noData: true })
-          return
-        }
-        let bars: {
-          time: number
-          low: number
-          high: number
-          open: number
-          close: number
-          volume: number
-        }[] = []
-        data.forEach((bar: string[]) => {
-          if (parseInt(bar[0]) >= from * 1000 && parseInt(bar[0]) < to * 1000) {
-            bars = [
-              ...bars,
-              {
-                time: parseInt(bar[0]),
-                open: parseFloat(bar[1]),
-                high: parseFloat(bar[2]),
-                low: parseFloat(bar[3]),
-                close: parseFloat(bar[4]),
-                volume: parseFloat(bar[5])
-              }
-            ]
-          }
-        })
-        if (firstDataRequest) {
-          this.lastBarsCache.set(symbolInfo.name, {
-            ...bars[bars.length - 1]
+
+      let bars: {
+        time: number
+        low: number
+        high: number
+        open: number
+        close: number
+        volume: number
+      }[] = []
+
+      // Binance K线数据格式: [时间戳(ms), 开盘价, 最高价, 最低价, 收盘价, 成交量, ...]
+      data.forEach((bar: any[]) => {
+        const barTime = parseInt(bar[0])
+        // 过滤时间范围（使用毫秒比较）
+        if (barTime >= from * 1000 && barTime < to * 1000) {
+          bars.push({
+            time: barTime, // 已经是毫秒时间戳
+            open: parseFloat(bar[1]),
+            high: parseFloat(bar[2]),
+            low: parseFloat(bar[3]),
+            close: parseFloat(bar[4]),
+            volume: parseFloat(bar[5])
           })
         }
-        console.log(`[getBars]: returned ${bars.length} bar(s)`)
-        onHistoryCallback(bars, { noData: false })
-      } catch (error) {
-        console.log('[getBars]: Get error', error)
-        onErrorCallback(error as string)
+      })
+
+      // 按时间排序（确保顺序正确）
+      bars.sort((a, b) => a.time - b.time)
+
+      if (bars.length > 0 && firstDataRequest) {
+        // 保存最后一根K线用于实时更新
+        this.lastBarsCache.set(symbolInfo.name, {
+          ...bars[bars.length - 1]
+        })
+        console.log('[getBars] Cached last bar:', bars[bars.length - 1])
       }
+
+      console.log(`[getBars]: Returned ${bars.length} bar(s)`)
+      onHistoryCallback(bars, { noData: bars.length === 0 })
+    } catch (error) {
+      console.error('[getBars]: Error:', error)
+      onErrorCallback(String(error))
     }
   }
 

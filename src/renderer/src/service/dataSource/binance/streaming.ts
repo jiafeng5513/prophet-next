@@ -27,105 +27,110 @@ export default class SocketClient {
 
   _createSocket() {
     console.log('[SocketClient] _createSocket')
-    this.socket = new WebSocket('wss://data-stream.binance.vision/ws')
-    // this.socket = new WebSocket('wss://data-stream.binance.vision/ws')
-    //
+    // 使用官方推荐的端点，支持订阅/取消订阅
+    this.socket = new WebSocket('wss://stream.binance.com:9443/ws')
     this.channelToSubscription = new Map()
 
-    this.socket.addEventListener('connect', () => {
-      console.log('[socket] Connected')
-    })
+    this.socket.onopen = () => {
+      console.log('[socket] Connected to Binance WebSocket')
+    }
 
-    this.socket.addEventListener('disconnect', (reason: any) => {
-      console.log('[socket] Disconnected:', reason)
-    })
+    this.socket.onclose = (event) => {
+      console.log('[socket] Disconnected:', event.code, event.reason)
+      // 可以在这里实现重连逻辑
+    }
 
-    this.socket.addEventListener('error', (error: any) => {
-      console.log('[socket] Error:', error)
-    })
+    this.socket.onerror = (error) => {
+      console.error('[socket] Error:', error)
+    }
 
-    this.socket.addEventListener('message', ({ data }) => {
-      console.log("[socket] Message:", data);
-      /**
-        {
-          "e": "kline",          // 事件类型
-          "E": 1672515782136,    // 事件时间
-          "s": "BNBBTC",         // 交易对
-          "k": {
-            "t": 1672515780000,  // 这根K线的起始时间
-            "T": 1672515839999,  // 这根K线的结束时间
-            "s": "BNBBTC",       // 交易对
-            "i": "1m",           // K线间隔
-            "f": 100,            // 这根K线期间第一笔成交ID
-            "L": 200,            // 这根K线期间末一笔成交ID
-            "o": "0.0010",       // 这根K线期间第一笔成交价
-            "c": "0.0020",       // 这根K线期间末一笔成交价
-            "h": "0.0025",       // 这根K线期间最高成交价
-            "l": "0.0015",       // 这根K线期间最低成交价
-            "v": "1000",         // 这根K线期间成交量
-            "n": 100,            // 这根K线期间成交数量
-            "x": false,          // 这根K线是否完结（是否已经开始下一根K线）
-            "q": "1.0000",       // 这根K线期间成交额
-            "V": "500",          // 主动买入的成交量
-            "Q": "0.500",        // 主动买入的成交额
-            "B": "123456"        // 忽略此参数
+    this.socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        console.log('[socket] Received message:', data)
+
+        // 处理ping帧 - 根据文档，服务器每20秒发送ping，需要回复pong
+        if (data.ping) {
+          this.socket.send(JSON.stringify({ pong: data.ping }))
+          console.log('[socket] Sent pong response')
+          return
+        }
+
+        // 处理订阅响应
+        if (data.id !== undefined && data.result !== undefined) {
+          console.log('[socket] Subscription response:', data)
+          return
+        }
+
+        // 处理K线数据
+        // 数据格式可能是直接的kline对象，或者包装在stream对象中
+        let klineData = data
+        if (data.stream && data.data) {
+          // 组合流格式
+          klineData = data.data
+        }
+
+        if (klineData.e === 'kline' && klineData.k) {
+          const kline = klineData.k
+          const eventTime = klineData.E
+
+          const channelString = `${kline.s.toLowerCase()}@kline_${kline.i}`
+          const subscriptionItem = this.channelToSubscription.get(channelString)
+
+          if (!subscriptionItem || !subscriptionItem.lastDailyBar) {
+            console.log('[socket] No subscription found for', channelString)
+            return
           }
-        } */
-      const { E: time, k: kline } = JSON.parse(data)
 
-      if (!kline) {
-        // Skip all non-trading events
-        return
-      }
-      const tradePrice = parseFloat(kline.c)
-      const tradeTime = parseInt(time)
-      const thisBarStartTime = parseInt(kline.t)
-      const thisBarEndTime = parseInt(kline.T)
-      const barDelatTime = thisBarEndTime - thisBarStartTime + 1
+          const lastDailyBar = subscriptionItem.lastDailyBar
+          const barStartTime = parseInt(kline.t)
+          const barEndTime = parseInt(kline.T)
+          const isBarClosed = kline.x // 是否完结
 
-      const channelString = `${kline.s.toLowerCase()}@kline_${kline.i}`
-      const subscriptionItem = this.channelToSubscription.get(channelString)
-      console.log('[subscriptionItem]', subscriptionItem)
-      if (subscriptionItem === undefined) {
-        return
-      }
-      const lastDailyBar = subscriptionItem.lastDailyBar
-      // 这里应该根据当前的时间分辨率计算新bar生成的时机
-      const nextDailyBarTime = lastDailyBar.time + barDelatTime
+          let bar: {
+            time: number
+            open: number
+            high: number
+            low: number
+            close: number
+            volume?: number
+          }
 
-      let bar: {
-        time: number
-        open: number
-        high: number
-        low: number
-        close: number
-      }
-      if (tradeTime > thisBarEndTime) {
-        bar = {
-          time: nextDailyBarTime,
-          open: tradePrice,
-          high: tradePrice,
-          low: tradePrice,
-          close: tradePrice
+          if (isBarClosed) {
+            // K线已完结，创建新的bar
+            bar = {
+              time: barStartTime,
+              open: parseFloat(kline.o),
+              high: parseFloat(kline.h),
+              low: parseFloat(kline.l),
+              close: parseFloat(kline.c),
+              volume: parseFloat(kline.v)
+            }
+            console.log('[socket] New bar closed:', bar)
+            subscriptionItem.lastDailyBar = bar
+          } else {
+            // K线还在更新中，更新当前bar
+            bar = {
+              time: barStartTime,
+              open: parseFloat(kline.o),
+              high: parseFloat(kline.h),
+              low: parseFloat(kline.l),
+              close: parseFloat(kline.c),
+              volume: parseFloat(kline.v)
+            }
+            console.log('[socket] Bar updated:', bar)
+            subscriptionItem.lastDailyBar = bar
+          }
+
+          // 发送数据给所有订阅者
+          subscriptionItem.handlers.forEach((handler: { callback: (arg0: any) => any }) => {
+            handler.callback(bar)
+          })
         }
-        console.log('[socket] Generate new bar', bar)
-      } else {
-        bar = {
-          ...lastDailyBar,
-          high: Math.max(lastDailyBar.high, tradePrice),
-          low: Math.min(lastDailyBar.low, tradePrice),
-          close: tradePrice
-        }
-        console.log('[socket] Update the latest bar by', bar)
+      } catch (error) {
+        console.error('[socket] Error parsing message:', error, event.data)
       }
-
-      subscriptionItem.lastDailyBar = bar
-
-      // Send data to every subscriber of that symbol
-      subscriptionItem.handlers.forEach((handler: { callback: (arg0: any) => any }) =>
-        handler.callback(bar)
-      )
-    })
+    }
   }
 
   public subscribeOnStream(
@@ -136,32 +141,70 @@ export default class SocketClient {
     onResetCacheNeededCallback: () => void,
     lastDailyBar: TradingView.Bar | undefined
   ) {
-    const parsedSymbol = parseFullSymbol(symbolInfo.full_name)
-    if (parsedSymbol) {
-      const resolution_str = `${BINANCE_RESOLUSION[resolution as keyof typeof BINANCE_RESOLUSION]}`
-      const channelString = `${parsedSymbol.symbol.toLowerCase()}@kline_${resolution_str}`
-
-      const handler = {
-        id: subscriberUID,
-        callback: onRealtimeCallback
-      }
-      let subscriptionItem = this.channelToSubscription.get(channelString)
-      if (subscriptionItem) {
-        // Already subscribed to the channel, use the existing subscription
-        subscriptionItem.handlers.push(handler)
-        return
-      }
-      subscriptionItem = {
-        subscriberUID,
-        resolution,
-        lastDailyBar,
-        handlers: [handler]
-      }
-      this.channelToSubscription.set(channelString, subscriptionItem)
-      console.log('[subscribeBars]: Subscribe to streaming. Channel:', channelString)
-
-      this.emit('SUBSCRIBE', [channelString], 1)
+    // 使用 ticker 或 name，确保能正确解析
+    const symbolToParse = symbolInfo.ticker || symbolInfo.name || symbolInfo.full_name || ''
+    console.log(`[subscribeOnStream] Parsing symbol - ticker: ${symbolInfo.ticker}, name: ${symbolInfo.name}, full_name: ${symbolInfo.full_name}`)
+    const parsedSymbol = parseFullSymbol(symbolToParse)
+    if (!parsedSymbol) {
+      console.error('[subscribeOnStream] Failed to parse symbol:', symbolToParse)
+      return
     }
+
+    const resolution_str = `${BINANCE_RESOLUSION[resolution as keyof typeof BINANCE_RESOLUSION]}`
+    if (!resolution_str) {
+      console.error('[subscribeOnStream] Invalid resolution:', resolution)
+      return
+    }
+
+    const channelString = `${parsedSymbol.symbol.toLowerCase()}@kline_${resolution_str}`
+    console.log('[subscribeOnStream] Channel:', channelString)
+
+    const handler = {
+      id: subscriberUID,
+      callback: onRealtimeCallback
+    }
+
+    let subscriptionItem = this.channelToSubscription.get(channelString)
+    if (subscriptionItem) {
+      // Already subscribed to the channel, use the existing subscription
+      subscriptionItem.handlers.push(handler)
+      console.log('[subscribeOnStream] Added handler to existing subscription')
+      return
+    }
+
+    subscriptionItem = {
+      subscriberUID,
+      resolution,
+      lastDailyBar: lastDailyBar || {
+        time: Date.now(),
+        open: 0,
+        high: 0,
+        low: 0,
+        close: 0
+      },
+      handlers: [handler]
+    }
+    this.channelToSubscription.set(channelString, subscriptionItem)
+    console.log('[subscribeOnStream] Created new subscription for:', channelString)
+
+    // 等待WebSocket连接建立后再订阅
+    const subscribe = () => {
+      if (this.socket.readyState === WebSocket.OPEN) {
+        this.emit('SUBSCRIBE', [channelString], Date.now())
+        console.log('[subscribeOnStream] Sent SUBSCRIBE request for:', channelString)
+      } else if (this.socket.readyState === WebSocket.CONNECTING) {
+        // 如果正在连接，等待连接建立
+        this.socket.addEventListener('open', subscribe, { once: true })
+        console.log('[subscribeOnStream] Waiting for connection to open...')
+      } else {
+        // 如果连接已关闭，重新创建连接
+        console.log('[subscribeOnStream] Connection closed, recreating...')
+        this._createSocket()
+        this.socket.addEventListener('open', subscribe, { once: true })
+      }
+    }
+
+    subscribe()
   }
 
   public unsubscribeFromStream(subscriberUID: string) {

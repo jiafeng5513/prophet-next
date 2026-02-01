@@ -194,6 +194,8 @@ window.electronAPI.onHomeCreated((event, viewId) => {
   tabsContainer.insertBefore(tab, newTabBtn)
 
   setActiveTab(viewId)
+  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
+  window.electronAPI.switchTab(viewId)
   updateNewTabButtonVisibility() // 更新新建按钮显示状态
   setTimeout(updateScrollButtons, 0)
 })
@@ -207,6 +209,8 @@ window.electronAPI.onSettingsCreated((event, viewId) => {
   tabsContainer.insertBefore(tab, newTabBtn)
 
   setActiveTab(viewId)
+  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
+  window.electronAPI.switchTab(viewId)
   updateNewTabButtonVisibility() // 更新新建按钮显示状态
   setTimeout(updateScrollButtons, 0)
 })
@@ -220,6 +224,8 @@ window.electronAPI.onTabCreated((event, viewId) => {
   tabsContainer.insertBefore(tab, newTabBtn)
 
   setActiveTab(viewId)
+  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
+  window.electronAPI.switchTab(viewId)
   updateNewTabButtonVisibility() // 更新新建按钮显示状态
   setTimeout(updateScrollButtons, 0)
 })
@@ -289,18 +295,6 @@ observer.observe(tabsContainer, {
   subtree: true
 })
 
-const originalOnTabCreated = window.electronAPI.onTabCreated
-window.electronAPI.onTabCreated = (event, viewId) => {
-  originalOnTabCreated(event, viewId)
-  setTimeout(updateScrollButtons, 0)
-}
-
-const originalOnTabClosed = window.electronAPI.onTabClosed
-window.electronAPI.onTabClosed = (event, viewId) => {
-  originalOnTabClosed(event, viewId)
-  setTimeout(updateScrollButtons, 0)
-}
-
 // 更新标签序号
 function updateTabNumbers() {
   document.querySelectorAll('.tab').forEach((tab, index) => {
@@ -354,23 +348,123 @@ window.electronAPI.onTabLoading((viewId, isLoading) => {
 })
 
 // 添加标题更新处理
-window.electronAPI.onTabTitleUpdated((viewId, title) => {
-  const tab = document.querySelector(`[data-view-id="${viewId}"]`)
-  if (!tab) return
+window.electronAPI.onTabTitleUpdated((event, viewId, title) => {
+  console.log('[index.js] onTabTitleUpdated called:', {
+    event,
+    viewId,
+    title,
+    viewIdType: typeof viewId
+  })
 
-  const titleElement = tab.querySelector('.tab-title')
-  if (!titleElement) return
+  // 确保 viewId 是字符串（因为 data-view-id 属性是字符串）
+  const viewIdStr = String(viewId)
 
-  // 获取标签序号
-  const tabNumber = Array.from(document.querySelectorAll('.tab')).indexOf(tab) + 1
+  // 列出所有现有的标签页，用于调试
+  const allTabs = document.querySelectorAll('.tab')
+  const allViewIds = Array.from(allTabs).map((tab) => tab.getAttribute('data-view-id'))
+  console.log('[index.js] All existing viewIds:', allViewIds)
+  console.log('[index.js] Looking for viewId:', viewIdStr)
 
-  // 如果标题为空或是默认标题，只显示序号
-  if (!title || title === 'about:blank') {
-    titleElement.textContent = `新标签页 ${tabNumber}`
-  } else {
-    // 组合网站标题和序号
-    titleElement.textContent = `${title} (${tabNumber})`
+  const updateTabTitle = (tabElement) => {
+    const titleElement = tabElement.querySelector('.tab-title')
+    if (!titleElement) {
+      console.warn('[index.js] Title element not found for viewId:', viewIdStr)
+      return false
+    }
+
+    // 如果标题为空或是默认标题，显示默认标题
+    if (!title || title === 'about:blank' || title.trim() === '') {
+      const tabNumber = Array.from(document.querySelectorAll('.tab')).indexOf(tabElement) + 1
+      titleElement.textContent = `新标签页 ${tabNumber}`
+      console.log('[index.js] Title is empty, using default:', titleElement.textContent)
+      return true
+    }
+
+    // 清理标题：移除 "- Chart" 后缀（如果存在）
+    let cleanTitle = title.replace(/\s*-\s*Chart\s*$/i, '').trim()
+
+    // 如果清理后标题为空，使用默认标题
+    if (!cleanTitle) {
+      const tabNumber = Array.from(document.querySelectorAll('.tab')).indexOf(tabElement) + 1
+      titleElement.textContent = `新标签页 ${tabNumber}`
+      console.log('[index.js] Cleaned title is empty, using default:', titleElement.textContent)
+      return true
+    }
+
+    console.log('[index.js] Processing title:', cleanTitle, 'for viewId:', viewIdStr)
+
+    // 获取所有其他标签页的标题（排除当前标签页）
+    const allTabs = document.querySelectorAll('.tab')
+    const otherTitles = Array.from(allTabs)
+      .map((tab) => {
+        const tabViewId = tab.getAttribute('data-view-id')
+        // 排除当前标签页
+        if (tabViewId === viewIdStr) return null
+        const titleEl = tab.querySelector('.tab-title')
+        return titleEl ? titleEl.textContent.trim() : null
+      })
+      .filter((t) => t && t && !t.startsWith('新标签页'))
+
+    console.log('[index.js] Other titles:', otherTitles)
+
+    // 检查是否有同名标题（基础标题相同，可能带有 -2, -3 等后缀）
+    const baseTitle = cleanTitle
+    const sameTitleTabs = otherTitles.filter((t) => {
+      if (!t) return false
+      // 提取基础标题（移除后缀）
+      const otherBaseTitle = t.replace(/-\d+$/, '')
+      return otherBaseTitle === baseTitle
+    })
+
+    console.log('[index.js] Same title tabs:', sameTitleTabs)
+
+    // 如果有同名标题，添加序号后缀
+    if (sameTitleTabs.length > 0) {
+      // 找到最大的序号
+      let maxSuffix = 0
+      sameTitleTabs.forEach((t) => {
+        if (t === baseTitle) {
+          // 如果没有后缀，说明是第一个同名标题
+          maxSuffix = Math.max(maxSuffix, 1)
+        } else {
+          // 提取后缀数字
+          const match = t.match(/-(\d+)$/)
+          if (match) {
+            const suffix = parseInt(match[1], 10)
+            maxSuffix = Math.max(maxSuffix, suffix)
+          }
+        }
+      })
+      // 当前标签页使用下一个序号
+      cleanTitle = `${baseTitle}-${maxSuffix + 1}`
+      console.log('[index.js] Found same titles, using suffix:', cleanTitle)
+    } else {
+      console.log('[index.js] No same titles, using base title:', cleanTitle)
+    }
+
+    titleElement.textContent = cleanTitle
+    console.log('[index.js] Title updated successfully:', cleanTitle)
+    return true
   }
+
+  const tab = document.querySelector(`[data-view-id="${viewIdStr}"]`)
+  if (!tab) {
+    console.warn('[index.js] Tab not found for viewId:', viewIdStr)
+    console.warn('[index.js] Available viewIds:', allViewIds)
+    // 尝试延迟重试（可能标签页还在创建中）
+    setTimeout(() => {
+      const retryTab = document.querySelector(`[data-view-id="${viewIdStr}"]`)
+      if (retryTab) {
+        console.log('[index.js] Tab found on retry, updating title')
+        updateTabTitle(retryTab)
+      } else {
+        console.warn('[index.js] Tab still not found after retry')
+      }
+    }, 100)
+    return
+  }
+
+  updateTabTitle(tab)
 })
 
 window.electronAPI.onContextMenuPushed((data) => {
@@ -398,19 +492,17 @@ window.electronAPI.onContextMenuPushed((data) => {
 })
 
 // 监听菜单操作反馈
-const { ipcRenderer } = require('electron')
-
 window.addEventListener('keydown', (e) => {
-  // 检测 Ctrl+Shift+I / Cmd+Option+I</span>
+  // 检测 Ctrl+Shift+I / Cmd+Option+I
   if ((e.ctrlKey && e.shiftKey && e.key === 'I') || (e.metaKey && e.altKey && e.key === 'I')) {
     e.preventDefault()
-    ipcRenderer.send('open-dev-tools-in-new-window')
+    window.electronAPI.openDevTools()
     console.log('open-dev-tools-in-new-window for Ctrl+Shift+I')
   }
 
-  // 检测 F12</span>
+  // 检测 F12
   if (e.key === 'F12') {
     e.preventDefault()
-    ipcRenderer.send('open-dev-tools-in-new-window')
+    window.electronAPI.openDevTools()
   }
 })

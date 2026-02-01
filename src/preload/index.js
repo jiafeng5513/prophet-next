@@ -26,5 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 添加标题更新监听
   onTabTitleUpdated: (callback) =>
-    ipcRenderer.on('tab-title-updated', (event, viewId, title) => callback(viewId, title))
+    ipcRenderer.on('tab-title-updated', (event, viewId, title) => callback(event, viewId, title)),
+
+  // 打开开发者工具
+  openDevTools: () => ipcRenderer.send('open-dev-tools-in-new-window')
 })
