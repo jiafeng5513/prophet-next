@@ -29,5 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tab-title-updated', (event, viewId, title) => callback(event, viewId, title)),
 
   // 打开开发者工具
-  openDevTools: () => ipcRenderer.send('open-dev-tools-in-new-window')
+  openDevTools: () => ipcRenderer.send('open-dev-tools-in-new-window'),
+  
+  // 关闭所有图表页面
+  closeAllChartTabs: () => ipcRenderer.send('close-all-chart-tabs')
 })
