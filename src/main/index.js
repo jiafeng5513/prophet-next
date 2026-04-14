@@ -5,7 +5,7 @@ import icon from '../../resources/prophet_logo.png?asset'
 
 // 全局的变量参数
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
-let views = new Map() // 所有的view 对象
+let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: 'home'|'settings'|'chart'|'python' }
 let activeViewId = null // 活动的view对象
 let homeViewId // home的viewId
 
@@ -102,7 +102,8 @@ function createHomeTab() {
   view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
-  views.set(viewId, view)
+  const viewData = { view, type: 'home' }
+  views.set(viewId, viewData)
 
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('home-created', viewId)
@@ -165,7 +166,8 @@ function createNewTab() {
   view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
-  views.set(viewId, view)
+  const viewData = { view, type: 'chart' }
+  views.set(viewId, viewData)
 
   // 发送新标签页信息给渲染进程
   mainWindow.webContents.send('tab-created', viewId)
@@ -226,7 +228,7 @@ function createSettingsTab() {
   view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
-  views.set(viewId, view)
+  views.set(viewId, { view, type: 'settings' })
 
   mainWindow.webContents.send('settings-created', viewId)
 
@@ -275,7 +277,7 @@ function createPythonTab() {
   view.setBackgroundColor('#2e2c29')
   updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
-  views.set(viewId, view)
+  views.set(viewId, { view, type: 'python' })
 
   mainWindow.webContents.send('tab-created', viewId)
 
@@ -322,13 +324,56 @@ function updateWebViewBounds(window, webView) {
   // webView.webContents.setZoomFactor(0.95)
 }
 
+// 关闭所有图表页面
+function closeAllChartTabs() {
+  console.log('[closeAllChartTabs] 开始关闭所有图表页面')
+  const chartViewIds = []
+  
+  // 收集所有图表页面的 viewId
+  views.forEach((viewData, viewId) => {
+    console.log(`[closeAllChartTabs] 检查标签页 ${viewId}, 类型: ${viewData.type}`)
+    if (viewData.type === 'chart') {
+      chartViewIds.push(viewId)
+    }
+  })
+  
+  console.log(`[closeAllChartTabs] 找到 ${chartViewIds.length} 个图表页面需要关闭:`, chartViewIds)
+  
+  // 关闭所有图表页面
+  chartViewIds.forEach((viewId) => {
+    const viewData = views.get(viewId)
+    if (viewData) {
+      console.log(`[closeAllChartTabs] 正在关闭图表页面: ${viewId}`)
+      try {
+        mainWindow.contentView.removeChildView(viewData.view)
+        views.delete(viewId)
+        mainWindow.webContents.send('tab-closed', viewId)
+        console.log(`[closeAllChartTabs] 成功关闭图表页面: ${viewId}`)
+      } catch (error) {
+        console.error(`[closeAllChartTabs] 关闭图表页面失败 ${viewId}:`, error)
+      }
+    }
+  })
+  
+  // 如果当前活动页面是图表页面，切换到其他页面
+  if (chartViewIds.includes(activeViewId)) {
+    const remainingViewIds = Array.from(views.keys())
+    console.log(`[closeAllChartTabs] 当前活动页面是图表页面，切换到:`, remainingViewIds)
+    if (remainingViewIds.length > 0) {
+      setActiveTab(remainingViewIds[remainingViewIds.length - 1])
+    }
+  }
+  
+  console.log(`[closeAllChartTabs] 完成，已关闭 ${chartViewIds.length} 个图表页面`)
+}
+
 // 重置可视窗口
 function setActiveTab(viewId) {
-  views.forEach((view, id) => {
+  views.forEach((viewData, id) => {
     if (id === viewId) {
-      updateWebViewBounds(mainWindow, view)
+      updateWebViewBounds(mainWindow, viewData.view)
     } else {
-      view.setBounds({ x: 0, y: 40, width: 0, height: 0 })
+      viewData.view.setBounds({ x: 0, y: 40, width: 0, height: 0 })
     }
   })
   activeViewId = viewId
@@ -356,11 +401,11 @@ ipcMain.on('switch-tab', (event, viewId) => {
 })
 
 ipcMain.on('close-tab', (event, viewId) => {
-  const view = views.get(viewId)
+  const viewData = views.get(viewId)
   // 修改判断条件，添加标签数量检查
-  if (view && views.size > 1) {
+  if (viewData && views.size > 1) {
     // mainWindow.removeBrowserView(view)
-    mainWindow.contentView.removeChildView(view)
+    mainWindow.contentView.removeChildView(viewData.view)
     views.delete(viewId)
 
     if (activeViewId === viewId) {
@@ -375,16 +420,24 @@ ipcMain.on('close-tab', (event, viewId) => {
   }
 })
 
+// 监听关闭所有图表页面的请求
+ipcMain.on('close-all-chart-tabs', () => {
+  console.log('[IPC] 收到关闭所有图表页面的请求')
+  closeAllChartTabs()
+})
+
 // 监听右键菜单请求
 ipcMain.on('show-context-menu', (event, viewId) => {
   console.log(`open context menu ${viewId}`)
-  const view = views.get(viewId)
+  const viewData = views.get(viewId)
+  if (!viewData) return
+  
   const template = [
     {
       label: '打开DevTools',
       click: () => {
         mainWindow.send('context-menu-action', { action: 'copy', viewId: viewId })
-        view.webContents.openDevTools({ mode: 'detach' })
+        viewData.view.webContents.openDevTools({ mode: 'detach' })
         console.log(`on menu item open DevTools for ${viewId}`)
       }
     },
@@ -399,7 +452,6 @@ ipcMain.on('show-context-menu', (event, viewId) => {
     }
   ]
   const menu = Menu.buildFromTemplate(template)
-  // const view = views.get(viewId)
   menu.popup({ window: mainWindow })
 })
 

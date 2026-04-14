@@ -314,6 +314,48 @@ class BrowserTabManager {
     }
   }
 
+  closeAllChartTabs() {
+    console.log('[BrowserTabManager] 开始关闭所有图表页面')
+    const chartViewIds = []
+    
+    // 收集所有图表页面的 viewId
+    this.views.forEach((viewData, viewId) => {
+      console.log(`[BrowserTabManager] 检查标签页 ${viewId}, 类型: ${viewData.type}`)
+      if (viewData.type === 'chart') {
+        chartViewIds.push(viewId)
+      }
+    })
+    
+    console.log(`[BrowserTabManager] 找到 ${chartViewIds.length} 个图表页面需要关闭:`, chartViewIds)
+    
+    // 关闭所有图表页面
+    chartViewIds.forEach((viewId) => {
+      const viewData = this.views.get(viewId)
+      if (viewData) {
+        console.log(`[BrowserTabManager] 正在关闭图表页面: ${viewId}`)
+        try {
+          viewData.iframe.remove()
+          this.views.delete(viewId)
+          this.emit('tab-closed', viewId)
+          console.log(`[BrowserTabManager] 成功关闭图表页面: ${viewId}`)
+        } catch (error) {
+          console.error(`[BrowserTabManager] 关闭图表页面失败 ${viewId}:`, error)
+        }
+      }
+    })
+    
+    // 如果当前活动页面是图表页面，切换到其他页面
+    if (chartViewIds.includes(this.activeViewId)) {
+      const remainingViewIds = Array.from(this.views.keys())
+      console.log(`[BrowserTabManager] 当前活动页面是图表页面，切换到:`, remainingViewIds)
+      if (remainingViewIds.length > 0) {
+        this.switchTab(remainingViewIds[remainingViewIds.length - 1])
+      }
+    }
+    
+    console.log(`[BrowserTabManager] 完成，已关闭 ${chartViewIds.length} 个图表页面`)
+  }
+
   openContextMenu(viewId) {
     // 浏览器模式下，右键菜单功能简化
     console.log('打开右键菜单:', viewId)
@@ -401,6 +443,10 @@ window.electronAPI = {
 
   openDevTools: () => {
     tabManager.openDevTools()
+  },
+
+  closeAllChartTabs: () => {
+    tabManager.closeAllChartTabs()
   },
 
   removeAllListeners: () => {
