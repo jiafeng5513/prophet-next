@@ -343,6 +343,16 @@
         transform: translateX(100%);
       }
     }
+
+    /* Tab drag reorder */
+    .tab.dragging {
+      z-index: 100;
+      opacity: 0.85;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      transition: none !important;
+      cursor: grabbing !important;
+      user-select: none;
+    }
   </style>
 </head>
 

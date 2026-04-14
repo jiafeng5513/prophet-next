@@ -12,6 +12,18 @@ let tabCounter = 0 // 用于跟踪标签序号
 let homeViewId
 // 添加一个 Map 来跟踪每个标签页的加载状态
 const loadingStates = new Map()
+let tabDragJustEnded = false
+
+// Suppress tab click right after drag ends
+tabsContainer.addEventListener(
+  'click',
+  (e) => {
+    if (tabDragJustEnded && e.target.closest('.tab')) {
+      e.stopPropagation()
+    }
+  },
+  true
+)
 
 // 创建主页tab
 function createHomeElement(viewId) {
@@ -55,6 +67,7 @@ function createHomeElement(viewId) {
     window.selectedElement = e.target
   })
 
+  setupTabDrag(tab)
   return tab
 }
 
@@ -100,6 +113,7 @@ function createSettingsElement(viewId) {
     window.selectedElement = e.target
   })
 
+  setupTabDrag(tab)
   return tab
 }
 
@@ -145,6 +159,7 @@ function createTabElement(viewId) {
     window.selectedElement = e.target
   })
 
+  setupTabDrag(tab)
   return tab
 }
 
@@ -506,3 +521,154 @@ window.addEventListener('keydown', (e) => {
     window.electronAPI.openDevTools()
   }
 })
+
+// =====================
+// Tab Drag Reordering
+// =====================
+let dragState = null
+
+function setupTabDrag(tabEl) {
+  tabEl.addEventListener('dragstart', (e) => e.preventDefault())
+
+  tabEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return
+    if (e.target.closest('.close-btn')) return
+    e.preventDefault()
+
+    // Clean up any stale drag state
+    if (dragState) {
+      dragState.allTabs.forEach((t) => {
+        t.style.transition = ''
+        t.style.transform = ''
+      })
+      dragState.tab.classList.remove('dragging')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      dragState = null
+    }
+
+    const startX = e.clientX
+
+    const onMouseMove = (moveEvt) => {
+      const dx = moveEvt.clientX - startX
+
+      if (!dragState) {
+        if (Math.abs(dx) < 5) return
+
+        const allTabs = [...tabsContainer.querySelectorAll('.tab')]
+        if (allTabs.length < 2) return
+        const rects = allTabs.map((t) => t.getBoundingClientRect())
+        const idx = allTabs.indexOf(tabEl)
+
+        // Compute slot width from actual tab positions
+        let slotWidth
+        if (idx < allTabs.length - 1) {
+          slotWidth = rects[idx + 1].left - rects[idx].left
+        } else if (idx > 0) {
+          slotWidth = rects[idx].left - rects[idx - 1].left
+        } else {
+          slotWidth = rects[idx].width
+        }
+
+        dragState = {
+          tab: tabEl,
+          allTabs,
+          rects,
+          originalIndex: idx,
+          currentIndex: idx,
+          slotWidth
+        }
+
+        tabEl.classList.add('dragging')
+        document.body.style.cursor = 'grabbing'
+        document.body.style.userSelect = 'none'
+
+        // Smooth transition on sibling tabs
+        allTabs.forEach((t, i) => {
+          if (i !== idx) {
+            t.style.transition = 'transform 200ms ease'
+          }
+        })
+      }
+
+      // Move dragged tab with cursor
+      tabEl.style.transform = `translateX(${dx}px)`
+
+      // Current center of the dragged tab (based on original position)
+      const origRect = dragState.rects[dragState.originalIndex]
+      const currentCenter = origRect.left + origRect.width / 2 + dx
+
+      // Determine target index
+      let target = dragState.originalIndex
+      for (let i = 0; i < dragState.rects.length; i++) {
+        if (i === dragState.originalIndex) continue
+        const rCenter = dragState.rects[i].left + dragState.rects[i].width / 2
+        if (i < dragState.originalIndex && currentCenter < rCenter) {
+          target = Math.min(target, i)
+        }
+        if (i > dragState.originalIndex && currentCenter > rCenter) {
+          target = Math.max(target, i)
+        }
+      }
+
+      // Shift siblings to make room
+      if (target !== dragState.currentIndex) {
+        dragState.currentIndex = target
+        const { originalIndex, allTabs: tabs, slotWidth: sw } = dragState
+
+        tabs.forEach((t, i) => {
+          if (i === originalIndex) return
+          if (originalIndex < target && i > originalIndex && i <= target) {
+            t.style.transform = `translateX(${-sw}px)`
+          } else if (originalIndex > target && i >= target && i < originalIndex) {
+            t.style.transform = `translateX(${sw}px)`
+          } else {
+            t.style.transform = 'translateX(0px)'
+          }
+        })
+      }
+    }
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+
+      if (!dragState) return
+
+      const { tab: draggedTab, allTabs, originalIndex, currentIndex } = dragState
+
+      // Clean up styles
+      allTabs.forEach((t) => {
+        t.style.transition = ''
+        t.style.transform = ''
+      })
+      draggedTab.classList.remove('dragging')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+
+      // Reorder DOM if position changed
+      if (currentIndex !== originalIndex) {
+        const newTabBtnEl = document.getElementById('new-tab-btn')
+        draggedTab.remove()
+        const remainingTabs = [...tabsContainer.querySelectorAll('.tab')]
+
+        if (currentIndex >= remainingTabs.length) {
+          tabsContainer.insertBefore(draggedTab, newTabBtnEl)
+        } else {
+          tabsContainer.insertBefore(draggedTab, remainingTabs[currentIndex])
+        }
+        updateTabNumbers()
+      }
+
+      // Suppress click event after drag
+      tabDragJustEnded = true
+      requestAnimationFrame(() => {
+        tabDragJustEnded = false
+      })
+      dragState = null
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  })
+}
