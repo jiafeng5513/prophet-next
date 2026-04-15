@@ -1,8 +1,8 @@
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
-const homeBtn = document.getElementById('home-btn')
-const settingsBtn = document.getElementById('settings-btn')
-const hashBtn = document.getElementById('hash-btn')
+const sidebarHomeBtn = document.getElementById('sidebar-home-btn')
+const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn')
+const sidebarPythonBtn = document.getElementById('sidebar-python-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
@@ -185,17 +185,18 @@ newTabBtn.addEventListener('click', () => {
   }
 })
 
-// 按home按钮，创建home tab
-homeBtn.addEventListener('click', () => {
+// 侧边栏: 按home按钮，创建homa tab
+sidebarHomeBtn.addEventListener('click', () => {
   window.electronAPI.createHomeTab()
 })
 
-// 按settings按钮，创建设置 tab
-settingsBtn.addEventListener('click', () => {
+// 侧边栏: 按settings按钮，创建设置 tab
+sidebarSettingsBtn.addEventListener('click', () => {
   window.electronAPI.createSettingsTab()
 })
 
-hashBtn.addEventListener('click', () => {
+// 侧边栏: 按python按钮，创建编辑器 tab
+sidebarPythonBtn.addEventListener('click', () => {
   window.electronAPI.createPythonTab()
 })
 
@@ -672,3 +673,31 @@ function setupTabDrag(tabEl) {
     document.addEventListener('mouseup', onMouseUp)
   })
 }
+
+// =====================
+// Sidebar Active State
+// =====================
+function updateSidebarActiveState(type) {
+  // 清除所有 active
+  document.querySelectorAll('.activity-bar-item').forEach((item) => {
+    item.classList.remove('active')
+  })
+  // 根据类型激活对应图标
+  if (type === 'home') {
+    sidebarHomeBtn.classList.add('active')
+  } else if (type === 'settings') {
+    sidebarSettingsBtn.classList.add('active')
+  } else if (type === 'python') {
+    sidebarPythonBtn.classList.add('active')
+  }
+}
+
+// 监听活动标签类型变化
+window.electronAPI.onActiveTabTypeChanged((type) => {
+  updateSidebarActiveState(type)
+})
+
+// 监听切换到已有标签页（主页/设置页单例复用）
+window.electronAPI.onSwitchToTab((viewId) => {
+  setActiveTab(viewId)
+})

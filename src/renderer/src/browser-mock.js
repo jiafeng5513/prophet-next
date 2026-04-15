@@ -43,7 +43,7 @@ class BrowserTabManager {
       this.contentArea.style.cssText = `
         position: absolute;
         top: 40px;
-        left: 0;
+        left: 48px;
         right: 0;
         bottom: 0;
         background: #2e2c29;
@@ -291,6 +291,12 @@ class BrowserTabManager {
     })
 
     this.activeViewId = viewId
+
+    // 通知侧边栏更新激活状态
+    const viewData = this.views.get(viewId)
+    if (viewData) {
+      this.emit('active-tab-type-changed', viewData.type)
+    }
   }
 
   closeTab(viewId) {
@@ -382,7 +388,13 @@ window.electronAPI = {
   }),
 
   createHomeTab: () => {
-    tabManager.createHomeTab()
+    // 单例：如果已存在则切换
+    if (tabManager.homeViewId && tabManager.views.has(tabManager.homeViewId)) {
+      tabManager.switchTab(tabManager.homeViewId)
+      tabManager.emit('switch-to-tab', tabManager.homeViewId)
+    } else {
+      tabManager.createHomeTab()
+    }
   },
 
   createNewTab: () => {
@@ -390,7 +402,14 @@ window.electronAPI = {
   },
 
   createSettingsTab: () => {
-    tabManager.createSettingsTab()
+    // 单例：如果已存在则切换
+    const settingsId = Array.from(tabManager.views.entries()).find(([, v]) => v.type === 'settings')?.[0]
+    if (settingsId) {
+      tabManager.switchTab(settingsId)
+      tabManager.emit('switch-to-tab', settingsId)
+    } else {
+      tabManager.createSettingsTab()
+    }
   },
 
   createPythonTab: () => {
@@ -447,6 +466,20 @@ window.electronAPI = {
 
   closeAllChartTabs: () => {
     tabManager.closeAllChartTabs()
+  },
+
+  onActiveTabTypeChanged: (callback) => {
+    if (!tabManager.listeners['active-tab-type-changed']) {
+      tabManager.listeners['active-tab-type-changed'] = []
+    }
+    tabManager.listeners['active-tab-type-changed'].push(callback)
+  },
+
+  onSwitchToTab: (callback) => {
+    if (!tabManager.listeners['switch-to-tab']) {
+      tabManager.listeners['switch-to-tab'] = []
+    }
+    tabManager.listeners['switch-to-tab'].push(callback)
   },
 
   removeAllListeners: () => {

@@ -20,6 +20,88 @@
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
       background: #000000;
+      overflow: hidden;
+    }
+
+    /* App 整体布局 */
+    .app-container {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* VSCode 风格 Activity Bar */
+    .activity-bar {
+      width: 48px;
+      min-width: 48px;
+      background: #252526;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 10;
+      border-right: 1px solid #1a1a1a;
+      -webkit-app-region: drag;
+    }
+
+    .activity-bar-top {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding-top: 4px;
+    }
+
+    .activity-bar-bottom {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding-bottom: 8px;
+    }
+
+    .activity-bar-item {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      -webkit-app-region: no-drag;
+    }
+
+    .activity-bar-item img {
+      filter: brightness(0) invert(1);
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+    }
+
+    .activity-bar-item:hover img {
+      opacity: 0.85;
+    }
+
+    .activity-bar-item.active img {
+      opacity: 1;
+    }
+
+    .activity-bar-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 25%;
+      height: 50%;
+      width: 2px;
+      background: #ffffff;
+      border-radius: 0 2px 2px 0;
+    }
+
+    /* Main Content 区域 */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
 
     /* 修改标签栏容器样式 */
@@ -132,11 +214,6 @@
       margin-left: 0;
     }
 
-    /* 调整python按钮和第一个动态标签页之间的距离 */
-    #hash-btn + .tab {
-      margin-left: 6px; /* 可以根据需要调整这个值 */
-    }
-
     /* 标签标题样式优化 */
     .tab-title {
       white-space: nowrap;
@@ -202,81 +279,6 @@
     }
 
     #new-tab-btn:hover {
-      background: #e8eaed;
-      color: #202124;
-    }
-
-    /*菜单按钮*/
-    /* 统一设置固定标签按钮的间距 */
-    #home-btn,
-    #settings-btn,
-    #hash-btn {
-      margin: 0 8px;
-      margin-bottom: 3px;
-    }
-
-    #home-btn {
-      width: 28px;
-      height: 28px;
-      min-width: 28px;
-      background: rgba(241, 243, 244, 0.8);
-      border: none;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #5f6368;
-      font-size: 18px;
-      transition: all 0.1s ease-out;
-      -webkit-app-region: no-drag;
-    }
-
-    #home-btn:hover {
-      background: #e8eaed;
-      color: #202124;
-    }
-
-    #settings-btn {
-      width: 28px;
-      height: 28px;
-      min-width: 28px;
-      background: rgba(241, 243, 244, 0.8);
-      border: none;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #5f6368;
-      font-size: 18px;
-      transition: all 0.1s ease-out;
-      -webkit-app-region: no-drag;
-    }
-
-    #settings-btn:hover {
-      background: #e8eaed;
-      color: #202124;
-    }
-
-    #hash-btn {
-      width: 28px;
-      height: 28px;
-      min-width: 28px;
-      background: rgba(241, 243, 244, 0.8);
-      border: none;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #5f6368;
-      font-size: 18px;
-      transition: all 0.1s ease-out;
-      -webkit-app-region: no-drag;
-    }
-
-    #hash-btn:hover {
       background: #e8eaed;
       color: #202124;
     }
@@ -357,24 +359,36 @@
 </head>
 
 <body>
-  <div class="tabs-container">
-    <button class="scroll-button left" id="scroll-left">‹</button>
-    <div class="tabs-scroll">
-      <div id="tabs">
-        <button id="home-btn">
-          <img src="/home.svg" alt="图标" width="16" height="16">
-        </button>
-        <button id="settings-btn">
-          <img src="/settings.svg" alt="图标" width="16" height="16">
-        </button>
-        <button id="hash-btn">
-          <img src="/python.svg" alt="图标" width="16" height="16">
-        </button>
-        <!-- 将新建标签按钮移到这里，作为 tabs 的子元素 -->
-        <button id="new-tab-btn">+</button>
+  <div class="app-container">
+    <!-- VSCode 风格 Activity Bar -->
+    <div class="activity-bar">
+      <div class="activity-bar-top">
+        <div class="activity-bar-item active" id="sidebar-home-btn" title="首页">
+          <img src="/home.svg" alt="首页" width="24" height="24">
+        </div>
+        <div class="activity-bar-item" id="sidebar-python-btn" title="编辑器">
+          <img src="/python.svg" alt="编辑器" width="24" height="24">
+        </div>
+      </div>
+      <div class="activity-bar-bottom">
+        <div class="activity-bar-item" id="sidebar-settings-btn" title="设置">
+          <img src="/settings.svg" alt="设置" width="24" height="24">
+        </div>
       </div>
     </div>
-    <button class="scroll-button right" id="scroll-right">›</button>
+    <!-- 主内容区 -->
+    <div class="main-content">
+      <div class="tabs-container">
+        <button class="scroll-button left" id="scroll-left">‹</button>
+        <div class="tabs-scroll">
+          <div id="tabs">
+            <!-- 将新建标签按钮移到这里，作为 tabs 的子元素 -->
+            <button id="new-tab-btn">+</button>
+          </div>
+        </div>
+        <button class="scroll-button right" id="scroll-right">›</button>
+      </div>
+    </div>
   </div>
 
   <!-- 使用外部脚本文件 -->

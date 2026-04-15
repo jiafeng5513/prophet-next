@@ -4,10 +4,14 @@ import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
 
 // 全局的变量参数
+const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
+const TAB_BAR_HEIGHT = 40 // 标签栏高度
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: 'home'|'settings'|'chart'|'python' }
 let activeViewId = null // 活动的view对象
-let homeViewId // home的viewId
+let homeViewId = null // home的viewId
+let settingsViewId = null // settings的viewId
+let pythonViewId = null // python编辑器的viewId
 
 function createWindow() {
   // Create the browser window.
@@ -37,7 +41,7 @@ function createWindow() {
     if (!mainWindow || !activeViewId) return
     const activeView = views.get(activeViewId)
     if (activeView) {
-      updateWebViewBounds(mainWindow, activeView)
+      updateWebViewBounds(mainWindow, activeView.view)
     }
   }
 
@@ -255,6 +259,7 @@ function createSettingsTab() {
   }
 
   setActiveTab(viewId)
+  settingsViewId = viewId
   return viewId
 }
 
@@ -304,24 +309,19 @@ function createPythonTab() {
   }
 
   setActiveTab(viewId)
+  pythonViewId = viewId
   return viewId
 }
 // 更新 WebContentsView 边界的函数
 function updateWebViewBounds(window, webView) {
-  // 这种方法取得的尺寸会受到窗口外边框的影响
-  // const mainwin_content_width = window.getBounds().width - 10,
-  // const mainwin_content_height = window.getBounds().height - 80
   // 这种方法取得的尺寸是实际可使用区域的尺寸
   const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
   webView.setBounds({
-    x: 0,
-    y: 40,
-    width: mainwin_content_width,
-    height: mainwin_content_height - 40
+    x: ACTIVITY_BAR_WIDTH,
+    y: TAB_BAR_HEIGHT,
+    width: mainwin_content_width - ACTIVITY_BAR_WIDTH,
+    height: mainwin_content_height - TAB_BAR_HEIGHT
   })
-
-  // 可选：设置缩放因子以适应内容
-  // webView.webContents.setZoomFactor(0.95)
 }
 
 // 关闭所有图表页面
@@ -373,15 +373,25 @@ function setActiveTab(viewId) {
     if (id === viewId) {
       updateWebViewBounds(mainWindow, viewData.view)
     } else {
-      viewData.view.setBounds({ x: 0, y: 40, width: 0, height: 0 })
+      viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: TAB_BAR_HEIGHT, width: 0, height: 0 })
     }
   })
   activeViewId = viewId
+  // 通知渲染进程更新侧边栏激活状态
+  const viewData = views.get(viewId)
+  if (viewData) {
+    mainWindow.webContents.send('active-tab-type-changed', viewData.type)
+  }
 }
 
 // 监听标签页相关的事件
 ipcMain.on('home-tab', () => {
-  createHomeTab()
+  if (homeViewId && views.has(homeViewId)) {
+    setActiveTab(homeViewId)
+    mainWindow.webContents.send('switch-to-tab', homeViewId)
+  } else {
+    createHomeTab()
+  }
 })
 
 ipcMain.on('new-tab', () => {
@@ -389,11 +399,21 @@ ipcMain.on('new-tab', () => {
 })
 
 ipcMain.on('settings-tab', () => {
-  createSettingsTab()
+  if (settingsViewId && views.has(settingsViewId)) {
+    setActiveTab(settingsViewId)
+    mainWindow.webContents.send('switch-to-tab', settingsViewId)
+  } else {
+    createSettingsTab()
+  }
 })
 
 ipcMain.on('python-tab', () => {
-  createPythonTab()
+  if (pythonViewId && views.has(pythonViewId)) {
+    setActiveTab(pythonViewId)
+    mainWindow.webContents.send('switch-to-tab', pythonViewId)
+  } else {
+    createPythonTab()
+  }
 })
 
 ipcMain.on('switch-tab', (event, viewId) => {
@@ -407,6 +427,11 @@ ipcMain.on('close-tab', (event, viewId) => {
     // mainWindow.removeBrowserView(view)
     mainWindow.contentView.removeChildView(viewData.view)
     views.delete(viewId)
+
+    // 清除单例标签的 ID 跟踪
+    if (viewId === homeViewId) homeViewId = null
+    if (viewId === settingsViewId) settingsViewId = null
+    if (viewId === pythonViewId) pythonViewId = null
 
     if (activeViewId === viewId) {
       const lastViewId = Array.from(views.keys())[views.size - 1]
