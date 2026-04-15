@@ -104,5 +104,14 @@ $ npm run build:linux
 9. [wondertreader](https://wtdocs.readthedocs.io/zh/latest/)
 10. [install-redis-on-linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/)
 
-## 已知bug
-1. 打开多个标签页的情况下移动和缩放页面会导致原来的标签页失去焦点
+## 开发计划
+1. 开发模式和交易模式的切换逻辑
+2. 编辑器页面的逻辑：编辑器页面重构成开发模式？
+3. 主logo的UX设计
+
+
+## 目前的主要疑惑：
+1. K线页面和代码页面显然都有打开多个页面的需求
+2. 代码调试的时候可能需要同时显示K线页面
+3. 一个工程可能存在多个代码文件，多个策略，多个指标，显然需要一个类似vscode的“资源管理器”
+4. Agent在开发模式下能够进行开发辅助，在交易模式下能够直接获得交易信息

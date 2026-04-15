@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self';
              script-src 'self';
              style-src 'self' 'unsafe-inline';
@@ -48,7 +49,7 @@
       flex-direction: column;
       align-items: center;
       width: 100%;
-      padding-top: 4px;
+      padding-top: 42px;
     }
 
     .activity-bar-bottom {
@@ -102,6 +103,19 @@
       display: flex;
       flex-direction: column;
       min-width: 0;
+    }
+
+    /* macOS 标题栏 */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      height: 38px;
+      background: #1e1e1e;
+      -webkit-app-region: drag;
+      position: relative;
+      border-bottom: 1px solid #1a1a1a;
+      padding-left: 80px;
     }
 
     /* 修改标签栏容器样式 */
@@ -355,6 +369,71 @@
       cursor: grabbing !important;
       user-select: none;
     }
+
+    /* 模式切换胶囊开关 */
+    .mode-switch {
+      display: flex;
+      align-items: center;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .mode-switch-label {
+      font-size: 11px;
+      color: #888;
+      user-select: none;
+      white-space: nowrap;
+      transition: color 0.2s;
+    }
+
+    .mode-switch-label.active {
+      color: #e0e0e0;
+    }
+
+    .mode-switch-toggle {
+      position: relative;
+      width: 36px;
+      height: 18px;
+      margin: 0 6px;
+      cursor: pointer;
+    }
+
+    .mode-switch-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .mode-switch-slider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #0e639c;
+      border-radius: 9px;
+      transition: background 0.3s;
+    }
+
+    .mode-switch-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      bottom: 2px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+
+    .mode-switch-toggle input:checked + .mode-switch-slider {
+      background: #89d185;
+    }
+
+    .mode-switch-toggle input:checked + .mode-switch-slider::before {
+      transform: translateX(18px);
+    }
   </style>
 </head>
 
@@ -378,6 +457,17 @@
     </div>
     <!-- 主内容区 -->
     <div class="main-content">
+      <!-- macOS 标题栏 -->
+      <div class="titlebar">
+        <div class="mode-switch">
+          <span class="mode-switch-label active" id="mode-label-trade">交易</span>
+          <label class="mode-switch-toggle">
+            <input type="checkbox" id="mode-toggle">
+            <span class="mode-switch-slider"></span>
+          </label>
+          <span class="mode-switch-label" id="mode-label-dev">开发</span>
+        </div>
+      </div>
       <div class="tabs-container">
         <button class="scroll-button left" id="scroll-left">‹</button>
         <div class="tabs-scroll">

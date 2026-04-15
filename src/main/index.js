@@ -5,7 +5,9 @@ import icon from '../../resources/prophet_logo.png?asset'
 
 // 全局的变量参数
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
+const TITLE_BAR_HEIGHT = 38 // 标题栏高度
 const TAB_BAR_HEIGHT = 40 // 标签栏高度
+const TOP_OFFSET = TITLE_BAR_HEIGHT + TAB_BAR_HEIGHT // 内容区域顶部偏移
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: 'home'|'settings'|'chart'|'python' }
 let activeViewId = null // 活动的view对象
@@ -21,6 +23,8 @@ function createWindow() {
     show: false,
     title: 'Prophet-Next',
     autoHideMenuBar: true,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 12, y: 10 },
     ...(process.platform === 'linux' ? { icon } : { icon }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -318,9 +322,9 @@ function updateWebViewBounds(window, webView) {
   const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
   webView.setBounds({
     x: ACTIVITY_BAR_WIDTH,
-    y: TAB_BAR_HEIGHT,
+    y: TOP_OFFSET,
     width: mainwin_content_width - ACTIVITY_BAR_WIDTH,
-    height: mainwin_content_height - TAB_BAR_HEIGHT
+    height: mainwin_content_height - TOP_OFFSET
   })
 }
 
@@ -373,7 +377,7 @@ function setActiveTab(viewId) {
     if (id === viewId) {
       updateWebViewBounds(mainWindow, viewData.view)
     } else {
-      viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: TAB_BAR_HEIGHT, width: 0, height: 0 })
+      viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: TOP_OFFSET, width: 0, height: 0 })
     }
   })
   activeViewId = viewId
@@ -385,6 +389,12 @@ function setActiveTab(viewId) {
 }
 
 // 监听标签页相关的事件
+ipcMain.on('renderer-ready', () => {
+  if (!homeViewId || !views.has(homeViewId)) {
+    createHomeTab()
+  }
+})
+
 ipcMain.on('home-tab', () => {
   if (homeViewId && views.has(homeViewId)) {
     setActiveTab(homeViewId)

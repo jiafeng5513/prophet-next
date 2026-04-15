@@ -42,7 +42,7 @@ class BrowserTabManager {
       this.contentArea.id = 'browser-content-area'
       this.contentArea.style.cssText = `
         position: absolute;
-        top: 40px;
+        top: 78px;
         left: 48px;
         right: 0;
         bottom: 0;
@@ -386,6 +386,13 @@ window.electronAPI = {
     node: 'browser-mode',
     v8: 'browser-mode'
   }),
+
+  rendererReady: () => {
+    // 浏览器模式：直接创建首页
+    if (!tabManager.homeViewId || !tabManager.views.has(tabManager.homeViewId)) {
+      tabManager.createHomeTab()
+    }
+  },
 
   createHomeTab: () => {
     // 单例：如果已存在则切换

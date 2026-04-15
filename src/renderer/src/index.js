@@ -6,6 +6,9 @@ const sidebarPythonBtn = document.getElementById('sidebar-python-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
+const modeToggle = document.getElementById('mode-toggle')
+const modeLabelTrade = document.getElementById('mode-label-trade')
+const modeLabelDev = document.getElementById('mode-label-dev')
 let activeTabId = null
 let views = new Set() // 用于跟踪标签数量
 let tabCounter = 0 // 用于跟踪标签序号
@@ -266,8 +269,8 @@ window.addEventListener('beforeunload', () => {
   window.electronAPI.removeAllListeners()
 })
 
-// 初始化时请求创建第一个标签并设置新建按钮状态
-window.electronAPI.createHomeTab()
+// 初始化时通知主进程渲染进程已就绪，请求创建首页
+window.electronAPI.rendererReady()
 
 updateNewTabButtonVisibility()
 
@@ -700,4 +703,17 @@ window.electronAPI.onActiveTabTypeChanged((type) => {
 // 监听切换到已有标签页（主页/设置页单例复用）
 window.electronAPI.onSwitchToTab((viewId) => {
   setActiveTab(viewId)
+})
+
+// =====================
+// 模式切换（交易 / 开发）
+// =====================
+let currentMode = 'trade' // 默认交易模式
+
+modeToggle.addEventListener('change', () => {
+  const isDev = modeToggle.checked
+  currentMode = isDev ? 'dev' : 'trade'
+  modeLabelTrade.classList.toggle('active', !isDev)
+  modeLabelDev.classList.toggle('active', isDev)
+  console.log(`[mode-switch] 切换到${isDev ? '开发' : '交易'}模式`)
 })
