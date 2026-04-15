@@ -42,5 +42,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 监听切换到已有标签页
   onSwitchToTab: (callback) =>
-    ipcRenderer.on('switch-to-tab', (event, viewId) => callback(viewId))
+    ipcRenderer.on('switch-to-tab', (event, viewId) => callback(viewId)),
+
+  // Agent 面板切换
+  toggleAgentPanel: (visible) => ipcRenderer.send('toggle-agent-panel', visible),
+
+  // Agent 面板调整宽度
+  resizeAgentPanel: (width) => ipcRenderer.send('resize-agent-panel', width)
 })

@@ -42,7 +42,7 @@ class BrowserTabManager {
       this.contentArea.id = 'browser-content-area'
       this.contentArea.style.cssText = `
         position: absolute;
-        top: 78px;
+        top: 66px;
         left: 48px;
         right: 0;
         bottom: 0;
@@ -487,6 +487,14 @@ window.electronAPI = {
       tabManager.listeners['switch-to-tab'] = []
     }
     tabManager.listeners['switch-to-tab'].push(callback)
+  },
+
+  toggleAgentPanel: (visible) => {
+    console.log('[browser-mock] Agent panel:', visible ? 'show' : 'hide')
+  },
+
+  resizeAgentPanel: (width) => {
+    console.log('[browser-mock] Agent panel width:', width)
   },
 
   removeAllListeners: () => {

@@ -9,6 +9,9 @@ const scrollRightBtn = document.getElementById('scroll-right')
 const modeToggle = document.getElementById('mode-toggle')
 const modeLabelTrade = document.getElementById('mode-label-trade')
 const modeLabelDev = document.getElementById('mode-label-dev')
+const toggleAgentBtn = document.getElementById('toggle-agent-btn')
+const agentPanel = document.getElementById('agent-panel')
+const agentInput = document.getElementById('agent-input')
 let activeTabId = null
 let views = new Set() // 用于跟踪标签数量
 let tabCounter = 0 // 用于跟踪标签序号
@@ -716,4 +719,59 @@ modeToggle.addEventListener('change', () => {
   modeLabelTrade.classList.toggle('active', !isDev)
   modeLabelDev.classList.toggle('active', isDev)
   console.log(`[mode-switch] 切换到${isDev ? '开发' : '交易'}模式`)
+})
+
+// =====================
+// Agent 侧栏切换
+// =====================
+let agentPanelVisible = true
+
+toggleAgentBtn.addEventListener('click', () => {
+  agentPanelVisible = !agentPanelVisible
+  agentPanel.classList.toggle('hidden', !agentPanelVisible)
+  toggleAgentBtn.classList.toggle('active', agentPanelVisible)
+  // 通知主进程更新 view 尺寸
+  window.electronAPI.toggleAgentPanel(agentPanelVisible)
+})
+
+// 自动调整 textarea 高度
+agentInput.addEventListener('input', () => {
+  agentInput.style.height = 'auto'
+  agentInput.style.height = Math.min(agentInput.scrollHeight, 120) + 'px'
+})
+
+// =====================
+// Agent 侧栏拖拽调整宽度
+// =====================
+const agentResizeHandle = document.getElementById('agent-resize-handle')
+let isResizing = false
+
+agentResizeHandle.addEventListener('mousedown', (e) => {
+  if (!agentPanelVisible) return
+  e.preventDefault()
+  isResizing = true
+  agentResizeHandle.classList.add('dragging')
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  const onMouseMove = (moveEvt) => {
+    const containerRight = document.querySelector('.workspace-row').getBoundingClientRect().right
+    let newWidth = containerRight - moveEvt.clientX
+    newWidth = Math.max(200, Math.min(600, newWidth))
+    agentPanel.style.width = newWidth + 'px'
+    // 通知主进程更新 view 尺寸
+    window.electronAPI.resizeAgentPanel(newWidth)
+  }
+
+  const onMouseUp = () => {
+    isResizing = false
+    agentResizeHandle.classList.remove('dragging')
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
 })

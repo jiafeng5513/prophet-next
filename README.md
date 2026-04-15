@@ -105,10 +105,10 @@ $ npm run build:linux
 10. [install-redis-on-linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/)
 
 ## 开发计划
-1. 开发模式和交易模式的切换逻辑
-2. 编辑器页面的逻辑：编辑器页面重构成开发模式？
-3. 主logo的UX设计
-
+1. [done]开发模式和交易模式的切换逻辑: 用一个开关手动切换
+2. 主logo的UX设计
+3. agent窗口和侧边栏开关按钮，模仿vscode右上角
+4. 两个模式的UI梳理
 
 ## 目前的主要疑惑：
 1. K线页面和代码页面显然都有打开多个页面的需求

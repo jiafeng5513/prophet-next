@@ -5,9 +5,12 @@ import icon from '../../resources/prophet_logo.png?asset'
 
 // 全局的变量参数
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
-const TITLE_BAR_HEIGHT = 38 // 标题栏高度
-const TAB_BAR_HEIGHT = 40 // 标签栏高度
+const TITLE_BAR_HEIGHT = 30 // 标题栏高度
+const TAB_BAR_HEIGHT = 36 // 标签栏高度
 const TOP_OFFSET = TITLE_BAR_HEIGHT + TAB_BAR_HEIGHT // 内容区域顶部偏移
+const AGENT_PANEL_WIDTH = 350 // Agent 侧栏默认宽度
+let agentPanelVisible = true // Agent 侧栏是否可见
+let currentAgentPanelWidth = AGENT_PANEL_WIDTH // Agent 侧栏当前宽度
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: 'home'|'settings'|'chart'|'python' }
 let activeViewId = null // 活动的view对象
@@ -24,7 +27,7 @@ function createWindow() {
     title: 'Prophet-Next',
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 10 },
+    trafficLightPosition: { x: 12, y: 8 },
     ...(process.platform === 'linux' ? { icon } : { icon }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -318,12 +321,12 @@ function createPythonTab() {
 }
 // 更新 WebContentsView 边界的函数
 function updateWebViewBounds(window, webView) {
-  // 这种方法取得的尺寸是实际可使用区域的尺寸
   const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
+  const rightPanelWidth = agentPanelVisible ? currentAgentPanelWidth : 0
   webView.setBounds({
     x: ACTIVITY_BAR_WIDTH,
     y: TOP_OFFSET,
-    width: mainwin_content_width - ACTIVITY_BAR_WIDTH,
+    width: mainwin_content_width - ACTIVITY_BAR_WIDTH - rightPanelWidth,
     height: mainwin_content_height - TOP_OFFSET
   })
 }
@@ -459,6 +462,34 @@ ipcMain.on('close-tab', (event, viewId) => {
 ipcMain.on('close-all-chart-tabs', () => {
   console.log('[IPC] 收到关闭所有图表页面的请求')
   closeAllChartTabs()
+})
+
+// 监听 Agent 面板切换
+ipcMain.on('toggle-agent-panel', (event, visible) => {
+  agentPanelVisible = visible
+  if (!visible) {
+    currentAgentPanelWidth = 0
+  } else {
+    currentAgentPanelWidth = AGENT_PANEL_WIDTH
+  }
+  // 更新当前活动视图的尺寸
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
+})
+
+// 监听 Agent 面板宽度调整
+ipcMain.on('resize-agent-panel', (event, width) => {
+  currentAgentPanelWidth = width
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
 })
 
 // 监听右键菜单请求
