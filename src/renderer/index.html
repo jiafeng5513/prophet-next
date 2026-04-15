@@ -113,7 +113,7 @@
       overflow: hidden;
     }
 
-    /* macOS 标题栏 */
+    /* 标题栏 */
     .titlebar {
       display: flex;
       align-items: center;
@@ -123,7 +123,43 @@
       -webkit-app-region: drag;
       position: relative;
       border-bottom: 1px solid #1a1a1a;
-      padding-left: 80px;
+      padding-left: 80px; /* macOS 默认，JS 中根据平台调整 */
+    }
+
+    /* Windows 平台标题栏 */
+    body.platform-win32 .titlebar {
+      padding-left: 8px;
+    }
+
+    /* 标题栏左侧 Logo 和标题（仅 Windows） */
+    .titlebar-brand {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin-right: 12px;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+
+    body.platform-win32 .titlebar-brand {
+      display: flex;
+    }
+
+    .titlebar-brand img {
+      width: 16px;
+      height: 16px;
+    }
+
+    .titlebar-brand span {
+      font-size: 12px;
+      color: #cccccc;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    /* Windows 平台标题栏右侧按钮需要避开原生窗口控制按钮覆盖层（约138px） */
+    body.platform-win32 .titlebar-actions {
+      right: 140px;
     }
 
     /* 修改标签栏容器样式 */
@@ -655,8 +691,12 @@
 
 <body>
   <div class="app-container">
-    <!-- macOS 标题栏（全宽） -->
+    <!-- 标题栏（全宽） -->
     <div class="titlebar">
+      <div class="titlebar-brand">
+        <img src="/prophet_logo.png" alt="Prophet">
+        <span>Prophet-Next</span>
+      </div>
       <div class="mode-switch">
         <span class="mode-switch-label active" id="mode-label-trade">交易</span>
         <label class="mode-switch-toggle">

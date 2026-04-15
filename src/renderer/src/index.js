@@ -273,6 +273,12 @@ window.addEventListener('beforeunload', () => {
 })
 
 // 初始化时通知主进程渲染进程已就绪，请求创建首页
+// 检测平台并添加对应 CSS 类
+if (window.electronAPI && window.electronAPI.getPlatform) {
+  const platform = window.electronAPI.getPlatform()
+  document.body.classList.add(`platform-${platform}`)
+}
+
 window.electronAPI.rendererReady()
 
 updateNewTabButtonVisibility()

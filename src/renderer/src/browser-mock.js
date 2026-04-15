@@ -387,6 +387,13 @@ window.electronAPI = {
     v8: 'browser-mode'
   }),
 
+  getPlatform: () => {
+    // 浏览器模式下根据 userAgent 猜测平台
+    if (navigator.userAgent.includes('Win')) return 'win32'
+    if (navigator.userAgent.includes('Mac')) return 'darwin'
+    return 'linux'
+  },
+
   rendererReady: () => {
     // 浏览器模式：直接创建首页
     if (!tabManager.homeViewId || !tabManager.views.has(tabManager.homeViewId)) {

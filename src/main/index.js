@@ -20,20 +20,34 @@ let pythonViewId = null // python编辑器的viewId
 
 function createWindow() {
   // Create the browser window.
-  mainWindow = new BrowserWindow({
+  const windowOptions = {
     width: 1600,
     height: 1000,
     show: false,
     title: 'Prophet-Next',
     autoHideMenuBar: true,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 8 },
-    ...(process.platform === 'linux' ? { icon } : { icon }),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
-  })
+  }
+
+  if (process.platform === 'darwin') {
+    // macOS: 隐藏标题栏，保留红绿灯
+    windowOptions.titleBarStyle = 'hiddenInset'
+    windowOptions.trafficLightPosition = { x: 12, y: 8 }
+  } else {
+    // Windows/Linux: 隐藏标题栏，使用原生窗口控制按钮覆盖层
+    windowOptions.titleBarStyle = 'hidden'
+    windowOptions.titleBarOverlay = {
+      color: '#1e1e1e',
+      symbolColor: '#cccccc',
+      height: 30
+    }
+  }
+
+  mainWindow = new BrowserWindow(windowOptions)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

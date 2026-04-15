@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => process.versions,
+  getPlatform: () => process.platform,
   // 通知主进程渲染进程已就绪
   rendererReady: () => ipcRenderer.send('renderer-ready'),
   // 添加标签页相关 API
