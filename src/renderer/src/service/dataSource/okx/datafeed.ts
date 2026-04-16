@@ -234,23 +234,23 @@ export default class DataFeed
 
     // OKX API 使用毫秒时间戳，TradingView 传入的 from/to 是秒时间戳
     // OKX API 参数: instId, bar, before, after, limit
-    // before: 请求此时间戳之前的数据（毫秒）
-    // after: 请求此时间戳之后的数据（毫秒）
+    // after: 返回时间戳早于该值的数据（即 ts < after）
+    // before: 返回时间戳晚于该值的数据（即 ts > before）
     const urlParameters: Record<string, string | number> = {
       instId: parsedSymbol.instId,
       bar: interval,
-      limit: 1000
+      limit: 300
     }
 
-    // OKX 使用 before 和 after 参数
-    // before: 请求此时间戳之前的数据（毫秒）
-    // after: 请求此时间戳之后的数据（毫秒）
+    // OKX 使用 before 和 after 参数（注意语义与直觉相反）
+    // after: 返回时间戳早于该值的记录（ts < after），用于向过去翻页
+    // before: 返回时间戳晚于该值的记录（ts > before），用于向未来翻页
     // 如果 firstDataRequest 为 true，忽略 to 参数，返回直到最新的K线
     if (!firstDataRequest && to) {
-      urlParameters.before = to * 1000
+      urlParameters.after = to * 1000
     }
     if (from) {
-      urlParameters.after = from * 1000
+      urlParameters.before = from * 1000
     }
 
     const query = Object.keys(urlParameters)

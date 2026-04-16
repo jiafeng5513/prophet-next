@@ -1,5 +1,5 @@
 // 设置页面脚本
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // 这里可以添加设置页面的交互逻辑
   console.log('设置页面已加载')
   
@@ -13,7 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('theme') || 'dark'
   const savedCloseWarning = localStorage.getItem('close-warning') === 'true'
   const savedMaxTabs = localStorage.getItem('max-tabs') || '10'
-  const savedDataSource = localStorage.getItem('data-source') || 'binance'
+  
+  // 从主进程获取数据源设置（解决跨 partition 隔离问题）
+  let savedDataSource = 'binance'
+  if (window.electronAPI && window.electronAPI.getDataSource) {
+    savedDataSource = await window.electronAPI.getDataSource()
+  } else {
+    savedDataSource = localStorage.getItem('data-source') || 'binance'
+  }
   
   // 恢复设置值
   themeSelect.value = savedTheme
@@ -60,22 +67,15 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('data-source', newDataSource)
       console.log('[Settings] 数据源已切换为:', newDataSource)
       
-      // 触发自定义事件，通知同窗口内的其他页面数据源已变化
-      window.dispatchEvent(new CustomEvent('dataSourceChanged', { 
-        detail: { dataSource: newDataSource } 
-      }))
-      console.log('[Settings] 已触发 dataSourceChanged 事件')
+      // 通过 IPC 通知主进程更新数据源（解决跨 partition 隔离问题）
+      if (window.electronAPI && window.electronAPI.setDataSource) {
+        window.electronAPI.setDataSource(newDataSource)
+      }
       
       // 通知主进程关闭所有图表页面
       if (window.electronAPI && window.electronAPI.closeAllChartTabs) {
         console.log('[Settings] 调用 closeAllChartTabs API')
         window.electronAPI.closeAllChartTabs()
-      } else {
-        // 浏览器模式下的处理
-        console.log('[Settings] 浏览器模式：需要关闭所有图表页面')
-        if (window.electronAPI && window.electronAPI.closeAllChartTabs) {
-          window.electronAPI.closeAllChartTabs()
-        }
       }
     } else {
       // 用户取消，恢复原来的值

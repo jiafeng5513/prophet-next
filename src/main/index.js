@@ -1,4 +1,4 @@
-import { app, shell, WebContentsView, BrowserWindow, ipcMain, Menu, MenuItem } from 'electron'
+import { app, shell, WebContentsView, BrowserWindow, ipcMain, Menu, session } from 'electron'
 import { join } from 'path'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
@@ -17,6 +17,7 @@ let activeViewId = null // 活动的view对象
 let homeViewId = null // home的viewId
 let settingsViewId = null // settings的viewId
 let pythonViewId = null // python编辑器的viewId
+let currentDataSource = 'binance' // 当前数据源设置（跨 partition 共享）
 
 function createWindow() {
   // Create the browser window.
@@ -478,6 +479,16 @@ ipcMain.on('close-all-chart-tabs', () => {
   closeAllChartTabs()
 })
 
+// 数据源设置的 IPC 处理（解决跨 partition localStorage 隔离问题）
+ipcMain.handle('get-data-source', () => {
+  return currentDataSource
+})
+
+ipcMain.on('set-data-source', (event, dataSource) => {
+  console.log('[IPC] 数据源已更新为:', dataSource)
+  currentDataSource = dataSource
+})
+
 // 监听 Agent 面板切换
 ipcMain.on('toggle-agent-panel', (event, visible) => {
   agentPanelVisible = visible
@@ -552,6 +563,30 @@ ipcMain.on('show-context-menu', (event, viewId) => {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+
+  // 为所有新创建的 session 设置 CORS 旁路（解决 OKX API 不返回 CORS 头的问题）
+  app.on('session-created', (newSession) => {
+    newSession.webRequest.onHeadersReceived((details, callback) => {
+      const { responseHeaders } = details
+      if (details.url.includes('okx.com')) {
+        responseHeaders['Access-Control-Allow-Origin'] = ['*']
+        responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS']
+        responseHeaders['Access-Control-Allow-Headers'] = ['*']
+      }
+      callback({ responseHeaders })
+    })
+  })
+
+  // 也为默认 session 设置
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const { responseHeaders } = details
+    if (details.url.includes('okx.com')) {
+      responseHeaders['Access-Control-Allow-Origin'] = ['*']
+      responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS']
+      responseHeaders['Access-Control-Allow-Headers'] = ['*']
+    }
+    callback({ responseHeaders })
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

@@ -37,6 +37,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 关闭所有图表页面
   closeAllChartTabs: () => ipcRenderer.send('close-all-chart-tabs'),
 
+  // 数据源设置（跨 partition 共享）
+  getDataSource: () => ipcRenderer.invoke('get-data-source'),
+  setDataSource: (dataSource) => ipcRenderer.send('set-data-source', dataSource),
+
   // 监听活动标签类型变化（用于更新侧边栏激活状态）
   onActiveTabTypeChanged: (callback) =>
     ipcRenderer.on('active-tab-type-changed', (event, type) => callback(type)),

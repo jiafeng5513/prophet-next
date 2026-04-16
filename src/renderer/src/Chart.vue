@@ -10,15 +10,19 @@ const errorMessage = ref('')
 const dataSource = ref('binance') // 当前使用的数据源
 const defaultSymbol = ref('Binance:BTC/USDT') // 默认交易对
 
-// 从 localStorage 获取数据源设置
-function getDataSource() {
+// 从主进程获取数据源设置（解决跨 partition localStorage 隔离问题）
+async function getDataSource() {
+  if (window.electronAPI && window.electronAPI.getDataSource) {
+    return await window.electronAPI.getDataSource()
+  }
+  // 浏览器模式回退到 localStorage
   return localStorage.getItem('data-source') || 'binance'
 }
 
 // 初始化数据源
-function initDataFeed() {
+async function initDataFeed() {
   try {
-    const currentDataSource = getDataSource()
+    const currentDataSource = await getDataSource()
     console.log('[Chart] 正在初始化数据源:', currentDataSource)
     
     // 根据设置创建对应的数据源实例
@@ -39,23 +43,8 @@ function initDataFeed() {
   }
 }
 
-onMounted(() => {
-  initDataFeed()
-  
-  // 监听 localStorage 变化（用于响应设置页面的数据源切换）
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'data-source' && e.newValue !== e.oldValue) {
-      console.log('[Chart] 检测到数据源变化，重新初始化:', e.newValue)
-      initDataFeed()
-    }
-  })
-  
-  // 使用自定义事件来监听同窗口内的 localStorage 变化
-  // 因为 storage 事件只在其他窗口/标签页触发
-  window.addEventListener('dataSourceChanged', (e) => {
-    console.log('[Chart] 收到数据源变化事件:', e.detail)
-    initDataFeed()
-  })
+onMounted(async () => {
+  await initDataFeed()
 })
 </script>
 

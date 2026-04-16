@@ -21,28 +21,6 @@ export const OKX_RESOLUSION = {
   '1M': '1M'  // 1月
 }
 
-// OKX WebSocket 订阅支持的周期格式映射
-// 根据 OKX API 文档，WebSocket 支持的周期格式应该与 REST API 一致
-// 使用与 REST API 相同的周期格式
-// 注意：如果某个周期不支持，可以临时映射到支持的周期进行测试
-export const OKX_WS_RESOLUTION = {
-  1: '1m',   // 1分钟
-  3: '3m',   // 3分钟
-  5: '5m',   // 5分钟
-  15: '1H',  // 15分钟 -> 临时映射到 1H 进行测试
-  30: '30m', // 30分钟
-  60: '1H',  // 1小时（OKX 使用大写 H）
-  120: '2H', // 2小时
-  240: '4H', // 4小时
-  360: '6H', // 6小时
-  720: '12H', // 12小时
-  '1D': '1D', // 1天
-  '2D': '1D', // 2天 -> 映射到 1D（如果 WebSocket 不支持）
-  '3D': '1D', // 3天 -> 映射到 1D（如果 WebSocket 不支持）
-  '1W': '1W', // 1周
-  '1M': '1M'  // 1月
-}
-
 export default class SocketClient {
   socket!: WebSocket;
   channelToSubscription!: Map<string, any>;
@@ -190,9 +168,8 @@ export default class SocketClient {
       return
     }
 
-    // 使用 WebSocket 专用的周期映射
-    // 如果 WebSocket 不支持某个周期，会映射到最接近的支持周期
-    const resolution_str = `${OKX_WS_RESOLUTION[resolution as keyof typeof OKX_WS_RESOLUTION]}`
+    // 使用统一的周期映射（REST API 和 WebSocket 格式一致）
+    const resolution_str = `${OKX_RESOLUSION[resolution as keyof typeof OKX_RESOLUSION]}`
     if (!resolution_str) {
       console.error('[subscribeOnStream] Invalid resolution:', resolution)
       return
