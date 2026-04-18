@@ -1,5 +1,25 @@
-import { app, shell, WebContentsView, BrowserWindow, ipcMain, Menu, session } from 'electron'
-import { join } from 'path'
+import {
+  app,
+  shell,
+  WebContentsView,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  session,
+  dialog
+} from 'electron'
+import { join, dirname } from 'path'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  renameSync,
+  rmSync
+} from 'fs'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
 
@@ -8,12 +28,275 @@ const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
 const TITLE_BAR_HEIGHT = 30 // 标题栏高度
 const TAB_BAR_HEIGHT = 36 // 标签栏高度
 const AGENT_PANEL_WIDTH = 350 // Agent 侧栏默认宽度
+const EXPLORER_PANEL_WIDTH = 250 // 资源管理器默认宽度
 let agentPanelVisible = true // Agent 侧栏是否可见
 let currentAgentPanelWidth = AGENT_PANEL_WIDTH // Agent 侧栏当前宽度
+let explorerPanelVisible = false // 资源管理器是否可见（仅开发模式）
+let currentExplorerPanelWidth = EXPLORER_PANEL_WIDTH // 资源管理器当前宽度
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: string, title: string }
 let activeViewId = null // 活动的view对象
 let currentDataSource = 'binance' // 当前数据源设置（跨 partition 共享）
+
+// =====================
+// 配置文件管理
+// =====================
+const configPath = join(app.getPath('userData'), 'prophet-config.json')
+
+function readConfig() {
+  try {
+    if (existsSync(configPath)) {
+      return JSON.parse(readFileSync(configPath, 'utf-8'))
+    }
+  } catch (e) {
+    console.error('[Config] 读取配置失败:', e)
+  }
+  return {}
+}
+
+function writeConfig(config) {
+  try {
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  } catch (e) {
+    console.error('[Config] 写入配置失败:', e)
+  }
+}
+
+function getDefaultWorkspacePath() {
+  if (is.dev) {
+    return join(app.getAppPath(), 'ProphetWorkSpace')
+  }
+  return join(dirname(app.getPath('exe')), 'ProphetWorkSpace')
+}
+
+function getWorkspacePath() {
+  const config = readConfig()
+  return config.workspacePath || getDefaultWorkspacePath()
+}
+
+function setWorkspacePath(newPath) {
+  const config = readConfig()
+  config.workspacePath = newPath
+  writeConfig(config)
+}
+
+function ensureWorkspaceDir() {
+  const wsPath = getWorkspacePath()
+  if (!existsSync(wsPath)) {
+    try {
+      mkdirSync(wsPath, { recursive: true })
+      console.log('[Workspace] 已创建工作区目录:', wsPath)
+    } catch (e) {
+      console.error('[Workspace] 创建工作区目录失败:', e)
+    }
+  }
+
+  // 创建 indicator 和 strategy 目录
+  const indicatorDir = join(wsPath, 'indicator')
+  const strategyDir = join(wsPath, 'strategy')
+  for (const dir of [indicatorDir, strategyDir]) {
+    if (!existsSync(dir)) {
+      try {
+        mkdirSync(dir, { recursive: true })
+      } catch (e) {
+        console.error('[Workspace] 创建子目录失败:', e)
+      }
+    }
+  }
+
+  // 创建示例指标：indicator/sma_indicator/
+  const smaDir = join(indicatorDir, 'sma_indicator')
+  if (!existsSync(smaDir)) {
+    mkdirSync(smaDir, { recursive: true })
+    writeFileSync(
+      join(smaDir, 'sma.py'),
+      [
+        '# SMA 简单移动平均线指标',
+        '# Prophet-Next 示例指标',
+        '',
+        '',
+        'def calculate(close_prices: list[float], period: int = 20) -> list[float]:',
+        '    """计算简单移动平均线',
+        '',
+        '    Args:',
+        '        close_prices: 收盘价序列',
+        '        period: 均线周期，默认20',
+        '',
+        '    Returns:',
+        '        移动平均线数值序列，前 period-1 个值为 None',
+        '    """',
+        '    result = []',
+        '    for i in range(len(close_prices)):',
+        '        if i < period - 1:',
+        '            result.append(None)',
+        '        else:',
+        '            window = close_prices[i - period + 1:i + 1]',
+        '            result.append(sum(window) / period)',
+        '    return result',
+        ''
+      ].join('\n'),
+      'utf-8'
+    )
+    writeFileSync(
+      join(smaDir, '__init__.py'),
+      ['from .sma import calculate', ''].join('\n'),
+      'utf-8'
+    )
+    console.log('[Workspace] 已创建示例指标: sma_indicator')
+  }
+
+  // 创建示例策略：strategy/ma_cross_strategy/
+  const maCrossDir = join(strategyDir, 'ma_cross_strategy')
+  if (!existsSync(maCrossDir)) {
+    mkdirSync(maCrossDir, { recursive: true })
+    writeFileSync(
+      join(maCrossDir, 'strategy.py'),
+      [
+        '# 均线交叉策略',
+        '# Prophet-Next 示例策略',
+        '',
+        'from indicator.sma_indicator import calculate as sma',
+        '',
+        '',
+        'def generate_signal(data: dict) -> str:',
+        '    """生成交易信号',
+        '',
+        '    Args:',
+        '        data: 包含 OHLCV 数据的字典，至少包含 "close" 键',
+        '',
+        '    Returns:',
+        '        "buy" / "sell" / "hold"',
+        '    """',
+        '    close = data.get("close", [])',
+        '    if len(close) < 21:',
+        '        return "hold"',
+        '',
+        '    ma_short = sma(close, period=5)',
+        '    ma_long = sma(close, period=20)',
+        '',
+        '    if ma_short[-1] is None or ma_long[-1] is None:',
+        '        return "hold"',
+        '    if ma_short[-2] is None or ma_long[-2] is None:',
+        '        return "hold"',
+        '',
+        '    # 短期均线上穿长期均线 -> 买入',
+        '    if ma_short[-1] > ma_long[-1] and ma_short[-2] <= ma_long[-2]:',
+        '        return "buy"',
+        '    # 短期均线下穿长期均线 -> 卖出',
+        '    elif ma_short[-1] < ma_long[-1] and ma_short[-2] >= ma_long[-2]:',
+        '        return "sell"',
+        '',
+        '    return "hold"',
+        ''
+      ].join('\n'),
+      'utf-8'
+    )
+    writeFileSync(
+      join(maCrossDir, 'backtest.py'),
+      [
+        '# 均线交叉策略回测脚本',
+        '',
+        'from strategy import generate_signal',
+        '',
+        '',
+        'def run_backtest(prices: list[float]) -> dict:',
+        '    """简单回测框架',
+        '',
+        '    Args:',
+        '        prices: 历史收盘价序列',
+        '',
+        '    Returns:',
+        '        回测结果统计',
+        '    """',
+        '    position = 0  # 0: 空仓, 1: 持仓',
+        '    trades = []',
+        '    entry_price = 0.0',
+        '',
+        '    for i in range(1, len(prices)):',
+        '        data = {"close": prices[:i + 1]}',
+        '        signal = generate_signal(data)',
+        '',
+        '        if signal == "buy" and position == 0:',
+        '            position = 1',
+        '            entry_price = prices[i]',
+        '            trades.append({"type": "buy", "price": entry_price, "index": i})',
+        '        elif signal == "sell" and position == 1:',
+        '            position = 0',
+        '            profit = prices[i] - entry_price',
+        '            trades.append({"type": "sell", "price": prices[i], "index": i, "profit": profit})',
+        '',
+        '    return {',
+        '        "total_trades": len(trades),',
+        '        "trades": trades',
+        '    }',
+        '',
+        '',
+        'if __name__ == "__main__":',
+        '    test_prices = [10, 11, 12, 11, 13, 14, 15, 14, 13, 12,',
+        '                   11, 12, 13, 14, 15, 16, 17, 18, 19, 20,',
+        '                   21, 22, 21, 20, 19, 18, 19, 20, 21, 22]',
+        '    result = run_backtest(test_prices)',
+        '    print(f"总交易次数: {result[\'total_trades\']}")',
+        '    for t in result["trades"]:',
+        '        print(t)',
+        ''
+      ].join('\n'),
+      'utf-8'
+    )
+    writeFileSync(
+      join(maCrossDir, '__init__.py'),
+      ['from .strategy import generate_signal', ''].join('\n'),
+      'utf-8'
+    )
+    console.log('[Workspace] 已创建示例策略: ma_cross_strategy')
+  }
+
+  // 清理旧的 example.py（如果存在）
+  const oldExamplePath = join(wsPath, 'example.py')
+  if (existsSync(oldExamplePath)) {
+    try {
+      unlinkSync(oldExamplePath)
+      console.log('[Workspace] 已清理旧示例文件: example.py')
+    } catch {
+      // 忽略清理失败
+    }
+  }
+}
+
+// 读取目录内容（用于资源管理器）
+function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
+  const items = []
+  try {
+    const entries = readdirSync(dirPath)
+    for (const name of entries) {
+      // 跳过隐藏文件
+      if (name.startsWith('.')) continue
+      const fullPath = join(dirPath, name)
+      try {
+        const stat = statSync(fullPath)
+        const item = {
+          name,
+          path: fullPath,
+          isDirectory: stat.isDirectory()
+        }
+        if (stat.isDirectory() && depth < maxDepth) {
+          item.children = readDirectoryTree(fullPath, depth + 1, maxDepth)
+        }
+        items.push(item)
+      } catch {
+        // 跳过无法访问的文件
+      }
+    }
+    // 文件夹在前，文件在后，各自按名称排序
+    items.sort((a, b) => {
+      if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name)
+      return a.isDirectory ? -1 : 1
+    })
+  } catch (e) {
+    console.error('[Explorer] 读取目录失败:', e)
+  }
+  return items
+}
 
 // 模式管理
 let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'settings'
@@ -110,10 +393,10 @@ function getUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     let random = Math.random() * 16
     if (timestamp > 0) {
-      random = (timestamp + random) % 16 | 0
+      random = ((timestamp + random) % 16) | 0
       timestamp = Math.floor(timestamp / 16)
     } else {
-      random = (perforNow + random) % 16 | 0
+      random = ((perforNow + random) % 16) | 0
       perforNow = Math.floor(perforNow / 16)
     }
     return (c === 'x' ? random : (random & 0x3) | 0x8).toString(16)
@@ -143,7 +426,7 @@ function getDefaultTitle(type) {
 }
 
 // 创建 WebContentsView（统一创建函数）
-function createView(type) {
+function createView(type, options = {}) {
   const viewId = getUUID()
   const view = new WebContentsView({
     webPreferences: {
@@ -156,7 +439,14 @@ function createView(type) {
   view.setBackgroundColor('#2e2c29')
   mainWindow.contentView.addChildView(view)
 
-  const viewData = { view, type, title: getDefaultTitle(type) }
+  // 如果指定了文件路径，使用文件名作为标题
+  let title = getDefaultTitle(type)
+  if (options.filePath) {
+    const fileName = options.filePath.split(/[\\/]/).pop()
+    title = fileName || title
+  }
+
+  const viewData = { view, type, title, filePath: options.filePath || null }
   views.set(viewId, viewData)
 
   // 初始隐藏
@@ -177,6 +467,10 @@ function createView(type) {
   })
   view.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
+    // 如果有关联的文件路径，通知 python 编辑器加载文件
+    if (viewData.filePath && viewData.type === 'python') {
+      view.webContents.send('open-file-in-editor', viewData.filePath)
+    }
   })
   view.webContents.on('did-fail-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
@@ -234,6 +528,8 @@ function switchMode(newMode) {
   })
 
   currentMode = newMode
+  // 资源管理器仅在开发模式下显示
+  explorerPanelVisible = newMode === 'developing'
   const showTabBar = newMode === 'trading' || newMode === 'developing'
   const showNewTabBtn = newMode === 'trading'
 
@@ -257,8 +553,11 @@ function switchMode(newMode) {
   } else if (newMode === 'developing') {
     const state = modeState.developing
     if (state.viewIds.size === 0) {
-      // 首次进入开发模式，创建 Python 编辑器
-      const viewId = createView('python')
+      // 首次进入开发模式，打开示例策略文件
+      const wsPath = getWorkspacePath()
+      const defaultPath = join(wsPath, 'strategy', 'ma_cross_strategy', 'strategy.py')
+      const filePath = existsSync(defaultPath) ? defaultPath : null
+      const viewId = createView('python', { filePath })
       state.viewIds.add(viewId)
       state.activeViewId = viewId
     }
@@ -303,11 +602,12 @@ function switchMode(newMode) {
 function updateWebViewBounds(window, webView) {
   const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
   const rightPanelWidth = agentPanelVisible ? currentAgentPanelWidth : 0
+  const leftPanelWidth = explorerPanelVisible ? currentExplorerPanelWidth : 0
   const topOffset = getTopOffset()
   webView.setBounds({
-    x: ACTIVITY_BAR_WIDTH,
+    x: ACTIVITY_BAR_WIDTH + leftPanelWidth,
     y: topOffset,
-    width: mainwin_content_width - ACTIVITY_BAR_WIDTH - rightPanelWidth,
+    width: mainwin_content_width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth,
     height: mainwin_content_height - topOffset
   })
 }
@@ -441,6 +741,50 @@ ipcMain.on('set-data-source', (event, dataSource) => {
   currentDataSource = dataSource
 })
 
+// 读取文件内容
+ipcMain.handle('read-file', (event, filePath) => {
+  // 安全检查：只允许读取工作区目录下的文件
+  const wsPath = getWorkspacePath()
+  const normalizedPath = join(filePath)
+  if (!normalizedPath.startsWith(wsPath)) {
+    console.warn('[ReadFile] 拒绝读取工作区以外的文件:', filePath)
+    return null
+  }
+  try {
+    return readFileSync(filePath, 'utf-8')
+  } catch (e) {
+    console.error('[ReadFile] 读取文件失败:', e)
+    return null
+  }
+})
+
+// 在开发模式中打开文件
+ipcMain.on('open-file', (event, filePath) => {
+  if (currentMode !== 'developing') return
+  const state = modeState.developing
+
+  // 检查是否已有打开此文件的标签页
+  for (const vid of state.viewIds) {
+    const vd = views.get(vid)
+    if (vd && vd.filePath === filePath) {
+      // 已打开，直接切换到此标签页
+      setActiveTab(vid)
+      mainWindow.webContents.send('tab-activated', vid)
+      return
+    }
+  }
+
+  // 创建新的编辑器视图
+  const viewId = createView('python', { filePath })
+  state.viewIds.add(viewId)
+  state.activeViewId = viewId
+
+  const viewData = views.get(viewId)
+  const title = viewData ? viewData.title : 'Python 编辑器'
+  mainWindow.webContents.send('file-opened', { viewId, title })
+  setActiveTab(viewId)
+})
+
 // 监听 Agent 面板切换
 ipcMain.on('toggle-agent-panel', (event, visible) => {
   agentPanelVisible = visible
@@ -461,6 +805,159 @@ ipcMain.on('toggle-agent-panel', (event, visible) => {
 // 监听 Agent 面板宽度调整
 ipcMain.on('resize-agent-panel', (event, width) => {
   currentAgentPanelWidth = width
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
+})
+
+// =====================
+// 工作区目录 IPC
+// =====================
+ipcMain.handle('get-workspace-path', () => {
+  return getWorkspacePath()
+})
+
+ipcMain.handle('set-workspace-path', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择工作区目录',
+    defaultPath: getWorkspacePath(),
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    const newPath = result.filePaths[0]
+    setWorkspacePath(newPath)
+    ensureWorkspaceDir()
+    return newPath
+  }
+  return null
+})
+
+ipcMain.handle('read-directory', (event, dirPath) => {
+  // 安全检查：只允许读取工作区目录下的内容
+  const wsPath = getWorkspacePath()
+  const normalizedDir = join(dirPath)
+  if (!normalizedDir.startsWith(wsPath)) {
+    console.warn('[Explorer] 拒绝访问工作区以外的目录:', dirPath)
+    return []
+  }
+  return readDirectoryTree(dirPath, 0, 0)
+})
+
+// 安全检查工具函数：确保路径在工作区内
+function isInsideWorkspace(targetPath) {
+  const wsPath = getWorkspacePath()
+  const normalized = join(targetPath)
+  return normalized.startsWith(wsPath)
+}
+
+// 创建文件
+ipcMain.handle('create-file', (event, filePath) => {
+  const safePath = join(filePath)
+  if (!isInsideWorkspace(safePath)) return { success: false, error: '路径不在工作区内' }
+  if (existsSync(safePath)) return { success: false, error: '文件已存在' }
+  try {
+    writeFileSync(safePath, '', 'utf-8')
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 创建文件夹
+ipcMain.handle('create-folder', (event, folderPath) => {
+  const safePath = join(folderPath)
+  if (!isInsideWorkspace(safePath)) return { success: false, error: '路径不在工作区内' }
+  if (existsSync(safePath)) return { success: false, error: '文件夹已存在' }
+  try {
+    mkdirSync(safePath, { recursive: true })
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 重命名
+ipcMain.handle('rename-item', (event, oldPath, newPath) => {
+  const safeOld = join(oldPath)
+  const safeNew = join(newPath)
+  if (!isInsideWorkspace(safeOld) || !isInsideWorkspace(safeNew)) {
+    return { success: false, error: '路径不在工作区内' }
+  }
+  if (!existsSync(safeOld)) return { success: false, error: '原路径不存在' }
+  if (existsSync(safeNew)) return { success: false, error: '目标名称已存在' }
+  try {
+    renameSync(safeOld, safeNew)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 删除文件/文件夹
+ipcMain.handle('delete-item', (event, targetPath) => {
+  const safePath = join(targetPath)
+  if (!isInsideWorkspace(safePath)) return { success: false, error: '路径不在工作区内' }
+  if (!existsSync(safePath)) return { success: false, error: '路径不存在' }
+  try {
+    const stat = statSync(safePath)
+    if (stat.isDirectory()) {
+      rmSync(safePath, { recursive: true, force: true })
+    } else {
+      unlinkSync(safePath)
+    }
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 移动（用于拖拽）
+ipcMain.handle('move-item', (event, srcPath, destDir) => {
+  const safeSrc = join(srcPath)
+  const safeDest = join(destDir)
+  if (!isInsideWorkspace(safeSrc) || !isInsideWorkspace(safeDest)) {
+    return { success: false, error: '路径不在工作区内' }
+  }
+  if (!existsSync(safeSrc)) return { success: false, error: '源路径不存在' }
+  const itemName = safeSrc.split(/[\\/]/).pop()
+  const destPath = join(safeDest, itemName)
+  if (existsSync(destPath)) return { success: false, error: '目标位置已存在同名项' }
+  try {
+    renameSync(safeSrc, destPath)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 保存文件内容
+ipcMain.handle('save-file', (event, filePath, content) => {
+  const safePath = join(filePath)
+  if (!isInsideWorkspace(safePath)) return { success: false, error: '路径不在工作区内' }
+  try {
+    writeFileSync(safePath, content, 'utf-8')
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 资源管理器面板 IPC
+ipcMain.on('toggle-explorer-panel', (event, visible) => {
+  explorerPanelVisible = visible
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
+})
+
+ipcMain.on('resize-explorer-panel', (event, width) => {
+  currentExplorerPanelWidth = width
   if (activeViewId) {
     const activeView = views.get(activeViewId)
     if (activeView) {
@@ -505,8 +1002,6 @@ ipcMain.on('show-context-menu', (event, viewId) => {
 //   })
 // }
 
-
-
 // app.whenReady().then(createWindow)
 
 // This method will be called when Electron has finished
@@ -515,6 +1010,9 @@ ipcMain.on('show-context-menu', (event, viewId) => {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+
+  // 确保工作区目录存在
+  ensureWorkspaceDir()
 
   // 为所有新创建的 session 设置 CORS 旁路（解决 OKX API 不返回 CORS 头的问题）
   app.on('session-created', (newSession) => {

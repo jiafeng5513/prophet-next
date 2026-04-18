@@ -5,6 +5,7 @@ import 'monaco-editor/esm/vs/basic-languages/python/python.contribution'
 
 const editorEl = ref(null)
 let editorInstance = null
+let currentFilePath = null
 
 onMounted(() => {
   // 1) 注册一次性的 Snippets（幂等保护，避免 HMR 重复注册）
@@ -52,21 +53,27 @@ onMounted(() => {
 
   // 3) 创建编辑器
   editorInstance = monaco.editor.create(editorEl.value, {
-    value: [
-      '# Welcome to Python Editor',
-      'def greet(name: str) -> None:',
-      '    print(f"Hello, {name}")',
-      '',
-      'if __name__ == "__main__":',
-      '    greet("Monaco")',
-      ''
-    ].join('\n'),
+    value: '',
     language: 'python',
     theme: 'vs-dark',
     fontSize: 14,
     automaticLayout: true,
     minimap: { enabled: false }
   })
+
+  // 4) 监听主进程发来的打开文件消息
+  if (window.electronAPI && window.electronAPI.onOpenFileInEditor) {
+    window.electronAPI.onOpenFileInEditor(async (filePath) => {
+      console.log('[Editor] 收到打开文件请求:', filePath)
+      if (window.electronAPI.readFile) {
+        const content = await window.electronAPI.readFile(filePath)
+        if (content !== null && editorInstance) {
+          editorInstance.setValue(content)
+          currentFilePath = filePath
+        }
+      }
+    })
+  }
 })
 
 onBeforeUnmount(() => {

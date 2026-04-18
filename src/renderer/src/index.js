@@ -12,6 +12,9 @@ const toggleAgentBtn = document.getElementById('toggle-agent-btn')
 const agentPanel = document.getElementById('agent-panel')
 const agentInput = document.getElementById('agent-input')
 const tabsContainerEl = document.querySelector('.tabs-container')
+const explorerPanel = document.getElementById('explorer-panel')
+const explorerTree = document.getElementById('explorer-tree')
+const explorerResizeHandle = document.getElementById('explorer-resize-handle')
 let activeTabId = null
 let tabCounter = 0 // 用于跟踪标签序号
 // 添加一个 Map 来跟踪每个标签页的加载状态
@@ -159,6 +162,13 @@ window.electronAPI.onModeSwitched((data) => {
   // 显示/隐藏新建按钮
   newTabBtn.style.display = data.showNewTabBtn ? 'flex' : 'none'
 
+  // 显示/隐藏资源管理器（仅开发模式）
+  const showExplorer = data.mode === 'developing'
+  explorerPanel.classList.toggle('visible', showExplorer)
+  if (showExplorer && explorerTree.children.length === 0) {
+    loadExplorerTree()
+  }
+
   // 恢复新模式的标签页
   if (data.showTabBar) {
     const saved = modeSavedTabs[data.mode]
@@ -222,6 +232,22 @@ window.electronAPI.onTabClosed((event, viewId) => {
 
 window.electronAPI.onTabLimit((message) => {
   showToast(message)
+})
+
+// 响应文件打开（开发模式从资源管理器打开文件，主进程创建了新视图）
+window.electronAPI.onFileOpened((data) => {
+  const { viewId, title } = data
+  if (!modeViews.developing) modeViews.developing = new Set()
+  modeViews.developing.add(viewId)
+  const tab = createTabElement(viewId, title)
+  tabsContainer.insertBefore(tab, newTabBtn)
+  setActiveTab(viewId)
+  setTimeout(updateScrollButtons, 0)
+})
+
+// 响应标签页激活（已打开的文件再次点击时切换到该标签页）
+window.electronAPI.onTabActivated((viewId) => {
+  setActiveTab(viewId)
 })
 
 window.addEventListener('beforeunload', () => {
@@ -646,6 +672,441 @@ function setupTabDrag(tabEl) {
     document.addEventListener('mouseup', onMouseUp)
   })
 }
+
+// =====================
+// 资源管理器
+// =====================
+let selectedTreeItem = null
+let currentContextMenu = null
+let workspacePath = null
+
+async function loadExplorerTree() {
+  if (!window.electronAPI || !window.electronAPI.getWorkspacePath) return
+  workspacePath = await window.electronAPI.getWorkspacePath()
+  if (!workspacePath) return
+  const items = await window.electronAPI.readDirectory(workspacePath)
+  explorerTree.innerHTML = ''
+  renderTreeItems(explorerTree, items, workspacePath, 0)
+}
+
+// 关闭所有右键菜单
+function closeContextMenu() {
+  if (currentContextMenu) {
+    currentContextMenu.remove()
+    currentContextMenu = null
+  }
+}
+document.addEventListener('click', closeContextMenu)
+document.addEventListener('contextmenu', closeContextMenu)
+
+// 显示右键菜单
+function showExplorerContextMenu(x, y, itemPath, isDirectory, row, itemEl, isRoot) {
+  closeContextMenu()
+  const menu = document.createElement('div')
+  menu.className = 'explorer-context-menu'
+  menu.style.left = x + 'px'
+  menu.style.top = y + 'px'
+
+  const actions = []
+  if (isDirectory) {
+    actions.push({ label: '新建文件', action: () => createNewItem(itemPath, 'file', itemEl) })
+    actions.push({ label: '新建文件夹', action: () => createNewItem(itemPath, 'folder', itemEl) })
+  }
+  if (!isRoot) {
+    if (isDirectory) actions.push({ type: 'separator' })
+    actions.push({ label: '重命名', action: () => startRename(row, itemPath, isDirectory) })
+    actions.push({
+      label: '删除',
+      danger: true,
+      action: () => deleteTreeItem(itemPath, isDirectory)
+    })
+  }
+
+  for (const act of actions) {
+    if (act.type === 'separator') {
+      const sep = document.createElement('div')
+      sep.className = 'menu-separator'
+      menu.appendChild(sep)
+    } else {
+      const mi = document.createElement('div')
+      mi.className = 'menu-item' + (act.danger ? ' danger' : '')
+      mi.textContent = act.label
+      mi.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closeContextMenu()
+        act.action()
+      })
+      menu.appendChild(mi)
+    }
+  }
+
+  document.body.appendChild(menu)
+  // 防止菜单超出屏幕
+  const rect = menu.getBoundingClientRect()
+  if (rect.right > window.innerWidth) menu.style.left = window.innerWidth - rect.width - 4 + 'px'
+  if (rect.bottom > window.innerHeight) menu.style.top = window.innerHeight - rect.height - 4 + 'px'
+  currentContextMenu = menu
+}
+
+// 在资源管理器空白处右键
+explorerTree.addEventListener('contextmenu', (e) => {
+  // 仅在直接点击 explorerTree 本身时触发（非树项）
+  if (e.target === explorerTree) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!workspacePath) return
+    showExplorerContextMenu(e.clientX, e.clientY, workspacePath, true, null, explorerTree, true)
+  }
+})
+
+// 根目录作为拖放目标
+explorerTree.addEventListener('dragover', (e) => {
+  if (e.target === explorerTree) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+})
+explorerTree.addEventListener('drop', async (e) => {
+  if (e.target !== explorerTree || !workspacePath) return
+  e.preventDefault()
+  const srcPath = e.dataTransfer.getData('text/plain')
+  if (!srcPath) return
+  const result = await window.electronAPI.moveItem(srcPath, workspacePath)
+  if (result.success) {
+    await loadExplorerTree()
+  }
+})
+
+// 新建文件/文件夹 - 在指定目录下创建内联输入
+async function createNewItem(parentPath, type, parentEl) {
+  // 如果 parentEl 是文件夹，确保展开
+  const childrenContainer = parentEl.querySelector(':scope > .tree-children')
+  if (childrenContainer && !childrenContainer.classList.contains('expanded')) {
+    // 触发展开
+    const row = parentEl.querySelector(':scope > .tree-item')
+    if (row) row.click()
+    // 等待展开完成
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  const target = childrenContainer || parentEl
+  const depth = getDepthOfContainer(target)
+
+  const wrapper = document.createElement('div')
+  wrapper.className = 'tree-item-wrapper'
+  const row = document.createElement('div')
+  row.className = 'tree-item'
+  for (let i = 0; i < depth; i++) {
+    const indent = document.createElement('span')
+    indent.className = 'tree-item-indent'
+    row.appendChild(indent)
+  }
+  const arrow = document.createElement('span')
+  arrow.className = 'tree-item-arrow placeholder'
+  arrow.textContent = '▶'
+  row.appendChild(arrow)
+  const icon = document.createElement('span')
+  icon.className = 'tree-item-icon'
+  icon.textContent = type === 'folder' ? '📁' : '📄'
+  row.appendChild(icon)
+
+  const input = document.createElement('input')
+  input.className = 'tree-item-rename-input'
+  input.placeholder = type === 'folder' ? '文件夹名' : '文件名'
+  row.appendChild(input)
+  wrapper.appendChild(row)
+  target.prepend(wrapper)
+  input.focus()
+
+  const commit = async () => {
+    const newName = input.value.trim()
+    wrapper.remove()
+    if (!newName) return
+    const newPath = parentPath + '/' + newName
+    const api = window.electronAPI
+    const result =
+      type === 'folder' ? await api.createFolder(newPath) : await api.createFile(newPath)
+    if (result.success) {
+      await refreshSubtree(parentPath, parentEl)
+    }
+  }
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commit()
+    }
+    if (e.key === 'Escape') wrapper.remove()
+  })
+  input.addEventListener('blur', commit)
+}
+
+// 获取容器深度
+function getDepthOfContainer(container) {
+  let depth = 0
+  let el = container
+  while (el && el !== explorerTree) {
+    if (el.classList && el.classList.contains('tree-children')) depth++
+    el = el.parentElement
+  }
+  return depth
+}
+
+// 刷新某个子树
+async function refreshSubtree(dirPath, wrapperEl) {
+  const childrenContainer =
+    wrapperEl === explorerTree ? explorerTree : wrapperEl.querySelector(':scope > .tree-children')
+  if (!childrenContainer) return
+  const items = await window.electronAPI.readDirectory(dirPath)
+  childrenContainer.innerHTML = ''
+  const depth = getDepthOfContainer(childrenContainer)
+  renderTreeItems(childrenContainer, items, dirPath, depth)
+  if (childrenContainer !== explorerTree) {
+    childrenContainer.classList.add('expanded')
+  }
+}
+
+// 内联重命名
+function startRename(row, itemPath, isDirectory) {
+  if (!row) return
+  const nameEl = row.querySelector('.tree-item-name')
+  if (!nameEl) return
+  const oldName = nameEl.textContent
+  nameEl.style.display = 'none'
+
+  const input = document.createElement('input')
+  input.className = 'tree-item-rename-input'
+  input.value = oldName
+  row.appendChild(input)
+  input.focus()
+  // 选中不含扩展名的部分
+  const dotIdx = oldName.lastIndexOf('.')
+  input.setSelectionRange(0, dotIdx > 0 && !isDirectory ? dotIdx : oldName.length)
+
+  const commit = async () => {
+    const newName = input.value.trim()
+    input.remove()
+    nameEl.style.display = ''
+    if (!newName || newName === oldName) return
+    const parentPath = itemPath.substring(
+      0,
+      Math.max(itemPath.lastIndexOf('/'), itemPath.lastIndexOf('\\'))
+    )
+    const newPath = parentPath + '/' + newName
+    const result = await window.electronAPI.renameItem(itemPath, newPath)
+    if (result.success) {
+      // 刷新父级
+      const parentWrapper = row.closest('.tree-children')?.closest('.tree-item-wrapper')
+      if (parentWrapper) {
+        await refreshSubtree(parentPath, parentWrapper)
+      } else {
+        await loadExplorerTree()
+      }
+    }
+  }
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commit()
+    }
+    if (e.key === 'Escape') {
+      input.remove()
+      nameEl.style.display = ''
+    }
+  })
+  input.addEventListener('blur', commit)
+}
+
+// 删除
+async function deleteTreeItem(itemPath, isDirectory) {
+  const name = itemPath.split('/').pop()
+  const typeName = isDirectory ? '文件夹' : '文件'
+  if (
+    !confirm(`确定删除${typeName} "${name}" 吗？${isDirectory ? '\n（将删除其中所有内容）' : ''}`)
+  ) {
+    return
+  }
+  const result = await window.electronAPI.deleteItem(itemPath)
+  if (result.success) {
+    await loadExplorerTree()
+  }
+}
+
+function renderTreeItems(container, items, parentPath, depth) {
+  for (const item of items) {
+    const itemEl = document.createElement('div')
+    itemEl.className = 'tree-item-wrapper'
+    itemEl.dataset.path = item.path
+    itemEl.dataset.isDirectory = item.isDirectory ? '1' : '0'
+
+    const row = document.createElement('div')
+    row.className = 'tree-item'
+
+    // 缩进
+    for (let i = 0; i < depth; i++) {
+      const indent = document.createElement('span')
+      indent.className = 'tree-item-indent'
+      row.appendChild(indent)
+    }
+
+    // 展开箭头（文件夹有箭头，文件用占位）
+    const arrow = document.createElement('span')
+    arrow.className = item.isDirectory ? 'tree-item-arrow' : 'tree-item-arrow placeholder'
+    arrow.textContent = '▶'
+    row.appendChild(arrow)
+
+    // 图标
+    const icon = document.createElement('span')
+    icon.className = 'tree-item-icon'
+    icon.textContent = item.isDirectory ? '📁' : getFileIcon(item.name)
+    row.appendChild(icon)
+
+    // 名称
+    const name = document.createElement('span')
+    name.className = 'tree-item-name'
+    name.textContent = item.name
+    row.appendChild(name)
+
+    itemEl.appendChild(row)
+
+    // 右键菜单
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      selectTreeItem(row)
+      showExplorerContextMenu(e.clientX, e.clientY, item.path, item.isDirectory, row, itemEl)
+    })
+
+    // 拖拽支持
+    row.draggable = true
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', item.path)
+      e.dataTransfer.effectAllowed = 'move'
+      row.classList.add('dragging')
+    })
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging')
+    })
+
+    // 文件夹子项容器
+    if (item.isDirectory) {
+      const childrenContainer = document.createElement('div')
+      childrenContainer.className = 'tree-children'
+      let loaded = false
+
+      // 文件夹可作为拖放目标
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        row.classList.add('drag-over')
+      })
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over')
+      })
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        row.classList.remove('drag-over')
+        const srcPath = e.dataTransfer.getData('text/plain')
+        if (!srcPath || srcPath === item.path) return
+        // 不允许拖拽到自己的子目录
+        if (item.path.startsWith(srcPath + '/') || item.path.startsWith(srcPath + '\\')) return
+        const result = await window.electronAPI.moveItem(srcPath, item.path)
+        if (result.success) {
+          await loadExplorerTree()
+        }
+      })
+
+      row.addEventListener('click', async () => {
+        const isExpanded = childrenContainer.classList.contains('expanded')
+        if (isExpanded) {
+          childrenContainer.classList.remove('expanded')
+          arrow.classList.remove('expanded')
+          icon.textContent = '📁'
+        } else {
+          if (!loaded) {
+            const children = await window.electronAPI.readDirectory(item.path)
+            renderTreeItems(childrenContainer, children, item.path, depth + 1)
+            loaded = true
+          }
+          childrenContainer.classList.add('expanded')
+          arrow.classList.add('expanded')
+          icon.textContent = '📂'
+        }
+        selectTreeItem(row)
+      })
+
+      itemEl.appendChild(childrenContainer)
+    } else {
+      row.addEventListener('click', () => {
+        selectTreeItem(row)
+        // 点击文件时在编辑器中打开
+        window.electronAPI.openFile(item.path)
+      })
+    }
+
+    container.appendChild(itemEl)
+  }
+}
+
+function selectTreeItem(row) {
+  if (selectedTreeItem) {
+    selectedTreeItem.classList.remove('selected')
+  }
+  row.classList.add('selected')
+  selectedTreeItem = row
+}
+
+function getFileIcon(filename) {
+  const ext = filename.split('.').pop().toLowerCase()
+  const iconMap = {
+    py: '🐍',
+    js: '📜',
+    ts: '📜',
+    json: '📋',
+    md: '📝',
+    txt: '📄',
+    html: '🌐',
+    css: '🎨',
+    csv: '📊',
+    yml: '⚙️',
+    yaml: '⚙️',
+    toml: '⚙️',
+    ini: '⚙️',
+    cfg: '⚙️',
+    log: '📃'
+  }
+  return iconMap[ext] || '📄'
+}
+
+// 资源管理器拖拽调整宽度
+let isExplorerResizing = false
+
+explorerResizeHandle.addEventListener('mousedown', (e) => {
+  e.preventDefault()
+  isExplorerResizing = true
+  explorerResizeHandle.classList.add('dragging')
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  const onMouseMove = (moveEvt) => {
+    const activityBarRect = document.querySelector('.activity-bar').getBoundingClientRect()
+    let newWidth = moveEvt.clientX - activityBarRect.right
+    newWidth = Math.max(150, Math.min(500, newWidth))
+    explorerPanel.style.width = newWidth + 'px'
+    window.electronAPI.resizeExplorerPanel(newWidth)
+  }
+
+  const onMouseUp = () => {
+    isExplorerResizing = false
+    explorerResizeHandle.classList.remove('dragging')
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+})
 
 // =====================
 // Sidebar Active State

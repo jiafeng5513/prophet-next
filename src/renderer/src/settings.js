@@ -2,7 +2,28 @@
 document.addEventListener('DOMContentLoaded', async () => {
   // 这里可以添加设置页面的交互逻辑
   console.log('设置页面已加载')
-  
+
+  // 工作区目录
+  const workspacePathInput = document.getElementById('workspace-path')
+  const browseWorkspaceBtn = document.getElementById('browse-workspace-btn')
+
+  // 加载工作区路径
+  if (window.electronAPI && window.electronAPI.getWorkspacePath) {
+    const wsPath = await window.electronAPI.getWorkspacePath()
+    workspacePathInput.value = wsPath || ''
+  }
+
+  // 浏览按钮：打开目录选择对话框
+  browseWorkspaceBtn.addEventListener('click', async () => {
+    if (window.electronAPI && window.electronAPI.setWorkspacePath) {
+      const newPath = await window.electronAPI.setWorkspacePath()
+      if (newPath) {
+        workspacePathInput.value = newPath
+        console.log('[Settings] 工作区目录已更改为:', newPath)
+      }
+    }
+  })
+
   // 示例：保存设置
   const themeSelect = document.getElementById('theme')
   const closeWarningCheckbox = document.getElementById('close-warning')

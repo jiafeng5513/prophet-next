@@ -111,7 +111,9 @@ class BrowserTabManager {
       try {
         const title = iframe.contentDocument?.title
         if (title) this.emit('tab-title-updated', viewId, title)
-      } catch (e) { /* cross-origin */ }
+      } catch (e) {
+        /* cross-origin */
+      }
     }
     iframe.onerror = () => {
       this.emit('tab-loading', viewId, false)
@@ -387,6 +389,90 @@ window.electronAPI = {
 
   resizeAgentPanel: (width) => {
     console.log('[browser-mock] Agent panel width:', width)
+  },
+
+  // 工作区相关
+  getWorkspacePath: () => Promise.resolve('/mock/ProphetWorkSpace'),
+  setWorkspacePath: () => {
+    console.log('[browser-mock] setWorkspacePath called')
+    return Promise.resolve(null)
+  },
+  readDirectory: (dirPath) => {
+    console.log('[browser-mock] readDirectory:', dirPath)
+    // 返回模拟的文件树
+    return Promise.resolve([
+      {
+        name: 'indicator',
+        path: dirPath + '/indicator',
+        isDirectory: true
+      },
+      {
+        name: 'strategy',
+        path: dirPath + '/strategy',
+        isDirectory: true
+      }
+    ])
+  },
+  readFile: (filePath) => {
+    console.log('[browser-mock] readFile:', filePath)
+    return Promise.resolve('# Mock file content\nprint("Hello from mock")\n')
+  },
+  openFile: (filePath) => {
+    console.log('[browser-mock] openFile:', filePath)
+    const fileName = filePath.split('/').pop()
+    const viewId = getUUID()
+    const state = tabManager.modeState.developing
+    const iframe = tabManager.createIframe('/python.html', viewId)
+    tabManager.views.set(viewId, { iframe, type: 'python' })
+    state.viewIds.add(viewId)
+    state.activeViewId = viewId
+    tabManager.switchTab(viewId)
+    tabManager.emit('file-opened', { viewId, title: fileName })
+  },
+  onFileOpened: (callback) => {
+    if (!tabManager.listeners['file-opened']) tabManager.listeners['file-opened'] = []
+    tabManager.listeners['file-opened'].push(callback)
+  },
+  onTabActivated: (callback) => {
+    if (!tabManager.listeners['tab-activated']) tabManager.listeners['tab-activated'] = []
+    tabManager.listeners['tab-activated'].push(callback)
+  },
+  onOpenFileInEditor: (callback) => {
+    console.log('[browser-mock] onOpenFileInEditor registered')
+  },
+
+  // 资源管理器面板
+  toggleExplorerPanel: (visible) => {
+    console.log('[browser-mock] Explorer panel:', visible ? 'show' : 'hide')
+  },
+  resizeExplorerPanel: (width) => {
+    console.log('[browser-mock] Explorer panel width:', width)
+  },
+
+  // 文件操作
+  createFile: (filePath) => {
+    console.log('[browser-mock] createFile:', filePath)
+    return Promise.resolve({ success: true })
+  },
+  createFolder: (folderPath) => {
+    console.log('[browser-mock] createFolder:', folderPath)
+    return Promise.resolve({ success: true })
+  },
+  renameItem: (oldPath, newPath) => {
+    console.log('[browser-mock] renameItem:', oldPath, '->', newPath)
+    return Promise.resolve({ success: true })
+  },
+  deleteItem: (targetPath) => {
+    console.log('[browser-mock] deleteItem:', targetPath)
+    return Promise.resolve({ success: true })
+  },
+  moveItem: (srcPath, destDir) => {
+    console.log('[browser-mock] moveItem:', srcPath, '->', destDir)
+    return Promise.resolve({ success: true })
+  },
+  saveFile: (filePath) => {
+    console.log('[browser-mock] saveFile:', filePath)
+    return Promise.resolve({ success: true })
   },
 
   removeAllListeners: () => {

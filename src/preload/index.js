@@ -45,5 +45,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleAgentPanel: (visible) => ipcRenderer.send('toggle-agent-panel', visible),
 
   // Agent 面板调整宽度
-  resizeAgentPanel: (width) => ipcRenderer.send('resize-agent-panel', width)
+  resizeAgentPanel: (width) => ipcRenderer.send('resize-agent-panel', width),
+
+  // 工作区目录
+  getWorkspacePath: () => ipcRenderer.invoke('get-workspace-path'),
+  setWorkspacePath: () => ipcRenderer.invoke('set-workspace-path'),
+  readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  openFile: (filePath) => ipcRenderer.send('open-file', filePath),
+  onFileOpened: (callback) => ipcRenderer.on('file-opened', (event, data) => callback(data)),
+  onTabActivated: (callback) =>
+    ipcRenderer.on('tab-activated', (event, viewId) => callback(viewId)),
+
+  // Python 编辑器 - 接收打开文件消息
+  onOpenFileInEditor: (callback) =>
+    ipcRenderer.on('open-file-in-editor', (event, filePath) => callback(filePath)),
+
+  // 资源管理器面板
+  toggleExplorerPanel: (visible) => ipcRenderer.send('toggle-explorer-panel', visible),
+  resizeExplorerPanel: (width) => ipcRenderer.send('resize-explorer-panel', width),
+
+  // 文件操作
+  createFile: (filePath) => ipcRenderer.invoke('create-file', filePath),
+  createFolder: (folderPath) => ipcRenderer.invoke('create-folder', folderPath),
+  renameItem: (oldPath, newPath) => ipcRenderer.invoke('rename-item', oldPath, newPath),
+  deleteItem: (targetPath) => ipcRenderer.invoke('delete-item', targetPath),
+  moveItem: (srcPath, destDir) => ipcRenderer.invoke('move-item', srcPath, destDir),
+  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content)
 })

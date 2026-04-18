@@ -90,6 +90,31 @@
             color: #888;
             margin-top: 4px;
         }
+        .settings-item .path-input-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .settings-item .path-input-group input[type="text"] {
+            flex: 1;
+        }
+
+        .settings-item .browse-btn {
+            padding: 8px 16px;
+            background: #0e639c;
+            border: 1px solid #0e639c;
+            border-radius: 4px;
+            color: #ffffff;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .settings-item .browse-btn:hover {
+            background: #1177bb;
+        }
     </style>
 </head>
 
@@ -99,6 +124,14 @@
 
         <div class="settings-section">
             <h2>通用设置</h2>
+            <div class="settings-item">
+                <label for="workspace-path">工作区目录</label>
+                <div class="path-input-group">
+                    <input type="text" id="workspace-path" readonly>
+                    <button class="browse-btn" id="browse-workspace-btn">浏览...</button>
+                </div>
+                <div class="description">工作区用于存储项目文件和 Python 脚本，默认为程序安装路径下的 ProphetWorkSpace 文件夹</div>
+            </div>
             <div class="settings-item">
                 <label for="theme">主题</label>
                 <select id="theme">
