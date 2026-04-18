@@ -1,24 +1,39 @@
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
-const sidebarHomeBtn = document.getElementById('sidebar-home-btn')
+const sidebarTradingBtn = document.getElementById('sidebar-trading-btn')
+const sidebarDevelopingBtn = document.getElementById('sidebar-developing-btn')
+const sidebarNewsBtn = document.getElementById('sidebar-news-btn')
+const sidebarMarketBtn = document.getElementById('sidebar-market-btn')
 const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn')
-const sidebarPythonBtn = document.getElementById('sidebar-python-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
-const modeToggle = document.getElementById('mode-toggle')
-const modeLabelTrade = document.getElementById('mode-label-trade')
-const modeLabelDev = document.getElementById('mode-label-dev')
 const toggleAgentBtn = document.getElementById('toggle-agent-btn')
 const agentPanel = document.getElementById('agent-panel')
 const agentInput = document.getElementById('agent-input')
+const tabsContainerEl = document.querySelector('.tabs-container')
 let activeTabId = null
-let views = new Set() // 用于跟踪标签数量
 let tabCounter = 0 // 用于跟踪标签序号
-let homeViewId
 // 添加一个 Map 来跟踪每个标签页的加载状态
 const loadingStates = new Map()
 let tabDragJustEnded = false
+
+// 模式管理
+let currentMode = 'trading'
+const modeViews = {
+  trading: new Set(),
+  developing: new Set()
+}
+// 保存每个模式的标签页 DOM 状态
+const modeSavedTabs = {
+  trading: { elements: [], activeTabId: null },
+  developing: { elements: [], activeTabId: null }
+}
+
+// 获取当前模式的 views
+function getCurrentModeViews() {
+  return modeViews[currentMode] || new Set()
+}
 
 // Suppress tab click right after drag ends
 tabsContainer.addEventListener(
@@ -31,19 +46,20 @@ tabsContainer.addEventListener(
   true
 )
 
-// 创建主页tab
-function createHomeElement(viewId) {
+// 创建标签页元素（统一函数）
+function createTabElement(viewId, title) {
   const tab = document.createElement('div')
   tab.className = 'tab'
   tab.setAttribute('data-view-id', viewId)
 
   tabCounter++
-
+  const displayTitle = title || `新标签页 ${tabCounter}`
   tab.innerHTML = `
-    <span class="tab-title">Home</span>
+    <span class="tab-title">${displayTitle}</span>
     <span class="close-btn">×</span>
     <div class="tab-loading"></div>
   `
+
   // 初始化加载状态
   loadingStates.set(viewId, false)
 
@@ -52,104 +68,13 @@ function createHomeElement(viewId) {
     setActiveTab(viewId)
     window.electronAPI.switchTab(viewId)
   })
+
   // 点击关闭按钮
   const closeBtn = tab.querySelector('.close-btn')
   closeBtn.addEventListener('click', (e) => {
-    console.log(`close-btn pushed`)
     e.stopPropagation()
-    if (views.size > 1) {
-      // 只有当标签数量大于1时才允许关闭
-      window.electronAPI.closeTab(viewId)
-    } else {
-      showToast('至少需要保留1个标签页')
-    }
-  })
-  // 右键菜单
-  tab.addEventListener('contextmenu', (e) => {
-    e.preventDefault() // 阻止默认右键菜单
-    // 可在此处传递元素信息（如ID）
-    window.electronAPI.openContextMenu(viewId)
-    // 保存事件目标（可选）
-    window.selectedElement = e.target
-  })
-
-  setupTabDrag(tab)
-  return tab
-}
-
-// 创建设置tab
-function createSettingsElement(viewId) {
-  const tab = document.createElement('div')
-  tab.className = 'tab'
-  tab.setAttribute('data-view-id', viewId)
-
-  tabCounter++
-
-  tab.innerHTML = `
-    <span class="tab-title">设置</span>
-    <span class="close-btn">×</span>
-    <div class="tab-loading"></div>
-  `
-  // 初始化加载状态
-  loadingStates.set(viewId, false)
-
-  // 点击标签页，激活当前页面
-  tab.addEventListener('click', () => {
-    setActiveTab(viewId)
-    window.electronAPI.switchTab(viewId)
-  })
-  // 点击关闭按钮
-  const closeBtn = tab.querySelector('.close-btn')
-  closeBtn.addEventListener('click', (e) => {
-    console.log(`close-btn pushed`)
-    e.stopPropagation()
-    if (views.size > 1) {
-      // 只有当标签数量大于1时才允许关闭
-      window.electronAPI.closeTab(viewId)
-    } else {
-      showToast('至少需要保留1个标签页')
-    }
-  })
-  // 右键菜单
-  tab.addEventListener('contextmenu', (e) => {
-    e.preventDefault() // 阻止默认右键菜单
-    // 可在此处传递元素信息（如ID）
-    window.electronAPI.openContextMenu(viewId)
-    // 保存事件目标（可选）
-    window.selectedElement = e.target
-  })
-
-  setupTabDrag(tab)
-  return tab
-}
-
-// 创建非主页tab
-function createTabElement(viewId) {
-  const tab = document.createElement('div')
-  tab.className = 'tab'
-  tab.setAttribute('data-view-id', viewId)
-
-  tabCounter++
-  const tabNumber = tabCounter // 保存当前标签的序号
-  tab.innerHTML = `
-    <span class="tab-title">新标签页 ${tabNumber}</span>
-    <span class="close-btn">×</span>
-    <div class="tab-loading"></div>
-  `
-
-  // 初始化加载状态
-  loadingStates.set(viewId, false)
-
-  tab.addEventListener('click', () => {
-    setActiveTab(viewId)
-    window.electronAPI.switchTab(viewId)
-  })
-
-  // 只有当标签数量大于1时才允许关闭
-  const closeBtn = tab.querySelector('.close-btn')
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    if (views.size > 1) {
+    const currentViews = getCurrentModeViews()
+    if (currentViews.size > 1) {
       window.electronAPI.closeTab(viewId)
     } else {
       showToast('至少需要保留1个标签页')
@@ -158,10 +83,8 @@ function createTabElement(viewId) {
 
   // 右键菜单
   tab.addEventListener('contextmenu', (e) => {
-    e.preventDefault() // 阻止默认右键菜单
-    // 可在此处传递元素信息（如ID）
+    e.preventDefault()
     window.electronAPI.openContextMenu(viewId)
-    // 保存事件目标（可选）
     window.selectedElement = e.target
   })
 
@@ -182,79 +105,112 @@ function setActiveTab(viewId) {
   updateScrollButtons()
 }
 
-// 按 新页面 按钮
+// 按 新页面 按钮（仅交易模式下有效）
 newTabBtn.addEventListener('click', () => {
-  if (views.size < 10) {
+  const currentViews = getCurrentModeViews()
+  if (currentViews.size < 10) {
     window.electronAPI.createNewTab()
   } else {
     showToast('最多只能创建10个标签页')
   }
 })
 
-// 侧边栏: 按home按钮，创建homa tab
-sidebarHomeBtn.addEventListener('click', () => {
-  window.electronAPI.createHomeTab()
+// 侧边栏: 模式切换按钮
+sidebarTradingBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('trading')
 })
 
-// 侧边栏: 按settings按钮，创建设置 tab
+sidebarDevelopingBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('developing')
+})
+
+sidebarNewsBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('news')
+})
+
+sidebarMarketBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('market_analyze')
+})
+
 sidebarSettingsBtn.addEventListener('click', () => {
-  window.electronAPI.createSettingsTab()
+  window.electronAPI.switchMode('settings')
 })
 
-// 侧边栏: 按python按钮，创建编辑器 tab
-sidebarPythonBtn.addEventListener('click', () => {
-  window.electronAPI.createPythonTab()
-})
+// 响应模式切换
+window.electronAPI.onModeSwitched((data) => {
+  const oldMode = currentMode
 
-// 响应 主页创建
-window.electronAPI.onHomeCreated((event, viewId) => {
-  views.add(viewId)
-  const tab = createHomeElement(viewId)
-  homeViewId = viewId
-  // 将新标签插入到新建按钮之前
-  const newTabBtn = document.getElementById('new-tab-btn')
-  tabsContainer.insertBefore(tab, newTabBtn)
+  // 保存旧模式的标签页 DOM 状态
+  if (oldMode === 'trading' || oldMode === 'developing') {
+    const tabElements = Array.from(tabsContainer.querySelectorAll('.tab'))
+    modeSavedTabs[oldMode] = {
+      elements: tabElements,
+      activeTabId: activeTabId
+    }
+    // 从 DOM 中移除（但保留在内存中）
+    tabElements.forEach((tab) => tab.remove())
+  }
 
-  setActiveTab(viewId)
-  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
-  window.electronAPI.switchTab(viewId)
-  updateNewTabButtonVisibility() // 更新新建按钮显示状态
+  currentMode = data.mode
+
+  // 显示/隐藏标签栏
+  tabsContainerEl.style.display = data.showTabBar ? 'flex' : 'none'
+
+  // 显示/隐藏新建按钮
+  newTabBtn.style.display = data.showNewTabBtn ? 'flex' : 'none'
+
+  // 恢复新模式的标签页
+  if (data.showTabBar) {
+    const saved = modeSavedTabs[data.mode]
+    if (saved && saved.elements.length > 0) {
+      // 恢复之前保存的标签页 DOM 元素（带有事件监听器）
+      saved.elements.forEach((tab) => tabsContainer.insertBefore(tab, newTabBtn))
+      if (saved.activeTabId) {
+        setActiveTab(saved.activeTabId)
+        window.electronAPI.switchTab(saved.activeTabId)
+      }
+      // 清空已恢复的保存状态
+      modeSavedTabs[data.mode] = { elements: [], activeTabId: null }
+    } else if (data.tabs && data.tabs.length > 0) {
+      // 首次进入此模式，从主进程数据创建标签页
+      if (!modeViews[data.mode]) modeViews[data.mode] = new Set()
+      data.tabs.forEach((tabInfo) => {
+        modeViews[data.mode].add(tabInfo.viewId)
+        const tab = createTabElement(tabInfo.viewId, tabInfo.title)
+        tabsContainer.insertBefore(tab, newTabBtn)
+      })
+      if (data.activeViewId) {
+        setActiveTab(data.activeViewId)
+      }
+    }
+    updateNewTabButtonVisibility()
+  }
+
+  // 更新侧边栏激活状态
+  updateSidebarActiveState(data.mode)
+
   setTimeout(updateScrollButtons, 0)
 })
 
-// 响应 设置页创建
-window.electronAPI.onSettingsCreated((event, viewId) => {
-  views.add(viewId)
-  const tab = createSettingsElement(viewId)
-  // 将新标签插入到新建按钮之前
-  const newTabBtn = document.getElementById('new-tab-btn')
-  tabsContainer.insertBefore(tab, newTabBtn)
-
-  setActiveTab(viewId)
-  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
-  window.electronAPI.switchTab(viewId)
-  updateNewTabButtonVisibility() // 更新新建按钮显示状态
-  setTimeout(updateScrollButtons, 0)
-})
-
+// 响应标签页创建（在当前模式下新建标签页）
 window.electronAPI.onTabCreated((event, viewId) => {
-  views.add(viewId)
+  const currentViews = getCurrentModeViews()
+  currentViews.add(viewId)
   const tab = createTabElement(viewId)
 
   // 将新标签插入到新建按钮之前
-  const newTabBtn = document.getElementById('new-tab-btn')
   tabsContainer.insertBefore(tab, newTabBtn)
 
   setActiveTab(viewId)
-  // 在浏览器模式下，需要调用 switchTab 来切换 iframe 显示
   window.electronAPI.switchTab(viewId)
-  updateNewTabButtonVisibility() // 更新新建按钮显示状态
+  updateNewTabButtonVisibility()
   setTimeout(updateScrollButtons, 0)
 })
 
 window.electronAPI.onTabClosed((event, viewId) => {
-  views.delete(viewId)
-  loadingStates.delete(viewId) // 清理加载状态
+  // 从所有模式的 views 中移除
+  Object.values(modeViews).forEach((viewSet) => viewSet.delete(viewId))
+  loadingStates.delete(viewId)
   const tab = document.querySelector(`[data-view-id="${viewId}"]`)
   if (tab) {
     tab.remove()
@@ -348,7 +304,12 @@ function updateTabNumbers() {
 
 // 更新新建按钮显示状态
 function updateNewTabButtonVisibility() {
-  newTabBtn.style.display = views.size >= 10 ? 'none' : 'flex'
+  if (currentMode !== 'trading') {
+    newTabBtn.style.display = 'none'
+    return
+  }
+  const currentViews = getCurrentModeViews()
+  newTabBtn.style.display = currentViews.size >= 10 ? 'none' : 'flex'
 }
 
 // 修改加载状态处理函数
@@ -689,43 +650,30 @@ function setupTabDrag(tabEl) {
 // =====================
 // Sidebar Active State
 // =====================
-function updateSidebarActiveState(type) {
+function updateSidebarActiveState(mode) {
   // 清除所有 active
   document.querySelectorAll('.activity-bar-item').forEach((item) => {
     item.classList.remove('active')
   })
-  // 根据类型激活对应图标
-  if (type === 'home') {
-    sidebarHomeBtn.classList.add('active')
-  } else if (type === 'settings') {
-    sidebarSettingsBtn.classList.add('active')
-  } else if (type === 'python') {
-    sidebarPythonBtn.classList.add('active')
+  // 根据模式激活对应图标
+  switch (mode) {
+    case 'trading':
+      sidebarTradingBtn.classList.add('active')
+      break
+    case 'developing':
+      sidebarDevelopingBtn.classList.add('active')
+      break
+    case 'news':
+      sidebarNewsBtn.classList.add('active')
+      break
+    case 'market_analyze':
+      sidebarMarketBtn.classList.add('active')
+      break
+    case 'settings':
+      sidebarSettingsBtn.classList.add('active')
+      break
   }
 }
-
-// 监听活动标签类型变化
-window.electronAPI.onActiveTabTypeChanged((type) => {
-  updateSidebarActiveState(type)
-})
-
-// 监听切换到已有标签页（主页/设置页单例复用）
-window.electronAPI.onSwitchToTab((viewId) => {
-  setActiveTab(viewId)
-})
-
-// =====================
-// 模式切换（交易 / 开发）
-// =====================
-let currentMode = 'trade' // 默认交易模式
-
-modeToggle.addEventListener('change', () => {
-  const isDev = modeToggle.checked
-  currentMode = isDev ? 'dev' : 'trade'
-  modeLabelTrade.classList.toggle('active', !isDev)
-  modeLabelDev.classList.toggle('active', isDev)
-  console.log(`[mode-switch] 切换到${isDev ? '开发' : '交易'}模式`)
-})
 
 // =====================
 // Agent 侧栏切换

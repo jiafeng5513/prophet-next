@@ -28,7 +28,8 @@ export default defineConfig({
         home: resolve(__dirname, 'src/renderer/home.html'),
         chart: resolve(__dirname, 'src/renderer/chart.html'),
         python: resolve(__dirname, 'src/renderer/python.html'),
-        settings: resolve(__dirname, 'src/renderer/settings.html')
+        settings: resolve(__dirname, 'src/renderer/settings.html'),
+        placeholder: resolve(__dirname, 'src/renderer/placeholder.html')
       }
     }
   },

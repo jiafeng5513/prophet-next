@@ -17,10 +17,16 @@ class BrowserTabManager {
   constructor() {
     this.views = new Map()
     this.activeViewId = null
-    this.homeViewId = null
+    this.currentMode = 'trading'
+    this.modeState = {
+      trading: { viewIds: new Set(), activeViewId: null },
+      developing: { viewIds: new Set(), activeViewId: null },
+      news: { viewId: null },
+      market_analyze: { viewId: null },
+      settings: { viewId: null }
+    }
     this.listeners = {
-      'home-created': [],
-      'settings-created': [],
+      'mode-switched': [],
       'tab-created': [],
       'tab-closed': [],
       'tab-limit': [],
@@ -33,7 +39,6 @@ class BrowserTabManager {
   }
 
   init() {
-    // 创建内容区域容器
     const existingContent = document.getElementById('browser-content-area')
     if (existingContent) {
       this.contentArea = existingContent
@@ -52,58 +57,20 @@ class BrowserTabManager {
       document.body.appendChild(this.contentArea)
     }
 
-    // 统一的消息处理器，用于接收来自所有 iframe 的消息
     this.messageHandler = (event) => {
-      // 验证消息类型
       if (event.data && event.data.type === 'iframe-title-updated') {
-        console.log('[BrowserTabManager] Received iframe-title-updated message:', event.data.title)
-        console.log('[BrowserTabManager] event.source:', event.source)
-        console.log('[BrowserTabManager] Current views:', Array.from(this.views.keys()))
-
-        // 通过 event.source 找到对应的 viewId
-        let found = false
         for (const [viewId, view] of this.views.entries()) {
           try {
-            const iframeWindow = view.iframe.contentWindow
-            console.log(`[BrowserTabManager] Checking viewId ${viewId}, iframe.contentWindow:`, iframeWindow)
-            
-            // 直接比较
-            if (iframeWindow === event.source) {
-              console.log('[BrowserTabManager] Matched! Updating title for viewId:', viewId, 'title:', event.data.title)
+            if (view.iframe.contentWindow === event.source) {
               this.emit('tab-title-updated', viewId, event.data.title)
-              found = true
               break
             }
-            
-            // 备用方案：通过 iframe 元素查找
-            // 如果直接比较失败，尝试通过遍历所有 iframe 来匹配
-            if (!found) {
-              const allIframes = this.contentArea.querySelectorAll('iframe')
-              for (const iframe of allIframes) {
-                if (iframe.contentWindow === event.source && iframe.id === `view-${viewId}`) {
-                  console.log('[BrowserTabManager] Matched via iframe element! Updating title for viewId:', viewId, 'title:', event.data.title)
-                  this.emit('tab-title-updated', viewId, event.data.title)
-                  found = true
-                  break
-                }
-              }
-            }
           } catch (e) {
-            console.warn(`[BrowserTabManager] Error checking viewId ${viewId}:`, e)
-          }
-        }
-
-        if (!found) {
-          console.warn('[BrowserTabManager] Could not find matching iframe for message source')
-          // 如果找不到匹配的 iframe，尝试更新当前活动的标签页
-          if (this.activeViewId) {
-            console.log('[BrowserTabManager] Fallback: updating active tab:', this.activeViewId)
-            this.emit('tab-title-updated', this.activeViewId, event.data.title)
+            // ignore cross-origin errors
           }
         }
       }
     }
-    // 添加全局消息监听器
     window.addEventListener('message', this.messageHandler)
   }
 
@@ -111,9 +78,10 @@ class BrowserTabManager {
     if (this.listeners[event]) {
       this.listeners[event].forEach((callback) => {
         try {
-          // 模拟 Electron IPC 事件格式
           if (event === 'context-menu-action') {
             callback({ action: args[0]?.action, viewId: args[0]?.viewId })
+          } else if (event === 'mode-switched') {
+            callback(args[0])
           } else {
             callback({}, ...args)
           }
@@ -124,183 +92,154 @@ class BrowserTabManager {
     }
   }
 
-  createHomeTab() {
-    if (this.views.size >= 10) {
-      this.emit('tab-limit', '最多只能创建10个标签页')
-      return null
-    }
-
-    const viewId = getUUID()
+  createIframe(src, viewId) {
     const iframe = document.createElement('iframe')
     iframe.id = `view-${viewId}`
     iframe.style.cssText = `
       width: 100%;
       height: 100%;
       border: none;
-      display: ${this.activeViewId === null ? 'block' : 'none'};
+      display: none;
     `
-    iframe.src = '/home.html'
+    iframe.src = src
     iframe.allow = 'clipboard-read; clipboard-write'
-
     this.contentArea.appendChild(iframe)
-    this.views.set(viewId, { iframe, type: 'home' })
 
-    if (this.activeViewId === null) {
-      this.activeViewId = viewId
-      this.homeViewId = viewId
-    }
-
-    // 模拟加载状态
     this.emit('tab-loading', viewId, true)
     iframe.onload = () => {
       this.emit('tab-loading', viewId, false)
-      // 延迟获取标题，确保页面已完全加载
-      setTimeout(() => {
-        try {
-          const title = iframe.contentDocument?.title || 'Home'
-          this.emit('tab-title-updated', viewId, title)
-        } catch (e) {
-          // 跨域限制，使用默认标题
-          this.emit('tab-title-updated', viewId, 'Home')
-        }
-      }, 100)
+      try {
+        const title = iframe.contentDocument?.title
+        if (title) this.emit('tab-title-updated', viewId, title)
+      } catch (e) { /* cross-origin */ }
     }
     iframe.onerror = () => {
       this.emit('tab-loading', viewId, false)
-      console.error('加载 Home 页面失败')
     }
 
-    this.emit('home-created', viewId)
+    return iframe
+  }
+
+  createView(type) {
+    const viewId = getUUID()
+    const srcMap = {
+      chart: '/chart.html',
+      python: '/python.html',
+      settings: '/settings.html',
+      placeholder: '/placeholder.html'
+    }
+    const iframe = this.createIframe(srcMap[type] || '/placeholder.html', viewId)
+    this.views.set(viewId, { iframe, type })
     return viewId
+  }
+
+  switchMode(newMode) {
+    // Save current mode active view
+    if (this.currentMode === 'trading' || this.currentMode === 'developing') {
+      this.modeState[this.currentMode].activeViewId = this.activeViewId
+    }
+
+    // Hide all iframes
+    this.views.forEach((view) => {
+      view.iframe.style.display = 'none'
+    })
+
+    this.currentMode = newMode
+    const showTabBar = newMode === 'trading' || newMode === 'developing'
+    const showNewTabBtn = newMode === 'trading'
+
+    let tabs = []
+    let newActiveViewId = null
+
+    if (newMode === 'trading') {
+      const state = this.modeState.trading
+      if (state.viewIds.size === 0) {
+        const viewId = this.createView('chart')
+        state.viewIds.add(viewId)
+        state.activeViewId = viewId
+      }
+      newActiveViewId = state.activeViewId
+      state.viewIds.forEach((vid) => {
+        const vd = this.views.get(vid)
+        if (vd) tabs.push({ viewId: vid, title: '新标签页', type: vd.type })
+      })
+    } else if (newMode === 'developing') {
+      const state = this.modeState.developing
+      if (state.viewIds.size === 0) {
+        const viewId = this.createView('python')
+        state.viewIds.add(viewId)
+        state.activeViewId = viewId
+      }
+      newActiveViewId = state.activeViewId
+      state.viewIds.forEach((vid) => {
+        const vd = this.views.get(vid)
+        if (vd) tabs.push({ viewId: vid, title: 'Python 编辑器', type: vd.type })
+      })
+    } else if (newMode === 'news' || newMode === 'market_analyze') {
+      const state = this.modeState[newMode]
+      if (!state.viewId) {
+        state.viewId = this.createView('placeholder')
+      }
+      newActiveViewId = state.viewId
+    } else if (newMode === 'settings') {
+      const state = this.modeState.settings
+      if (!state.viewId) {
+        state.viewId = this.createView('settings')
+      }
+      newActiveViewId = state.viewId
+    }
+
+    if (newActiveViewId) {
+      this.activeViewId = newActiveViewId
+      const view = this.views.get(newActiveViewId)
+      if (view) view.iframe.style.display = 'block'
+    }
+
+    // Update content area top offset
+    this.contentArea.style.top = showTabBar ? '66px' : '30px'
+
+    this.emit('mode-switched', {
+      mode: newMode,
+      showTabBar,
+      showNewTabBtn,
+      tabs,
+      activeViewId: newActiveViewId
+    })
   }
 
   createNewTab() {
-    if (this.views.size >= 10) {
+    if (this.currentMode !== 'trading') return null
+    const state = this.modeState.trading
+    if (state.viewIds.size >= 10) {
       this.emit('tab-limit', '最多只能创建10个标签页')
       return null
     }
 
-    const viewId = getUUID()
-    const iframe = document.createElement('iframe')
-    iframe.id = `view-${viewId}`
-    iframe.style.cssText = `
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: none;
-    `
-    iframe.src = '/chart.html'
-
-    this.contentArea.appendChild(iframe)
-    this.views.set(viewId, { iframe, type: 'chart' })
-
-    // 模拟加载状态
-    this.emit('tab-loading', viewId, true)
-    iframe.onload = () => {
-      this.emit('tab-loading', viewId, false)
-      try {
-        const title = iframe.contentDocument?.title || '新标签页'
-        this.emit('tab-title-updated', viewId, title)
-      } catch (e) {
-        // 跨域限制，忽略
-      }
-    }
-
-    this.emit('tab-created', viewId)
-    return viewId
-  }
-
-  createSettingsTab() {
-    if (this.views.size >= 10) {
-      this.emit('tab-limit', '最多只能创建10个标签页')
-      return null
-    }
-
-    const viewId = getUUID()
-    const iframe = document.createElement('iframe')
-    iframe.id = `view-${viewId}`
-    iframe.style.cssText = `
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: none;
-    `
-    iframe.src = '/settings.html'
-
-    this.contentArea.appendChild(iframe)
-    this.views.set(viewId, { iframe, type: 'settings' })
-
-    // 模拟加载状态
-    this.emit('tab-loading', viewId, true)
-    iframe.onload = () => {
-      this.emit('tab-loading', viewId, false)
-      try {
-        const title = iframe.contentDocument?.title || '设置'
-        this.emit('tab-title-updated', viewId, title)
-      } catch (e) {
-        // 跨域限制，忽略
-      }
-    }
-
-    this.emit('settings-created', viewId)
-    return viewId
-  }
-
-  createPythonTab() {
-    if (this.views.size >= 10) {
-      this.emit('tab-limit', '最多只能创建10个标签页')
-      return null
-    }
-
-    const viewId = getUUID()
-    const iframe = document.createElement('iframe')
-    iframe.id = `view-${viewId}`
-    iframe.style.cssText = `
-      width: 100%;
-      height: 100%;
-      border: none;
-      display: none;
-    `
-    iframe.src = '/python.html'
-
-    this.contentArea.appendChild(iframe)
-    this.views.set(viewId, { iframe, type: 'python' })
-
-    // 模拟加载状态
-    this.emit('tab-loading', viewId, true)
-    iframe.onload = () => {
-      this.emit('tab-loading', viewId, false)
-      try {
-        const title = iframe.contentDocument?.title || 'Python 编辑器'
-        this.emit('tab-title-updated', viewId, title)
-      } catch (e) {
-        // 跨域限制，忽略
-      }
-    }
-
+    const viewId = this.createView('chart')
+    state.viewIds.add(viewId)
     this.emit('tab-created', viewId)
     return viewId
   }
 
   switchTab(viewId) {
     if (!this.views.has(viewId)) return
-
-    // 隐藏所有标签页
     this.views.forEach((view, id) => {
       view.iframe.style.display = id === viewId ? 'block' : 'none'
     })
-
     this.activeViewId = viewId
-
-    // 通知侧边栏更新激活状态
-    const viewData = this.views.get(viewId)
-    if (viewData) {
-      this.emit('active-tab-type-changed', viewData.type)
-    }
   }
 
   closeTab(viewId) {
-    if (this.views.size <= 1) {
+    // Find which mode owns this view
+    let viewMode = null
+    for (const [mode, state] of Object.entries(this.modeState)) {
+      if (state.viewIds && state.viewIds.has(viewId)) {
+        viewMode = mode
+        break
+      }
+    }
+
+    if (viewMode && this.modeState[viewMode].viewIds.size <= 1) {
       this.emit('tab-limit', '至少需要保留1个标签页')
       return
     }
@@ -309,11 +248,15 @@ class BrowserTabManager {
     if (view) {
       view.iframe.remove()
       this.views.delete(viewId)
+      if (viewMode && this.modeState[viewMode].viewIds) {
+        this.modeState[viewMode].viewIds.delete(viewId)
+      }
 
-      // 如果关闭的是当前活动标签，切换到最后一个
-      if (this.activeViewId === viewId) {
-        const lastViewId = Array.from(this.views.keys())[this.views.size - 1]
-        this.switchTab(lastViewId)
+      if (this.activeViewId === viewId && viewMode) {
+        const remaining = Array.from(this.modeState[viewMode].viewIds)
+        if (remaining.length > 0) {
+          this.switchTab(remaining[remaining.length - 1])
+        }
       }
 
       this.emit('tab-closed', viewId)
@@ -321,57 +264,36 @@ class BrowserTabManager {
   }
 
   closeAllChartTabs() {
-    console.log('[BrowserTabManager] 开始关闭所有图表页面')
-    const chartViewIds = []
-    
-    // 收集所有图表页面的 viewId
-    this.views.forEach((viewData, viewId) => {
-      console.log(`[BrowserTabManager] 检查标签页 ${viewId}, 类型: ${viewData.type}`)
-      if (viewData.type === 'chart') {
-        chartViewIds.push(viewId)
-      }
-    })
-    
-    console.log(`[BrowserTabManager] 找到 ${chartViewIds.length} 个图表页面需要关闭:`, chartViewIds)
-    
-    // 关闭所有图表页面
+    const state = this.modeState.trading
+    const chartViewIds = Array.from(state.viewIds)
+
     chartViewIds.forEach((viewId) => {
       const viewData = this.views.get(viewId)
       if (viewData) {
-        console.log(`[BrowserTabManager] 正在关闭图表页面: ${viewId}`)
-        try {
-          viewData.iframe.remove()
-          this.views.delete(viewId)
-          this.emit('tab-closed', viewId)
-          console.log(`[BrowserTabManager] 成功关闭图表页面: ${viewId}`)
-        } catch (error) {
-          console.error(`[BrowserTabManager] 关闭图表页面失败 ${viewId}:`, error)
-        }
+        viewData.iframe.remove()
+        this.views.delete(viewId)
+        state.viewIds.delete(viewId)
+        this.emit('tab-closed', viewId)
       }
     })
-    
-    // 如果当前活动页面是图表页面，切换到其他页面
-    if (chartViewIds.includes(this.activeViewId)) {
-      const remainingViewIds = Array.from(this.views.keys())
-      console.log(`[BrowserTabManager] 当前活动页面是图表页面，切换到:`, remainingViewIds)
-      if (remainingViewIds.length > 0) {
-        this.switchTab(remainingViewIds[remainingViewIds.length - 1])
-      }
+
+    state.activeViewId = null
+
+    if (this.currentMode === 'trading') {
+      const viewId = this.createView('chart')
+      state.viewIds.add(viewId)
+      state.activeViewId = viewId
+      this.emit('tab-created', viewId)
+      this.switchTab(viewId)
     }
-    
-    console.log(`[BrowserTabManager] 完成，已关闭 ${chartViewIds.length} 个图表页面`)
   }
 
   openContextMenu(viewId) {
-    // 浏览器模式下，右键菜单功能简化
     console.log('打开右键菜单:', viewId)
-    // 可以在这里实现浏览器原生的右键菜单
   }
 
   openDevTools() {
-    // 浏览器模式下，打开浏览器开发者工具
     console.log('打开开发者工具')
-    // 在浏览器中，用户可以使用 F12 或右键菜单打开开发者工具
   }
 }
 
@@ -388,46 +310,28 @@ window.electronAPI = {
   }),
 
   getPlatform: () => {
-    // 浏览器模式下根据 userAgent 猜测平台
     if (navigator.userAgent.includes('Win')) return 'win32'
     if (navigator.userAgent.includes('Mac')) return 'darwin'
     return 'linux'
   },
 
   rendererReady: () => {
-    // 浏览器模式：直接创建首页
-    if (!tabManager.homeViewId || !tabManager.views.has(tabManager.homeViewId)) {
-      tabManager.createHomeTab()
-    }
+    tabManager.switchMode('trading')
   },
 
-  createHomeTab: () => {
-    // 单例：如果已存在则切换
-    if (tabManager.homeViewId && tabManager.views.has(tabManager.homeViewId)) {
-      tabManager.switchTab(tabManager.homeViewId)
-      tabManager.emit('switch-to-tab', tabManager.homeViewId)
-    } else {
-      tabManager.createHomeTab()
+  switchMode: (mode) => {
+    tabManager.switchMode(mode)
+  },
+
+  onModeSwitched: (callback) => {
+    if (!tabManager.listeners['mode-switched']) {
+      tabManager.listeners['mode-switched'] = []
     }
+    tabManager.listeners['mode-switched'].push(callback)
   },
 
   createNewTab: () => {
     tabManager.createNewTab()
-  },
-
-  createSettingsTab: () => {
-    // 单例：如果已存在则切换
-    const settingsId = Array.from(tabManager.views.entries()).find(([, v]) => v.type === 'settings')?.[0]
-    if (settingsId) {
-      tabManager.switchTab(settingsId)
-      tabManager.emit('switch-to-tab', settingsId)
-    } else {
-      tabManager.createSettingsTab()
-    }
-  },
-
-  createPythonTab: () => {
-    tabManager.createPythonTab()
   },
 
   switchTab: (viewId) => {
@@ -440,14 +344,6 @@ window.electronAPI = {
 
   openContextMenu: (viewId) => {
     tabManager.openContextMenu(viewId)
-  },
-
-  onHomeCreated: (callback) => {
-    tabManager.listeners['home-created'].push(callback)
-  },
-
-  onSettingsCreated: (callback) => {
-    tabManager.listeners['settings-created'].push(callback)
   },
 
   onTabCreated: (callback) => {
@@ -482,19 +378,8 @@ window.electronAPI = {
     tabManager.closeAllChartTabs()
   },
 
-  onActiveTabTypeChanged: (callback) => {
-    if (!tabManager.listeners['active-tab-type-changed']) {
-      tabManager.listeners['active-tab-type-changed'] = []
-    }
-    tabManager.listeners['active-tab-type-changed'].push(callback)
-  },
-
-  onSwitchToTab: (callback) => {
-    if (!tabManager.listeners['switch-to-tab']) {
-      tabManager.listeners['switch-to-tab'] = []
-    }
-    tabManager.listeners['switch-to-tab'].push(callback)
-  },
+  getDataSource: () => Promise.resolve('binance'),
+  setDataSource: (ds) => console.log('[browser-mock] setDataSource:', ds),
 
   toggleAgentPanel: (visible) => {
     console.log('[browser-mock] Agent panel:', visible ? 'show' : 'hide')
@@ -505,7 +390,6 @@ window.electronAPI = {
   },
 
   removeAllListeners: () => {
-    // 清理所有监听器
     Object.keys(tabManager.listeners).forEach((key) => {
       tabManager.listeners[key] = []
     })

@@ -5,16 +5,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPlatform: () => process.platform,
   // 通知主进程渲染进程已就绪
   rendererReady: () => ipcRenderer.send('renderer-ready'),
-  // 添加标签页相关 API
-  createHomeTab: () => ipcRenderer.send('home-tab'),
+
+  // 模式切换
+  switchMode: (mode) => ipcRenderer.send('switch-mode', mode),
+  onModeSwitched: (callback) => ipcRenderer.on('mode-switched', (event, data) => callback(data)),
+
+  // 标签页相关 API
   createNewTab: () => ipcRenderer.send('new-tab'),
-  createSettingsTab: () => ipcRenderer.send('settings-tab'),
-  createPythonTab: () => ipcRenderer.send('python-tab'),
   switchTab: (viewId) => ipcRenderer.send('switch-tab', viewId),
   closeTab: (viewId) => ipcRenderer.send('close-tab', viewId),
   openContextMenu: (viewId) => ipcRenderer.send('show-context-menu', viewId),
-  onHomeCreated: (callback) => ipcRenderer.on('home-created', callback),
-  onSettingsCreated: (callback) => ipcRenderer.on('settings-created', callback),
   onTabCreated: (callback) => ipcRenderer.on('tab-created', callback),
   onTabClosed: (callback) => ipcRenderer.on('tab-closed', callback),
   onContextMenuPushed: (callback) =>
@@ -33,21 +33,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开开发者工具
   openDevTools: () => ipcRenderer.send('open-dev-tools-in-new-window'),
-  
+
   // 关闭所有图表页面
   closeAllChartTabs: () => ipcRenderer.send('close-all-chart-tabs'),
 
   // 数据源设置（跨 partition 共享）
   getDataSource: () => ipcRenderer.invoke('get-data-source'),
   setDataSource: (dataSource) => ipcRenderer.send('set-data-source', dataSource),
-
-  // 监听活动标签类型变化（用于更新侧边栏激活状态）
-  onActiveTabTypeChanged: (callback) =>
-    ipcRenderer.on('active-tab-type-changed', (event, type) => callback(type)),
-
-  // 监听切换到已有标签页
-  onSwitchToTab: (callback) =>
-    ipcRenderer.on('switch-to-tab', (event, viewId) => callback(viewId)),
 
   // Agent 面板切换
   toggleAgentPanel: (visible) => ipcRenderer.send('toggle-agent-panel', visible),

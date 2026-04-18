@@ -41,6 +41,7 @@
     npm install -g nrm
     # optinal: `nrm ls` to show all avaliable source, `nrm use` to set it
     ```
+
 2. close and restart a new Windows shell, run `npm -v`, it should tell you that the npm is not a valied command or executable, that because the npm env is one-time-drop now. You can try `fnm env --use-on-cd | Out-String | Invoke-Expression` again, and then `npm -v`, and it should work again.
 
 3. to make npm env activate auto start with windows shell, edit the `C:\Users\${username}\Documents\WindowsPowerShell\profile.ps1` which created when install anaconda, edit it as bellow:
@@ -113,6 +114,7 @@ $ npm run build:linux
 6. 数据持久化和本地缓存
 7. 工作区模式（程序第一次启动，要询问工作区，持久化数据和python脚本要放进去）
 8. binance数据源
+
 ## 目前的主要疑惑：
 1. K线页面和代码页面显然都有打开多个页面的需求
 2. 代码调试的时候可能需要同时显示K线页面
@@ -124,3 +126,14 @@ $ npm run build:linux
 程序第一次启动，要询问工作区，工作区用于存储持久化数据和python脚本，存放用于python运行的虚拟环境
 K线视图里，除了内置的indicators列表，还要有一个自定义指标的列表，其中的指标是工作区中存储的python指标
 还应该有一个策略列表，其中的条目是存储工作区中存储的python策略，目前我们只考虑单一策略，未来可以考虑权重式多策略和多策略排行回测
+
+
+仔细思考后，我决定进行一个较大的UI逻辑更新：
+1. 将程序分成交易模式(trading_mode), 开发模式(developing_mode), 新闻模式(news_mode), 市场分析模式(market_analyze_mode)
+2. 模式切换按钮放在左侧的侧边栏中，可以使用src\renderer\public中的图标
+3. 模式切换按钮不再起到新建tab页面的作用，而是切换不同的模式，不同模式的解释如下：
+4. 交易模式显示k线图也就是chart页面，tab栏中的新建页面按钮保留，功能还是新建chart页面
+5. 开发模式，显示代码编辑页面，tab栏中无新建页面按钮
+6. 新闻模式和市场分析模式目前没有内容，我们日后再进行详细开发，目前只需要显示“正在开发中”即可
+7. 从A模式切换到B模式之后，保留A模式打开的所有标签页状态，以便于日后切换回A模式时恢复之前打开的标签页
+8. 设置、新闻模式、市场分析模式这三个模式不适用多tab页面，当切换到这个模式时不显示tab栏

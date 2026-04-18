@@ -7,17 +7,23 @@ import icon from '../../resources/prophet_logo.png?asset'
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
 const TITLE_BAR_HEIGHT = 30 // 标题栏高度
 const TAB_BAR_HEIGHT = 36 // 标签栏高度
-const TOP_OFFSET = TITLE_BAR_HEIGHT + TAB_BAR_HEIGHT // 内容区域顶部偏移
 const AGENT_PANEL_WIDTH = 350 // Agent 侧栏默认宽度
 let agentPanelVisible = true // Agent 侧栏是否可见
 let currentAgentPanelWidth = AGENT_PANEL_WIDTH // Agent 侧栏当前宽度
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
-let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: 'home'|'settings'|'chart'|'python' }
+let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: string, title: string }
 let activeViewId = null // 活动的view对象
-let homeViewId = null // home的viewId
-let settingsViewId = null // settings的viewId
-let pythonViewId = null // python编辑器的viewId
 let currentDataSource = 'binance' // 当前数据源设置（跨 partition 共享）
+
+// 模式管理
+let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'settings'
+const modeState = {
+  trading: { viewIds: new Set(), activeViewId: null },
+  developing: { viewIds: new Set(), activeViewId: null },
+  news: { viewId: null },
+  market_analyze: { viewId: null },
+  settings: { viewId: null }
+}
 
 function createWindow() {
   // Create the browser window.
@@ -114,28 +120,51 @@ function getUUID() {
   })
 }
 
-// 创建 HomeTab
-function createHomeTab() {
-  const viewId = getUUID() // Date.now().toString()
+// 获取动态顶部偏移（根据当前模式是否显示标签栏）
+function getTopOffset() {
+  const showTabBar = currentMode === 'trading' || currentMode === 'developing'
+  return TITLE_BAR_HEIGHT + (showTabBar ? TAB_BAR_HEIGHT : 0)
+}
+
+// 获取默认标题
+function getDefaultTitle(type) {
+  switch (type) {
+    case 'chart':
+      return '新标签页'
+    case 'python':
+      return 'Python 编辑器'
+    case 'settings':
+      return '设置'
+    case 'placeholder':
+      return '正在开发中'
+    default:
+      return ''
+  }
+}
+
+// 创建 WebContentsView（统一创建函数）
+function createView(type) {
+  const viewId = getUUID()
   const view = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      partition: `persist:${viewId}`, // 实现存储隔离
-      preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
+      partition: `persist:${viewId}`,
+      preload: join(__dirname, '../preload/index.js')
     }
   })
   view.setBackgroundColor('#2e2c29')
-  updateWebViewBounds(mainWindow, view)
   mainWindow.contentView.addChildView(view)
-  const viewData = { view, type: 'home' }
+
+  const viewData = { view, type, title: getDefaultTitle(type) }
   views.set(viewId, viewData)
 
-  // 发送新标签页信息给渲染进程
-  mainWindow.webContents.send('home-created', viewId)
+  // 初始隐藏
+  view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: 0, width: 0, height: 0 })
 
   // 监听页面标题变化
   view.webContents.on('page-title-updated', (event, title) => {
+    viewData.title = title
     mainWindow.webContents.send('tab-title-updated', viewId, title)
   })
 
@@ -143,225 +172,154 @@ function createHomeTab() {
   view.webContents.on('did-start-loading', () => {
     mainWindow.webContents.send('tab-loading', viewId, true)
   })
-
   view.webContents.on('did-stop-loading', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
-
-  // 添加导航完成事件监听，确保页面完全加载后移除加载状态
   view.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
-
-  // 添加加载失败事件监听
   view.webContents.on('did-fail-load', () => {
     mainWindow.webContents.send('tab-loading', viewId, false)
   })
 
-  // home页面
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/home.html`)
-  } else {
-    view.webContents.loadURL(join(__dirname, '../renderer/home.html'))
+  // 加载对应页面
+  const htmlFileMap = {
+    chart: 'chart.html',
+    python: 'python.html',
+    settings: 'settings.html',
+    placeholder: 'placeholder.html'
   }
-  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立
+  const htmlFile = htmlFileMap[type]
+  if (htmlFile) {
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${htmlFile}`)
+    } else {
+      view.webContents.loadFile(join(__dirname, `../renderer/${htmlFile}`))
+    }
+  }
 
-  setActiveTab(viewId)
-  homeViewId = viewId
   return viewId
 }
 
-// 创建一个tab
+// 在交易模式下创建新的图表标签页
 function createNewTab() {
-  // 如果已经有10个标签，则不再创建
-  if (views.size >= 10) {
-    // 通知渲染进程显示提示
+  if (currentMode !== 'trading') return null
+  const state = modeState.trading
+  if (state.viewIds.size >= 10) {
     mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
     return null
   }
 
-  const viewId = getUUID() // Date.now().toString()
-  const view = new WebContentsView({
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      partition: `persist:${viewId}`, // 实现存储隔离
-      preload: join(__dirname, '../preload/index.js') // 添加 preload 脚本
-    }
-  })
-  view.setBackgroundColor('#2e2c29')
-  updateWebViewBounds(mainWindow, view)
-  mainWindow.contentView.addChildView(view)
-  const viewData = { view, type: 'chart' }
-  views.set(viewId, viewData)
+  const viewId = createView('chart')
+  state.viewIds.add(viewId)
 
-  // 发送新标签页信息给渲染进程
+  // 通知渲染进程
   mainWindow.webContents.send('tab-created', viewId)
 
-  // 监听页面标题变化
-  view.webContents.on('page-title-updated', (event, title) => {
-    mainWindow.webContents.send('tab-title-updated', viewId, title)
-  })
-
-  // 监听页面加载状态
-  view.webContents.on('did-start-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, true)
-  })
-
-  view.webContents.on('did-stop-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-
-  // 添加导航完成事件监听，确保页面完全加载后移除加载状态
-  view.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-
-  // 添加加载失败事件监听
-  view.webContents.on('did-fail-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/chart.html`)
-  } else {
-    view.webContents.loadFile(join(__dirname, '../renderer/chart.html'))
-  }
-
-  // view.webContents.loadURL(join(__dirname, '../renderer/chart.html'))
-  
-  // view.webContents.openDevTools({ mode: 'detach' }); // 'detach' 模式使工具窗口独立ssss
-
   setActiveTab(viewId)
-  return viewId
-}
-// 创建设置页面
-function createSettingsTab() {
-  if (views.size >= 10) {
-    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
-    return null
-  }
-
-  const viewId = getUUID()
-  const view = new WebContentsView({
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      partition: `persist:${viewId}`,
-      preload: join(__dirname, '../preload/index.js')
-    }
-  })
-  view.setBackgroundColor('#2e2c29')
-  updateWebViewBounds(mainWindow, view)
-  mainWindow.contentView.addChildView(view)
-  views.set(viewId, { view, type: 'settings' })
-
-  mainWindow.webContents.send('settings-created', viewId)
-
-  view.webContents.on('page-title-updated', (event, title) => {
-    mainWindow.webContents.send('tab-title-updated', viewId, title)
-  })
-  view.webContents.on('did-start-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, true)
-  })
-  view.webContents.on('did-stop-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-  view.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-  view.webContents.on('did-fail-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/settings.html`)
-  } else {
-    view.webContents.loadFile(join(__dirname, '../renderer/settings.html'))
-  }
-
-  setActiveTab(viewId)
-  settingsViewId = viewId
+  state.activeViewId = viewId
   return viewId
 }
 
-// 创建编辑器页面
-function createPythonTab() {
-  if (views.size >= 10) {
-    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
-    return null
+// 模式切换
+function switchMode(newMode) {
+  // 保存当前模式的活动视图
+  if (currentMode === 'trading' || currentMode === 'developing') {
+    modeState[currentMode].activeViewId = activeViewId
   }
 
-  const viewId = getUUID()
-  const view = new WebContentsView({
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      partition: `persist:${viewId}`,
-      preload: join(__dirname, '../preload/index.js')
+  // 隐藏所有视图
+  views.forEach((viewData) => {
+    viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: 0, width: 0, height: 0 })
+  })
+
+  currentMode = newMode
+  const showTabBar = newMode === 'trading' || newMode === 'developing'
+  const showNewTabBtn = newMode === 'trading'
+
+  let tabs = []
+  let newActiveViewId = null
+
+  if (newMode === 'trading') {
+    const state = modeState.trading
+    if (state.viewIds.size === 0) {
+      // 首次进入交易模式，创建第一个图表标签页
+      const viewId = createView('chart')
+      state.viewIds.add(viewId)
+      state.activeViewId = viewId
     }
-  })
-  view.setBackgroundColor('#2e2c29')
-  updateWebViewBounds(mainWindow, view)
-  mainWindow.contentView.addChildView(view)
-  views.set(viewId, { view, type: 'python' })
-
-  mainWindow.webContents.send('tab-created', viewId)
-
-  view.webContents.on('page-title-updated', (event, title) => {
-    mainWindow.webContents.send('tab-title-updated', viewId, title)
-  })
-  view.webContents.on('did-start-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, true)
-  })
-  view.webContents.on('did-stop-loading', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-  view.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-  view.webContents.on('did-fail-load', () => {
-    mainWindow.webContents.send('tab-loading', viewId, false)
-  })
-
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/python.html`)
-  } else {
-    view.webContents.loadFile(join(__dirname, '../renderer/python.html'))
+    newActiveViewId = state.activeViewId
+    // 构建标签页信息
+    state.viewIds.forEach((vid) => {
+      const vd = views.get(vid)
+      if (vd) tabs.push({ viewId: vid, title: vd.title || '新标签页', type: vd.type })
+    })
+  } else if (newMode === 'developing') {
+    const state = modeState.developing
+    if (state.viewIds.size === 0) {
+      // 首次进入开发模式，创建 Python 编辑器
+      const viewId = createView('python')
+      state.viewIds.add(viewId)
+      state.activeViewId = viewId
+    }
+    newActiveViewId = state.activeViewId
+    state.viewIds.forEach((vid) => {
+      const vd = views.get(vid)
+      if (vd) tabs.push({ viewId: vid, title: vd.title || 'Python 编辑器', type: vd.type })
+    })
+  } else if (newMode === 'news' || newMode === 'market_analyze') {
+    const state = modeState[newMode]
+    if (!state.viewId) {
+      state.viewId = createView('placeholder')
+    }
+    newActiveViewId = state.viewId
+  } else if (newMode === 'settings') {
+    const state = modeState.settings
+    if (!state.viewId) {
+      state.viewId = createView('settings')
+    }
+    newActiveViewId = state.viewId
   }
 
-  setActiveTab(viewId)
-  pythonViewId = viewId
-  return viewId
+  // 显示新模式的活动视图
+  if (newActiveViewId) {
+    activeViewId = newActiveViewId
+    const viewData = views.get(newActiveViewId)
+    if (viewData) {
+      updateWebViewBounds(mainWindow, viewData.view)
+    }
+  }
+
+  // 通知渲染进程
+  mainWindow.webContents.send('mode-switched', {
+    mode: newMode,
+    showTabBar,
+    showNewTabBtn,
+    tabs,
+    activeViewId: newActiveViewId
+  })
 }
 // 更新 WebContentsView 边界的函数
 function updateWebViewBounds(window, webView) {
   const [mainwin_content_width, mainwin_content_height] = mainWindow.getContentSize()
   const rightPanelWidth = agentPanelVisible ? currentAgentPanelWidth : 0
+  const topOffset = getTopOffset()
   webView.setBounds({
     x: ACTIVITY_BAR_WIDTH,
-    y: TOP_OFFSET,
+    y: topOffset,
     width: mainwin_content_width - ACTIVITY_BAR_WIDTH - rightPanelWidth,
-    height: mainwin_content_height - TOP_OFFSET
+    height: mainwin_content_height - topOffset
   })
 }
 
 // 关闭所有图表页面
 function closeAllChartTabs() {
   console.log('[closeAllChartTabs] 开始关闭所有图表页面')
-  const chartViewIds = []
-  
-  // 收集所有图表页面的 viewId
-  views.forEach((viewData, viewId) => {
-    console.log(`[closeAllChartTabs] 检查标签页 ${viewId}, 类型: ${viewData.type}`)
-    if (viewData.type === 'chart') {
-      chartViewIds.push(viewId)
-    }
-  })
-  
+  const state = modeState.trading
+  const chartViewIds = Array.from(state.viewIds)
+
   console.log(`[closeAllChartTabs] 找到 ${chartViewIds.length} 个图表页面需要关闭:`, chartViewIds)
-  
-  // 关闭所有图表页面
+
   chartViewIds.forEach((viewId) => {
     const viewData = views.get(viewId)
     if (viewData) {
@@ -369,6 +327,7 @@ function closeAllChartTabs() {
       try {
         mainWindow.contentView.removeChildView(viewData.view)
         views.delete(viewId)
+        state.viewIds.delete(viewId)
         mainWindow.webContents.send('tab-closed', viewId)
         console.log(`[closeAllChartTabs] 成功关闭图表页面: ${viewId}`)
       } catch (error) {
@@ -376,16 +335,18 @@ function closeAllChartTabs() {
       }
     }
   })
-  
-  // 如果当前活动页面是图表页面，切换到其他页面
-  if (chartViewIds.includes(activeViewId)) {
-    const remainingViewIds = Array.from(views.keys())
-    console.log(`[closeAllChartTabs] 当前活动页面是图表页面，切换到:`, remainingViewIds)
-    if (remainingViewIds.length > 0) {
-      setActiveTab(remainingViewIds[remainingViewIds.length - 1])
-    }
+
+  state.activeViewId = null
+
+  // 如果当前在交易模式，创建一个新的图表标签页
+  if (currentMode === 'trading') {
+    const viewId = createView('chart')
+    state.viewIds.add(viewId)
+    state.activeViewId = viewId
+    mainWindow.webContents.send('tab-created', viewId)
+    setActiveTab(viewId)
   }
-  
+
   console.log(`[closeAllChartTabs] 完成，已关闭 ${chartViewIds.length} 个图表页面`)
 }
 
@@ -395,53 +356,30 @@ function setActiveTab(viewId) {
     if (id === viewId) {
       updateWebViewBounds(mainWindow, viewData.view)
     } else {
-      viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: TOP_OFFSET, width: 0, height: 0 })
+      viewData.view.setBounds({ x: ACTIVITY_BAR_WIDTH, y: 0, width: 0, height: 0 })
     }
   })
   activeViewId = viewId
-  // 通知渲染进程更新侧边栏激活状态
-  const viewData = views.get(viewId)
-  if (viewData) {
-    mainWindow.webContents.send('active-tab-type-changed', viewData.type)
+  // 更新当前模式的活动视图
+  if (currentMode === 'trading' || currentMode === 'developing') {
+    const state = modeState[currentMode]
+    if (state.viewIds.has(viewId)) {
+      state.activeViewId = viewId
+    }
   }
 }
 
 // 监听标签页相关的事件
 ipcMain.on('renderer-ready', () => {
-  if (!homeViewId || !views.has(homeViewId)) {
-    createHomeTab()
-  }
+  switchMode('trading')
 })
 
-ipcMain.on('home-tab', () => {
-  if (homeViewId && views.has(homeViewId)) {
-    setActiveTab(homeViewId)
-    mainWindow.webContents.send('switch-to-tab', homeViewId)
-  } else {
-    createHomeTab()
-  }
+ipcMain.on('switch-mode', (event, newMode) => {
+  switchMode(newMode)
 })
 
 ipcMain.on('new-tab', () => {
   createNewTab()
-})
-
-ipcMain.on('settings-tab', () => {
-  if (settingsViewId && views.has(settingsViewId)) {
-    setActiveTab(settingsViewId)
-    mainWindow.webContents.send('switch-to-tab', settingsViewId)
-  } else {
-    createSettingsTab()
-  }
-})
-
-ipcMain.on('python-tab', () => {
-  if (pythonViewId && views.has(pythonViewId)) {
-    setActiveTab(pythonViewId)
-    mainWindow.webContents.send('switch-to-tab', pythonViewId)
-  } else {
-    createPythonTab()
-  }
 })
 
 ipcMain.on('switch-tab', (event, viewId) => {
@@ -450,27 +388,41 @@ ipcMain.on('switch-tab', (event, viewId) => {
 
 ipcMain.on('close-tab', (event, viewId) => {
   const viewData = views.get(viewId)
-  // 修改判断条件，添加标签数量检查
-  if (viewData && views.size > 1) {
-    // mainWindow.removeBrowserView(view)
-    mainWindow.contentView.removeChildView(viewData.view)
-    views.delete(viewId)
+  if (!viewData) return
 
-    // 清除单例标签的 ID 跟踪
-    if (viewId === homeViewId) homeViewId = null
-    if (viewId === settingsViewId) settingsViewId = null
-    if (viewId === pythonViewId) pythonViewId = null
-
-    if (activeViewId === viewId) {
-      const lastViewId = Array.from(views.keys())[views.size - 1]
-      setActiveTab(lastViewId)
+  // 找到该视图所属的模式
+  let viewMode = null
+  for (const [mode, state] of Object.entries(modeState)) {
+    if (state.viewIds && state.viewIds.has(viewId)) {
+      viewMode = mode
+      break
     }
-
-    mainWindow.webContents.send('tab-closed', viewId)
-  } else {
-    // 通知渲染进程显示提示
-    mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
   }
+
+  // 至少保留1个标签页
+  if (viewMode && modeState[viewMode].viewIds.size <= 1) {
+    mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
+    return
+  }
+
+  mainWindow.contentView.removeChildView(viewData.view)
+  views.delete(viewId)
+
+  if (viewMode && modeState[viewMode].viewIds) {
+    modeState[viewMode].viewIds.delete(viewId)
+  }
+
+  if (activeViewId === viewId) {
+    // 切换到当前模式的最后一个视图
+    if (viewMode && modeState[viewMode].viewIds) {
+      const remaining = Array.from(modeState[viewMode].viewIds)
+      if (remaining.length > 0) {
+        setActiveTab(remaining[remaining.length - 1])
+      }
+    }
+  }
+
+  mainWindow.webContents.send('tab-closed', viewId)
 })
 
 // 监听关闭所有图表页面的请求
@@ -522,7 +474,7 @@ ipcMain.on('show-context-menu', (event, viewId) => {
   console.log(`open context menu ${viewId}`)
   const viewData = views.get(viewId)
   if (!viewData) return
-  
+
   const template = [
     {
       label: '打开DevTools',
