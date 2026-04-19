@@ -100,10 +100,23 @@ $ npm run build:linux
 4. [UDF API](./UDF-api.md)
 5. [Electron + Vue + Vite + Python + FastAPI](https://github.com/hafiidz/electron-vite-vue-fastapi)
 6. [TradingView API Reference](https://www.tradingview.com/charting-library-docs/latest/connecting_data/Datafeed-API#getservertime)
-7. [Binance WSS API](https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams)
-8. [CCXT: 跨交易所的交易API封装库，为各种交易所提供统一的上层接口，支持python和js](https://docs.ccxt.com/#/README?id=social)
-9. [wondertreader](https://wtdocs.readthedocs.io/zh/latest/)
-10. [install-redis-on-linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/)
+7. [charting-library-examples](https://github.com/tradingview/charting-library-examples)
+8. [charting-library-demo](https://trading-terminal.tradingview-widget.com/)
+9. [free-charting-libraries](https://cn.tradingview.com/free-charting-libraries/)
+10. [lightweight-charts](https://github.com/tradingview/lightweight-charts)
+11. [Binance WSS API](https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams)
+12. [CCXT: 跨交易所的交易API封装库，为各种交易所提供统一的上层接口，支持python和js](https://docs.ccxt.com/#/README?id=social)
+13. [wondertreader](https://wtdocs.readthedocs.io/zh/latest/)
+14. [install-redis-on-linux](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/)
+15. [openctp主页](http://www.openctp.cn/)
+16. [openctp](https://github.com/openctp/openctp)
+17. [KLineChart Pro](https://pro.klinecharts.com/)
+18. [klinecharts](https://github.com/klinecharts/KLineChart)
+19. [klinecharts](https://klinecharts.com/)
+20. [klinecharts](https://github.com/klinecharts/preview)
+21. [preview.klinecharts](https://preview.klinecharts.com/)
+22. [daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)
+
 
 ## 开发计划
 1. [done]开发模式和交易模式的切换逻辑: 用一个开关手动切换
