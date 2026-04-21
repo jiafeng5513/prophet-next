@@ -104,6 +104,160 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('[Settings] 用户取消切换，恢复原数据源:', currentDataSource)
     }
   })
+
+  // =====================
+  // DSA 配置管理
+  // =====================
+  const dsaPathInput = document.getElementById('dsa-path')
+  const browseDsaBtn = document.getElementById('browse-dsa-btn')
+  const pythonPathInput = document.getElementById('python-path')
+  const browsePythonBtn = document.getElementById('browse-python-btn')
+  const dsaPortInput = document.getElementById('dsa-port')
+  const llmProviderSelect = document.getElementById('llm-provider')
+  const llmApiKeyInput = document.getElementById('llm-api-key')
+  const toggleApiKeyBtn = document.getElementById('toggle-api-key-btn')
+  const llmModelInput = document.getElementById('llm-model')
+  const searchApiKeyInput = document.getElementById('search-api-key')
+  const dsaStatusDot = document.getElementById('dsa-status-dot')
+  const dsaStatusText = document.getElementById('dsa-status-text')
+  const dsaStartBtn = document.getElementById('dsa-start-btn')
+  const dsaStopBtn = document.getElementById('dsa-stop-btn')
+  const dsaStatusDesc = document.getElementById('dsa-status-desc')
+
+  // 加载 DSA 配置
+  if (window.electronAPI && window.electronAPI.getDsaConfig) {
+    const dsaConfig = await window.electronAPI.getDsaConfig()
+    dsaPathInput.value = dsaConfig.dsaPath || ''
+    pythonPathInput.value = dsaConfig.pythonPath || ''
+    dsaPortInput.value = dsaConfig.port || 8000
+    llmProviderSelect.value = dsaConfig.llmProvider || ''
+    llmApiKeyInput.value = dsaConfig.llmApiKey || ''
+    llmModelInput.value = dsaConfig.llmModel || ''
+    searchApiKeyInput.value = dsaConfig.searchApiKey || ''
+  }
+
+  // 加载 DSA 服务状态
+  if (window.electronAPI && window.electronAPI.getDsaStatus) {
+    const statusInfo = await window.electronAPI.getDsaStatus()
+    updateDsaStatusUI(statusInfo.status)
+  }
+
+  // 监听 DSA 服务状态变化
+  if (window.electronAPI && window.electronAPI.onDsaStatusChanged) {
+    window.electronAPI.onDsaStatusChanged((data) => {
+      updateDsaStatusUI(data.status)
+    })
+  }
+
+  function updateDsaStatusUI(status) {
+    const statusMap = {
+      stopped: { color: '#666', text: '未启动', showStart: true, showStop: false },
+      starting: { color: '#d29922', text: '正在启动...', showStart: false, showStop: false },
+      running: { color: '#2ea043', text: '运行中', showStart: false, showStop: true },
+      error: { color: '#da3633', text: '启动失败', showStart: true, showStop: false }
+    }
+    const info = statusMap[status] || statusMap.stopped
+    dsaStatusDot.style.background = info.color
+    dsaStatusText.textContent = info.text
+    dsaStartBtn.style.display = info.showStart ? '' : 'none'
+    dsaStopBtn.style.display = info.showStop ? '' : 'none'
+  }
+
+  // 保存 DSA 配置的通用函数
+  async function saveDsaConfig() {
+    if (!window.electronAPI || !window.electronAPI.setDsaConfig) return
+    await window.electronAPI.setDsaConfig({
+      dsaPath: dsaPathInput.value,
+      pythonPath: pythonPathInput.value,
+      port: parseInt(dsaPortInput.value) || 8000,
+      llmProvider: llmProviderSelect.value,
+      llmApiKey: llmApiKeyInput.value,
+      llmModel: llmModelInput.value,
+      searchApiKey: searchApiKeyInput.value
+    })
+    console.log('[Settings] DSA 配置已保存')
+  }
+
+  // 浏览 DSA 路径
+  browseDsaBtn.addEventListener('click', async () => {
+    if (window.electronAPI && window.electronAPI.browseDsaPath) {
+      const newPath = await window.electronAPI.browseDsaPath()
+      if (newPath) {
+        dsaPathInput.value = newPath
+        await saveDsaConfig()
+      }
+    }
+  })
+
+  // 浏览 Python 路径
+  browsePythonBtn.addEventListener('click', async () => {
+    if (window.electronAPI && window.electronAPI.browsePythonPath) {
+      const newPath = await window.electronAPI.browsePythonPath()
+      if (newPath) {
+        pythonPathInput.value = newPath
+        await saveDsaConfig()
+      }
+    }
+  })
+
+  // 各配置项变化时自动保存
+  dsaPortInput.addEventListener('change', saveDsaConfig)
+  llmProviderSelect.addEventListener('change', saveDsaConfig)
+  llmApiKeyInput.addEventListener('change', saveDsaConfig)
+  llmModelInput.addEventListener('change', saveDsaConfig)
+  searchApiKeyInput.addEventListener('change', saveDsaConfig)
+
+  // API Key 显示/隐藏切换
+  toggleApiKeyBtn.addEventListener('click', () => {
+    if (llmApiKeyInput.type === 'password') {
+      llmApiKeyInput.type = 'text'
+      toggleApiKeyBtn.textContent = '隐藏'
+    } else {
+      llmApiKeyInput.type = 'password'
+      toggleApiKeyBtn.textContent = '显示'
+    }
+  })
+
+  // 启动 DSA 服务
+  dsaStartBtn.addEventListener('click', async () => {
+    if (!dsaPathInput.value) {
+      await showConfirmDialog('提示', '请先设置 DSA 项目路径', '确定', '确定')
+      return
+    }
+    if (!llmProviderSelect.value || !llmApiKeyInput.value) {
+      const proceed = await showConfirmDialog(
+        '提示',
+        '尚未配置 LLM API Key，部分功能可能无法正常工作。是否继续启动？',
+        '继续',
+        '取消'
+      )
+      if (!proceed) return
+    }
+
+    await saveDsaConfig()
+    dsaStartBtn.style.display = 'none'
+    updateDsaStatusUI('starting')
+
+    if (window.electronAPI && window.electronAPI.startDsaServer) {
+      const result = await window.electronAPI.startDsaServer()
+      if (result.success) {
+        updateDsaStatusUI('running')
+        dsaStatusDesc.textContent = `服务运行在 http://127.0.0.1:${dsaPortInput.value}`
+      } else {
+        updateDsaStatusUI('error')
+        dsaStatusDesc.textContent = `启动失败: ${result.error}`
+      }
+    }
+  })
+
+  // 停止 DSA 服务
+  dsaStopBtn.addEventListener('click', async () => {
+    if (window.electronAPI && window.electronAPI.stopDsaServer) {
+      await window.electronAPI.stopDsaServer()
+      updateDsaStatusUI('stopped')
+      dsaStatusDesc.textContent = '启动 DSA 后端服务后，可使用股票分析和问股功能'
+    }
+  })
 })
 
 // 显示确认对话框

@@ -71,5 +71,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameItem: (oldPath, newPath) => ipcRenderer.invoke('rename-item', oldPath, newPath),
   deleteItem: (targetPath) => ipcRenderer.invoke('delete-item', targetPath),
   moveItem: (srcPath, destDir) => ipcRenderer.invoke('move-item', srcPath, destDir),
-  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content)
+  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content),
+
+  // DSA (daily_stock_analysis) 集成
+  getDsaConfig: () => ipcRenderer.invoke('get-dsa-config'),
+  setDsaConfig: (config) => ipcRenderer.invoke('set-dsa-config', config),
+  browseDsaPath: () => ipcRenderer.invoke('browse-dsa-path'),
+  browsePythonPath: () => ipcRenderer.invoke('browse-python-path'),
+  startDsaServer: () => ipcRenderer.invoke('start-dsa-server'),
+  stopDsaServer: () => ipcRenderer.invoke('stop-dsa-server'),
+  getDsaStatus: () => ipcRenderer.invoke('get-dsa-status'),
+  checkDsaHealth: () => ipcRenderer.invoke('check-dsa-health'),
+  onDsaStatusChanged: (callback) =>
+    ipcRenderer.on('dsa-status-changed', (event, data) => callback(data))
 })

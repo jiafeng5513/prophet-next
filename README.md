@@ -166,4 +166,12 @@ K线视图里，除了内置的indicators列表，还要有一个自定义指标
 
 调优修复
 1. 资源管理器在空白处右键不应该显示重命名和删除，不允许通过这种方式删除和重命名工作区目录
-2. 
+
+分析切换本项目为react native的可能性
+https://github.com/tradingview/charting-library-examples/tree/master/react-native这里提供了charting-library和react-native的集成示例，
+
+分析daily_stock_analysis
+https://github.com/ZhuLinsen/daily_stock_analysis这个项目中有两个功能我比较感兴趣：首页的股票分析功能，和第二个页面的问股功能，并且想将其集成到当前项目中，请帮我分析可行的方案。daily_stock_analysis的代码已经同步到D:\ProjectsSoftware\Treading\daily_stock_analysis
+
+
+终端输

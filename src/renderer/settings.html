@@ -166,6 +166,72 @@
                 <div class="description">允许同时打开的最大标签页数量</div>
             </div>
         </div>
+
+        <div class="settings-section">
+            <h2>股票分析服务 (DSA)</h2>
+            <div class="settings-item">
+                <label for="dsa-path">DSA 项目路径</label>
+                <div class="path-input-group">
+                    <input type="text" id="dsa-path" readonly>
+                    <button class="browse-btn" id="browse-dsa-btn">浏览...</button>
+                </div>
+                <div class="description">daily_stock_analysis 项目的本地路径，包含 server.py</div>
+            </div>
+            <div class="settings-item">
+                <label for="python-path">Python 解释器路径</label>
+                <div class="path-input-group">
+                    <input type="text" id="python-path" placeholder="python（使用系统默认）">
+                    <button class="browse-btn" id="browse-python-btn">浏览...</button>
+                </div>
+                <div class="description">用于运行 DSA 后端的 Python 解释器，留空则使用系统 PATH 中的 python</div>
+            </div>
+            <div class="settings-item">
+                <label for="dsa-port">服务端口</label>
+                <input type="number" id="dsa-port" value="8000" min="1024" max="65535">
+                <div class="description">FastAPI 服务监听端口，默认 8000</div>
+            </div>
+            <div class="settings-item">
+                <label for="llm-provider">LLM 提供商</label>
+                <select id="llm-provider">
+                    <option value="">-- 请选择 --</option>
+                    <option value="gemini">Gemini（推荐，有免费额度）</option>
+                    <option value="deepseek">DeepSeek（性价比高）</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic Claude</option>
+                    <option value="aihubmix">AIHubmix（聚合平台）</option>
+                    <option value="ollama">Ollama（本地模型）</option>
+                </select>
+                <div class="description">AI 分析和问股功能所使用的大语言模型提供商</div>
+            </div>
+            <div class="settings-item">
+                <label for="llm-api-key">LLM API Key</label>
+                <div class="path-input-group">
+                    <input type="password" id="llm-api-key" placeholder="输入 API Key" style="flex:1; padding:8px 12px; background:#1a1a1a; border:1px solid #444; border-radius:4px; color:#fff; font-size:14px;">
+                    <button class="browse-btn" id="toggle-api-key-btn">显示</button>
+                </div>
+                <div class="description">对应提供商的 API Key；Ollama 模式下填写服务地址（如 http://localhost:11434）</div>
+            </div>
+            <div class="settings-item">
+                <label for="llm-model">LLM 模型名称（可选）</label>
+                <input type="text" id="llm-model" placeholder="留空使用默认模型">
+                <div class="description">如 gemini-2.5-flash、deepseek-chat、gpt-4o-mini 等</div>
+            </div>
+            <div class="settings-item">
+                <label for="search-api-key">搜索引擎 API Key（可选）</label>
+                <input type="password" id="search-api-key" placeholder="Tavily API Key">
+                <div class="description">用于获取股票新闻和舆情分析，推荐使用 Tavily（https://tavily.com）</div>
+            </div>
+            <div class="settings-item">
+                <label>DSA 服务状态</label>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <span id="dsa-status-dot" style="width:10px; height:10px; border-radius:50%; background:#666; display:inline-block;"></span>
+                    <span id="dsa-status-text" style="font-size:14px; color:#ccc;">未启动</span>
+                    <button class="browse-btn" id="dsa-start-btn" style="background:#2ea043;">启动服务</button>
+                    <button class="browse-btn" id="dsa-stop-btn" style="background:#da3633; display:none;">停止服务</button>
+                </div>
+                <div class="description" id="dsa-status-desc">启动 DSA 后端服务后，可使用股票分析和问股功能</div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="/src/settings.js"></script>

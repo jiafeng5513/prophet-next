@@ -33,7 +33,8 @@ export default defineConfig({
           chart: resolve(__dirname, 'src/renderer/chart.html'),
           python: resolve(__dirname, 'src/renderer/python.html'),
           settings: resolve(__dirname, 'src/renderer/settings.html'),
-          placeholder: resolve(__dirname, 'src/renderer/placeholder.html')
+          placeholder: resolve(__dirname, 'src/renderer/placeholder.html'),
+          stockAnalysis: resolve(__dirname, 'src/renderer/stock-analysis.html')
         }
       }
     },

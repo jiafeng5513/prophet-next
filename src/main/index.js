@@ -20,6 +20,7 @@ import {
   renameSync,
   rmSync
 } from 'fs'
+import { spawn } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
 
@@ -78,6 +79,269 @@ function setWorkspacePath(newPath) {
   const config = readConfig()
   config.workspacePath = newPath
   writeConfig(config)
+}
+
+// =====================
+// DSA (daily_stock_analysis) 配置管理
+// =====================
+function getDsaConfig() {
+  const config = readConfig()
+  return config.dsa || {}
+}
+
+function setDsaConfig(dsaConfig) {
+  const config = readConfig()
+  config.dsa = { ...config.dsa, ...dsaConfig }
+  writeConfig(config)
+}
+
+function getDefaultDsaPath() {
+  // 开发模式下使用同级目录
+  if (is.dev) {
+    return join(dirname(app.getAppPath()), 'daily_stock_analysis')
+  }
+  return ''
+}
+
+// 生成 DSA 的 .env 文件
+function writeDsaEnvFile(dsaPath) {
+  const dsaConfig = getDsaConfig()
+  const lines = []
+
+  // LLM 配置
+  if (dsaConfig.llmProvider && dsaConfig.llmApiKey) {
+    const provider = dsaConfig.llmProvider
+    if (provider === 'gemini') {
+      lines.push(`GEMINI_API_KEY=${dsaConfig.llmApiKey}`)
+    } else if (provider === 'deepseek') {
+      lines.push(`DEEPSEEK_API_KEY=${dsaConfig.llmApiKey}`)
+    } else if (provider === 'openai') {
+      lines.push(`OPENAI_API_KEY=${dsaConfig.llmApiKey}`)
+    } else if (provider === 'anthropic') {
+      lines.push(`ANTHROPIC_API_KEY=${dsaConfig.llmApiKey}`)
+    } else if (provider === 'aihubmix') {
+      lines.push(`AIHUBMIX_KEY=${dsaConfig.llmApiKey}`)
+    } else if (provider === 'ollama') {
+      lines.push(`OLLAMA_API_BASE=${dsaConfig.llmApiKey || 'http://localhost:11434'}`)
+    }
+  }
+
+  if (dsaConfig.llmModel) {
+    lines.push(`LITELLM_MODEL=${dsaConfig.llmModel}`)
+  }
+
+  // 搜索引擎 API Key
+  if (dsaConfig.searchApiKey) {
+    lines.push(`TAVILY_API_KEYS=${dsaConfig.searchApiKey}`)
+  }
+
+  // Agent 模式
+  lines.push('AGENT_MODE=true')
+  lines.push('AGENT_SKILLS=all')
+
+  // 端口配置
+  const port = dsaConfig.port || 8000
+  lines.push(`# FastAPI port: ${port}`)
+
+  const envPath = join(dsaPath, '.env')
+  try {
+    writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8')
+    console.log('[DSA] 已写入 .env 文件:', envPath)
+    return true
+  } catch (e) {
+    console.error('[DSA] 写入 .env 文件失败:', e)
+    return false
+  }
+}
+
+// =====================
+// FastAPI 子进程管理
+// =====================
+let fastApiProcess = null
+let fastApiStatus = 'stopped' // 'stopped' | 'starting' | 'running' | 'error'
+let fastApiPort = 8000
+
+function getFastApiUrl() {
+  return `http://127.0.0.1:${fastApiPort}`
+}
+
+async function startFastApiServer() {
+  if (fastApiProcess) {
+    console.log('[FastAPI] 服务已在运行中')
+    return { success: true, status: 'running' }
+  }
+
+  const dsaConfig = getDsaConfig()
+  const dsaPath = dsaConfig.dsaPath || getDefaultDsaPath()
+  const pythonPath = dsaConfig.pythonPath || 'python'
+  fastApiPort = dsaConfig.port || 8000
+
+  if (!dsaPath || !existsSync(dsaPath)) {
+    const msg = `DSA 项目路径不存在: ${dsaPath}`
+    console.error('[FastAPI]', msg)
+    fastApiStatus = 'error'
+    broadcastDsaStatus()
+    return { success: false, error: msg }
+  }
+
+  const serverPy = join(dsaPath, 'server.py')
+  if (!existsSync(serverPy)) {
+    const msg = `未找到 server.py: ${serverPy}`
+    console.error('[FastAPI]', msg)
+    fastApiStatus = 'error'
+    broadcastDsaStatus()
+    return { success: false, error: msg }
+  }
+
+  // 生成 .env 配置
+  writeDsaEnvFile(dsaPath)
+
+  fastApiStatus = 'starting'
+  broadcastDsaStatus()
+
+  return new Promise((resolve) => {
+    const args = [
+      '-m',
+      'uvicorn',
+      'server:app',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(fastApiPort)
+    ]
+
+    console.log(`[FastAPI] 启动命令: ${pythonPath} ${args.join(' ')}`)
+    console.log(`[FastAPI] 工作目录: ${dsaPath}`)
+
+    fastApiProcess = spawn(pythonPath, args, {
+      cwd: dsaPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+        PYTHONLEGACYWINDOWSSTDIO: '0'
+      }
+    })
+
+    let started = false
+
+    fastApiProcess.stdout.on('data', (data) => {
+      const output = data.toString()
+      console.log('[FastAPI stdout]', output.trim())
+      if (!started && output.includes('Uvicorn running')) {
+        started = true
+        fastApiStatus = 'running'
+        broadcastDsaStatus()
+        resolve({ success: true, status: 'running' })
+      }
+    })
+
+    fastApiProcess.stderr.on('data', (data) => {
+      const output = data.toString()
+      console.log('[FastAPI stderr]', output.trim())
+      // uvicorn 输出到 stderr 也是正常的
+      if (!started && output.includes('Uvicorn running')) {
+        started = true
+        fastApiStatus = 'running'
+        broadcastDsaStatus()
+        resolve({ success: true, status: 'running' })
+      }
+    })
+
+    fastApiProcess.on('error', (err) => {
+      console.error('[FastAPI] 启动失败:', err.message)
+      fastApiProcess = null
+      fastApiStatus = 'error'
+      broadcastDsaStatus()
+      if (!started) {
+        resolve({ success: false, error: err.message })
+      }
+    })
+
+    fastApiProcess.on('exit', (code) => {
+      console.log(`[FastAPI] 进程退出, code=${code}`)
+      fastApiProcess = null
+      fastApiStatus = 'stopped'
+      broadcastDsaStatus()
+      if (!started) {
+        resolve({ success: false, error: `进程退出 code=${code}` })
+      }
+    })
+
+    // 超时 30 秒
+    setTimeout(() => {
+      if (!started) {
+        started = true
+        // 进程还活着但没检测到启动消息，尝试健康检查
+        checkFastApiHealth().then((healthy) => {
+          if (healthy) {
+            fastApiStatus = 'running'
+            broadcastDsaStatus()
+            resolve({ success: true, status: 'running' })
+          } else {
+            fastApiStatus = 'running' // 可能还在加载中，给个乐观状态
+            broadcastDsaStatus()
+            resolve({
+              success: true,
+              status: 'running',
+              warning: '未检测到启动消息，但进程仍在运行'
+            })
+          }
+        })
+      }
+    }, 30000)
+  })
+}
+
+function stopFastApiServer() {
+  if (!fastApiProcess) {
+    fastApiStatus = 'stopped'
+    broadcastDsaStatus()
+    return { success: true }
+  }
+
+  console.log('[FastAPI] 正在停止服务...')
+  try {
+    // Windows 下用 taskkill 终止进程树
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(fastApiProcess.pid), '/f', '/t'])
+    } else {
+      fastApiProcess.kill('SIGTERM')
+    }
+  } catch (e) {
+    console.error('[FastAPI] 停止失败:', e)
+  }
+  fastApiProcess = null
+  fastApiStatus = 'stopped'
+  broadcastDsaStatus()
+  return { success: true }
+}
+
+async function checkFastApiHealth() {
+  try {
+    const { net } = await import('electron')
+    return new Promise((resolve) => {
+      const request = net.request(`${getFastApiUrl()}/api/health`)
+      request.on('response', (response) => {
+        resolve(response.statusCode === 200)
+      })
+      request.on('error', () => resolve(false))
+      setTimeout(() => resolve(false), 5000)
+      request.end()
+    })
+  } catch {
+    return false
+  }
+}
+
+function broadcastDsaStatus() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('dsa-status-changed', {
+      status: fastApiStatus,
+      port: fastApiPort
+    })
+  }
 }
 
 function ensureWorkspaceDir() {
@@ -481,7 +745,8 @@ function createView(type, options = {}) {
     chart: 'chart.html',
     python: 'python.html',
     settings: 'settings.html',
-    placeholder: 'placeholder.html'
+    placeholder: 'placeholder.html',
+    'stock-analysis': 'stock-analysis.html'
   }
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
@@ -566,10 +831,16 @@ function switchMode(newMode) {
       const vd = views.get(vid)
       if (vd) tabs.push({ viewId: vid, title: vd.title || 'Python 编辑器', type: vd.type })
     })
-  } else if (newMode === 'news' || newMode === 'market_analyze') {
-    const state = modeState[newMode]
+  } else if (newMode === 'news') {
+    const state = modeState.news
     if (!state.viewId) {
       state.viewId = createView('placeholder')
+    }
+    newActiveViewId = state.viewId
+  } else if (newMode === 'market_analyze') {
+    const state = modeState.market_analyze
+    if (!state.viewId) {
+      state.viewId = createView('stock-analysis')
     }
     newActiveViewId = state.viewId
   } else if (newMode === 'settings') {
@@ -966,6 +1237,63 @@ ipcMain.on('resize-explorer-panel', (event, width) => {
   }
 })
 
+// =====================
+// DSA (daily_stock_analysis) IPC
+// =====================
+ipcMain.handle('get-dsa-config', () => {
+  return getDsaConfig()
+})
+
+ipcMain.handle('set-dsa-config', (event, dsaConfig) => {
+  setDsaConfig(dsaConfig)
+  return { success: true }
+})
+
+ipcMain.handle('browse-dsa-path', async () => {
+  const dsaConfig = getDsaConfig()
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择 daily_stock_analysis 项目目录',
+    defaultPath: dsaConfig.dsaPath || getDefaultDsaPath(),
+    properties: ['openDirectory']
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0]
+  }
+  return null
+})
+
+ipcMain.handle('browse-python-path', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择 Python 解释器',
+    properties: ['openFile'],
+    filters:
+      process.platform === 'win32'
+        ? [{ name: 'Python', extensions: ['exe'] }]
+        : [{ name: 'All Files', extensions: ['*'] }]
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0]
+  }
+  return null
+})
+
+ipcMain.handle('start-dsa-server', async () => {
+  return await startFastApiServer()
+})
+
+ipcMain.handle('stop-dsa-server', () => {
+  return stopFastApiServer()
+})
+
+ipcMain.handle('get-dsa-status', () => {
+  return { status: fastApiStatus, port: fastApiPort }
+})
+
+ipcMain.handle('check-dsa-health', async () => {
+  const healthy = await checkFastApiHealth()
+  return { healthy, status: fastApiStatus, port: fastApiPort }
+})
+
 // 监听右键菜单请求
 ipcMain.on('show-context-menu', (event, viewId) => {
   console.log(`open context menu ${viewId}`)
@@ -1061,9 +1389,14 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  stopFastApiServer()
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  stopFastApiServer()
 })
 
 app.on('activate', () => {
