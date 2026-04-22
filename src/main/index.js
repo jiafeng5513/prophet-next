@@ -20,23 +20,15 @@ import {
   renameSync,
   rmSync
 } from 'fs'
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
-
-// 修复 Windows 控制台中文乱码：将代码页设置为 UTF-8 (65001)
-if (process.platform === 'win32') {
-  try {
-    execSync('chcp 65001', { stdio: 'ignore' })
-  } catch {
-    // ignore
-  }
-}
 
 // 全局的变量参数
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
 const TITLE_BAR_HEIGHT = 30 // 标题栏高度
 const TAB_BAR_HEIGHT = 36 // 标签栏高度
+const STATUS_BAR_HEIGHT = 22 // 底部状态栏高度
 const AGENT_PANEL_WIDTH = 350 // Agent 侧栏默认宽度
 const EXPLORER_PANEL_WIDTH = 250 // 资源管理器默认宽度
 let agentPanelVisible = true // Agent 侧栏是否可见
@@ -175,6 +167,13 @@ function getFastApiUrl() {
   return `http://127.0.0.1:${fastApiPort}`
 }
 
+// 向渲染进程广播后端进度信息
+function broadcastBackendProgress(message, phase) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('backend-progress', { message, phase })
+  }
+}
+
 async function startFastApiServer() {
   if (fastApiProcess) {
     console.log('[FastAPI] 服务已在运行中')
@@ -228,11 +227,16 @@ async function startFastApiServer() {
 
     console.log(`[FastAPI] 启动命令: uv ${args.join(' ')}`)
     console.log(`[FastAPI] 工作目录: ${backendDir}`)
+    broadcastBackendProgress('正在启动后端服务...', 'starting')
 
-    fastApiProcess = spawn('uv', args, {
+    // 在 Windows 上使用 uv.exe，避免 shell: true 导致的编码问题和进程包装
+    const uvCmd = process.platform === 'win32' ? 'uv.exe' : 'uv'
+
+    fastApiProcess = spawn(uvCmd, args, {
       cwd: backendDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
+      shell: false,
+      windowsHide: true,
       env: {
         ...process.env,
         PYTHONIOENCODING: 'utf-8',
@@ -245,24 +249,53 @@ async function startFastApiServer() {
     let started = false
 
     fastApiProcess.stdout.on('data', (data) => {
-      const output = data.toString()
+      const output = data.toString('utf-8')
       console.log('[FastAPI stdout]', output.trim())
+      // 广播日志到状态栏
+      broadcastBackendProgress(output.trim(), 'running')
       if (!started && output.includes('Uvicorn running')) {
         started = true
         fastApiStatus = 'running'
         broadcastDsaStatus()
+        broadcastBackendProgress('服务已就绪', 'ready')
         resolve({ success: true, status: 'running' })
       }
     })
 
     fastApiProcess.stderr.on('data', (data) => {
-      const output = data.toString()
+      const output = data.toString('utf-8')
       console.log('[FastAPI stderr]', output.trim())
+
+      // 解析 stderr 中的进度信息并广播到状态栏
+      if (output.includes('Creating virtual environment')) {
+        broadcastBackendProgress('正在创建 Python 虚拟环境...', 'env')
+      } else if (output.includes('Installed') && output.includes('packages')) {
+        const match = output.match(/Installed (\d+) packages/)
+        if (match) {
+          broadcastBackendProgress(`已安装 ${match[1]} 个依赖包`, 'install')
+        }
+      } else if (output.includes('Downloading')) {
+        const match = output.match(/Downloading (\S+)/)
+        if (match) {
+          broadcastBackendProgress(`正在下载: ${match[1]}`, 'download')
+        }
+      } else if (output.includes('Building')) {
+        const match = output.match(/Building (\S+)/)
+        if (match) {
+          broadcastBackendProgress(`正在构建: ${match[1]}`, 'build')
+        }
+      } else if (output.includes('Using') && output.includes('interpreter')) {
+        broadcastBackendProgress('正在配置 Python 解释器...', 'env')
+      } else if (output.includes('Resolved') || output.includes('Resolving')) {
+        broadcastBackendProgress('正在解析依赖...', 'resolve')
+      }
+
       // uvicorn 输出到 stderr 也是正常的
       if (!started && output.includes('Uvicorn running')) {
         started = true
         fastApiStatus = 'running'
         broadcastDsaStatus()
+        broadcastBackendProgress('服务已就绪', 'ready')
         resolve({ success: true, status: 'running' })
       }
     })
@@ -272,6 +305,7 @@ async function startFastApiServer() {
       fastApiProcess = null
       fastApiStatus = 'error'
       broadcastDsaStatus()
+      broadcastBackendProgress(`启动失败: ${err.message}`, 'error')
       if (!started) {
         resolve({ success: false, error: err.message })
       }
@@ -282,6 +316,7 @@ async function startFastApiServer() {
       fastApiProcess = null
       fastApiStatus = 'stopped'
       broadcastDsaStatus()
+      broadcastBackendProgress('后端服务已停止', 'stopped')
       if (!started) {
         resolve({ success: false, error: `进程退出 code=${code}` })
       }
@@ -913,7 +948,7 @@ function updateWebViewBounds(window, webView) {
     x: ACTIVITY_BAR_WIDTH + leftPanelWidth,
     y: topOffset,
     width: mainwin_content_width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth,
-    height: mainwin_content_height - topOffset
+    height: mainwin_content_height - topOffset - STATUS_BAR_HEIGHT
   })
 }
 
