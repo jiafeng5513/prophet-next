@@ -563,12 +563,13 @@ function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
 }
 
 // 模式管理
-let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'settings'
+let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'portfolio' | 'settings'
 const modeState = {
   trading: { viewIds: new Set(), activeViewId: null },
   developing: { viewIds: new Set(), activeViewId: null },
   news: { viewId: null },
   market_analyze: { viewId: null },
+  portfolio: { viewId: null },
   settings: { viewId: null }
 }
 
@@ -746,7 +747,8 @@ function createView(type, options = {}) {
     python: 'python.html',
     settings: 'settings.html',
     placeholder: 'placeholder.html',
-    'stock-analysis': 'stock-analysis.html'
+    'stock-analysis': 'stock-analysis.html',
+    portfolio: 'portfolio.html'
   }
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
@@ -841,6 +843,12 @@ function switchMode(newMode) {
     const state = modeState.market_analyze
     if (!state.viewId) {
       state.viewId = createView('stock-analysis')
+    }
+    newActiveViewId = state.viewId
+  } else if (newMode === 'portfolio') {
+    const state = modeState.portfolio
+    if (!state.viewId) {
+      state.viewId = createView('portfolio')
     }
     newActiveViewId = state.viewId
   } else if (newMode === 'settings') {

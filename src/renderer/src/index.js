@@ -4,6 +4,7 @@ const sidebarTradingBtn = document.getElementById('sidebar-trading-btn')
 const sidebarDevelopingBtn = document.getElementById('sidebar-developing-btn')
 const sidebarNewsBtn = document.getElementById('sidebar-news-btn')
 const sidebarMarketBtn = document.getElementById('sidebar-market-btn')
+const sidebarPortfolioBtn = document.getElementById('sidebar-portfolio-btn')
 const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
@@ -133,6 +134,10 @@ sidebarNewsBtn.addEventListener('click', () => {
 
 sidebarMarketBtn.addEventListener('click', () => {
   window.electronAPI.switchMode('market_analyze')
+})
+
+sidebarPortfolioBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('portfolio')
 })
 
 sidebarSettingsBtn.addEventListener('click', () => {
@@ -1130,6 +1135,9 @@ function updateSidebarActiveState(mode) {
     case 'market_analyze':
       sidebarMarketBtn.classList.add('active')
       break
+    case 'portfolio':
+      sidebarPortfolioBtn.classList.add('active')
+      break
     case 'settings':
       sidebarSettingsBtn.classList.add('active')
       break
@@ -1190,3 +1198,633 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 })
+
+// =====================
+// Agent 问股功能
+// =====================
+;(function initAgentChat() {
+  const agentMessages = document.getElementById('agent-messages')
+  const agentEmpty = document.getElementById('agent-empty')
+  const agentSendBtn = document.getElementById('agent-send-btn')
+  const agentSkillTrigger = document.getElementById('agent-skill-trigger')
+  const agentSkillLabel = document.getElementById('agent-skill-label')
+  const agentSkillDropdown = document.getElementById('agent-skill-dropdown')
+  const agentSessionsBtn = document.getElementById('agent-sessions-btn')
+  const agentSessionsPanel = document.getElementById('agent-sessions-panel')
+  const agentSessionsClose = document.getElementById('agent-sessions-close')
+  const agentSessionsList = document.getElementById('agent-sessions-list')
+  const agentNewChatBtn = document.getElementById('agent-new-chat-btn')
+  const agentServiceStatus = document.getElementById('agent-service-status')
+  const agentStatusLabel = document.getElementById('agent-status-label')
+  const agentQuickQuestions = document.getElementById('agent-quick-questions')
+
+  let dsaPort = 8000
+  let agentSessionId = null
+  let agentSkills = []
+  let selectedSkills = []
+  let agentIsStreaming = false
+  let agentAbortController = null
+  let agentChatMessages = [] // { role, content }
+  let agentConnected = false
+
+  function getAgentBaseUrl() {
+    return `http://127.0.0.1:${dsaPort}`
+  }
+
+  // 简易 Markdown 渲染
+  function renderMarkdown(text) {
+    if (!text) return ''
+    let html = text
+    // 代码块
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
+    // 行内代码
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+    // 标题
+    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // 加粗
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // 斜体
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // 链接
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    // 无序列表
+    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    // 有序列表
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // 表格
+    html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
+      const cells = content.split('|').map(c => c.trim())
+      if (cells.every(c => /^[-:]+$/.test(c))) return ''
+      const tag = 'td'
+      return '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>'
+    })
+    html = html.replace(/(<tr>.*<\/tr>\n?)+/g, '<table>$&</table>')
+    // 换行
+    html = html.replace(/\n\n/g, '</p><p>')
+    html = html.replace(/\n/g, '<br>')
+    html = '<p>' + html + '</p>'
+    html = html.replace(/<p><\/p>/g, '')
+    html = html.replace(/<p>(<h[1-4]>)/g, '$1')
+    html = html.replace(/(<\/h[1-4]>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<ul>)/g, '$1')
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<table>)/g, '$1')
+    html = html.replace(/(<\/table>)<\/p>/g, '$1')
+    html = html.replace(/<p>(<pre>)/g, '$1')
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1')
+    return html
+  }
+
+  // 检查服务状态
+  async function checkAgentService() {
+    try {
+      const resp = await fetch(`${getAgentBaseUrl()}/api/health`, {
+        signal: AbortSignal.timeout(3000)
+      })
+      if (resp.ok) {
+        agentConnected = true
+        agentServiceStatus.className = 'agent-service-status connected'
+        agentStatusLabel.textContent = 'DSA 已连接'
+        return true
+      }
+    } catch {
+      // ignore
+    }
+    agentConnected = false
+    agentServiceStatus.className = 'agent-service-status disconnected'
+    agentStatusLabel.textContent = 'DSA 未连接'
+    return false
+  }
+
+  // 获取技能列表
+  async function fetchSkills() {
+    try {
+      const resp = await fetch(`${getAgentBaseUrl()}/api/v1/agent/skills`, {
+        signal: AbortSignal.timeout(5000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        agentSkills = data.skills || []
+        renderSkills(data.default_skill_id)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function renderSkills(defaultSkillId) {
+    agentSkillDropdown.innerHTML = ''
+    if (agentSkills.length === 0) {
+      agentSkillTrigger.style.display = 'none'
+      return
+    }
+    agentSkillTrigger.style.display = 'inline-flex'
+
+    // 设置默认选中
+    if (defaultSkillId) {
+      selectedSkills = [defaultSkillId]
+      const defaultSkill = agentSkills.find(s => s.id === defaultSkillId)
+      if (defaultSkill) {
+        agentSkillLabel.textContent = defaultSkill.name
+      }
+    }
+
+    agentSkills.forEach(skill => {
+      const option = document.createElement('div')
+      option.className = 'agent-skill-option' + (selectedSkills.includes(skill.id) ? ' selected' : '')
+      option.dataset.skillId = skill.id
+      option.innerHTML = `
+        <div class="agent-skill-option-name">${escapeHtml(skill.name)}</div>
+        ${skill.description ? `<div class="agent-skill-option-desc">${escapeHtml(skill.description)}</div>` : ''}
+      `
+      option.addEventListener('click', () => {
+        selectSkill(skill)
+      })
+      agentSkillDropdown.appendChild(option)
+    })
+  }
+
+  function selectSkill(skill) {
+    // 切换选中
+    if (selectedSkills.includes(skill.id)) {
+      selectedSkills = []
+      agentSkillLabel.textContent = '选择技能'
+    } else {
+      selectedSkills = [skill.id]
+      agentSkillLabel.textContent = skill.name
+    }
+    // 更新选中态
+    agentSkillDropdown.querySelectorAll('.agent-skill-option').forEach(opt => {
+      opt.classList.toggle('selected', opt.dataset.skillId === (selectedSkills[0] || ''))
+    })
+    closeSkillDropdown()
+  }
+
+  function toggleSkillDropdown() {
+    const isOpen = agentSkillDropdown.classList.contains('visible')
+    if (isOpen) {
+      closeSkillDropdown()
+    } else {
+      agentSkillDropdown.classList.add('visible')
+      agentSkillTrigger.classList.add('open')
+    }
+  }
+
+  function closeSkillDropdown() {
+    agentSkillDropdown.classList.remove('visible')
+    agentSkillTrigger.classList.remove('open')
+  }
+
+  agentSkillTrigger.addEventListener('click', (e) => {
+    e.stopPropagation()
+    toggleSkillDropdown()
+  })
+
+  // 点击外部关闭下拉
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#agent-skill-select-wrapper')) {
+      closeSkillDropdown()
+    }
+  })
+
+  // 获取会话列表
+  async function fetchSessions() {
+    try {
+      const resp = await fetch(`${getAgentBaseUrl()}/api/v1/agent/chat/sessions?limit=30`, {
+        signal: AbortSignal.timeout(5000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        renderSessions(data.sessions || [])
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function renderSessions(sessions) {
+    agentSessionsList.innerHTML = ''
+    if (sessions.length === 0) {
+      agentSessionsList.innerHTML = '<div style="padding:12px;color:#666;font-size:12px;text-align:center;">暂无历史会话</div>'
+      return
+    }
+    sessions.forEach(s => {
+      const item = document.createElement('div')
+      item.className = 'agent-session-item' + (s.session_id === agentSessionId ? ' active' : '')
+      item.innerHTML = `
+        <div class="agent-session-title">${escapeHtml(s.title || '未命名会话')}</div>
+        <div class="agent-session-meta">
+          ${s.message_count || 0} 条消息
+          <button class="agent-session-delete" title="删除">✕</button>
+        </div>
+      `
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.agent-session-delete')) return
+        loadSession(s.session_id)
+      })
+      item.querySelector('.agent-session-delete').addEventListener('click', (e) => {
+        e.stopPropagation()
+        deleteSession(s.session_id)
+      })
+      agentSessionsList.appendChild(item)
+    })
+  }
+
+  async function loadSession(sessionId) {
+    try {
+      const resp = await fetch(`${getAgentBaseUrl()}/api/v1/agent/chat/sessions/${sessionId}`, {
+        signal: AbortSignal.timeout(10000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        agentSessionId = sessionId
+        agentChatMessages = (data.messages || []).map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+        renderAllMessages()
+        agentSessionsPanel.classList.remove('visible')
+        fetchSessions()
+      }
+    } catch (e) {
+      console.error('[Agent] 加载会话失败:', e)
+    }
+  }
+
+  async function deleteSession(sessionId) {
+    try {
+      await fetch(`${getAgentBaseUrl()}/api/v1/agent/chat/sessions/${sessionId}`, {
+        method: 'DELETE'
+      })
+      if (sessionId === agentSessionId) {
+        startNewChat()
+      }
+      fetchSessions()
+    } catch (e) {
+      console.error('[Agent] 删除会话失败:', e)
+    }
+  }
+
+  function startNewChat() {
+    agentSessionId = null
+    agentChatMessages = []
+    agentMessages.innerHTML = ''
+    agentMessages.appendChild(agentEmpty)
+    agentEmpty.style.display = 'flex'
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  // 渲染所有消息
+  function renderAllMessages() {
+    agentMessages.innerHTML = ''
+    if (agentChatMessages.length === 0) {
+      agentMessages.appendChild(agentEmpty)
+      agentEmpty.style.display = 'flex'
+      return
+    }
+    agentEmpty.style.display = 'none'
+    agentChatMessages.forEach(msg => {
+      appendMessageBubble(msg.role, msg.content)
+    })
+    scrollToBottom()
+  }
+
+  function appendMessageBubble(role, content) {
+    const div = document.createElement('div')
+    div.className = `agent-msg agent-msg-${role}`
+    const roleLabel = role === 'user' ? '你' : 'AI'
+    div.innerHTML = `
+      <div class="agent-msg-role">${roleLabel}</div>
+      <div class="agent-msg-bubble">${role === 'user' ? escapeHtml(content) : renderMarkdown(content)}</div>
+    `
+    agentMessages.appendChild(div)
+    return div
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(() => {
+      agentMessages.scrollTop = agentMessages.scrollHeight
+    })
+  }
+
+  // 创建进度区域
+  function createProgressArea() {
+    const area = document.createElement('div')
+    area.className = 'agent-progress'
+    area.id = 'agent-current-progress'
+    agentMessages.appendChild(area)
+    return area
+  }
+
+  function addProgressStep(area, event) {
+    const step = document.createElement('div')
+    step.className = 'agent-progress-step'
+    step.dataset.tool = event.tool || ''
+
+    const iconSpan = document.createElement('span')
+    iconSpan.className = 'agent-progress-icon'
+
+    if (event.type === 'thinking') {
+      iconSpan.classList.add('spinning')
+      iconSpan.textContent = '⚙'
+      step.innerHTML = ''
+      step.appendChild(iconSpan)
+      const name = document.createElement('span')
+      name.className = 'agent-progress-name'
+      name.textContent = event.message || '思考中...'
+      step.appendChild(name)
+    } else if (event.type === 'tool_start') {
+      iconSpan.classList.add('spinning')
+      iconSpan.textContent = '⚙'
+      step.innerHTML = ''
+      step.appendChild(iconSpan)
+      const name = document.createElement('span')
+      name.className = 'agent-progress-name'
+      name.textContent = event.display_name || event.tool || '执行工具...'
+      step.appendChild(name)
+    } else if (event.type === 'tool_done') {
+      // 更新之前的 tool_start 步骤
+      const existing = area.querySelector(`[data-tool="${event.tool}"]`)
+      if (existing) {
+        const icon = existing.querySelector('.agent-progress-icon')
+        icon.classList.remove('spinning')
+        if (event.success !== false) {
+          existing.classList.add('done')
+          icon.textContent = '✓'
+        } else {
+          existing.classList.add('error')
+          icon.textContent = '✗'
+        }
+        if (event.duration) {
+          const dur = document.createElement('span')
+          dur.className = 'agent-progress-duration'
+          dur.textContent = `${event.duration.toFixed(1)}s`
+          existing.appendChild(dur)
+        }
+      }
+      return
+    } else if (event.type === 'generating') {
+      iconSpan.classList.add('spinning')
+      iconSpan.textContent = '✎'
+      step.innerHTML = ''
+      step.appendChild(iconSpan)
+      const name = document.createElement('span')
+      name.className = 'agent-progress-name'
+      name.textContent = event.message || '生成报告...'
+      step.appendChild(name)
+    }
+
+    area.appendChild(step)
+    scrollToBottom()
+  }
+
+  // 发送消息（SSE 流式）
+  async function sendAgentMessage(message, skills) {
+    if (agentIsStreaming) return
+    if (!agentConnected) {
+      alert('DSA 服务未连接，请先在设置中启动 DSA 服务')
+      return
+    }
+
+    const trimmed = message.trim()
+    if (!trimmed) return
+
+    agentIsStreaming = true
+    agentInput.value = ''
+    agentInput.style.height = 'auto'
+    updateSendButton()
+
+    // 隐藏欢迎页
+    agentEmpty.style.display = 'none'
+
+    // 添加用户消息
+    agentChatMessages.push({ role: 'user', content: trimmed })
+    appendMessageBubble('user', trimmed)
+    scrollToBottom()
+
+    // 创建进度区域
+    const progressArea = createProgressArea()
+
+    // 准备请求
+    const payload = {
+      message: trimmed,
+      session_id: agentSessionId || undefined,
+      skills: skills && skills.length > 0 ? skills : undefined
+    }
+
+    agentAbortController = new AbortController()
+
+    try {
+      const resp = await fetch(`${getAgentBaseUrl()}/api/v1/agent/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: agentAbortController.signal
+      })
+
+      if (!resp.ok) {
+        let errMsg = `请求失败 (${resp.status})`
+        try {
+          const errData = await resp.json()
+          errMsg = errData.detail || errData.message || errMsg
+        } catch {}
+        throw new Error(errMsg)
+      }
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+
+          try {
+            const event = JSON.parse(jsonStr)
+            handleStreamEvent(event, progressArea)
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // 用户取消
+        const cancelDiv = appendMessageBubble('assistant', '*分析已取消*')
+        cancelDiv.querySelector('.agent-msg-bubble').style.fontStyle = 'italic'
+        cancelDiv.querySelector('.agent-msg-bubble').style.color = '#888'
+      } else {
+        appendMessageBubble('assistant', `⚠️ 错误: ${err.message}`)
+      }
+    } finally {
+      agentIsStreaming = false
+      agentAbortController = null
+      updateSendButton()
+      // 清除未完成的进度区域中的动画
+      progressArea.querySelectorAll('.spinning').forEach(el => el.classList.remove('spinning'))
+      scrollToBottom()
+    }
+  }
+
+  function handleStreamEvent(event, progressArea) {
+    switch (event.type) {
+      case 'thinking':
+      case 'tool_start':
+      case 'tool_done':
+      case 'generating':
+        addProgressStep(progressArea, event)
+        break
+      case 'done':
+        // 分析完成
+        if (event.session_id) {
+          agentSessionId = event.session_id
+        }
+        if (event.content) {
+          agentChatMessages.push({ role: 'assistant', content: event.content })
+          appendMessageBubble('assistant', event.content)
+        }
+        // 清除进度区的 spinning
+        progressArea.querySelectorAll('.spinning').forEach(el => el.classList.remove('spinning'))
+        scrollToBottom()
+        fetchSessions()
+        break
+      case 'error':
+        appendMessageBubble('assistant', `⚠️ ${event.message || '分析出错'}`)
+        progressArea.querySelectorAll('.spinning').forEach(el => el.classList.remove('spinning'))
+        scrollToBottom()
+        break
+    }
+  }
+
+  function updateSendButton() {
+    if (agentIsStreaming) {
+      agentSendBtn.classList.add('stop')
+      agentSendBtn.title = '停止'
+      agentSendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>'
+    } else {
+      agentSendBtn.classList.remove('stop')
+      agentSendBtn.title = '发送'
+      agentSendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5v-5l8-1.5-8-1.5z"/></svg>'
+    }
+  }
+
+  // 事件绑定
+  agentSendBtn.addEventListener('click', () => {
+    if (agentIsStreaming) {
+      // 停止
+      if (agentAbortController) agentAbortController.abort()
+      return
+    }
+    sendAgentMessage(agentInput.value, selectedSkills)
+  })
+
+  agentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!agentIsStreaming) {
+        sendAgentMessage(agentInput.value, selectedSkills)
+      }
+    }
+  })
+
+  // 快速问题
+  agentQuickQuestions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.agent-quick-btn')
+    if (!btn) return
+    const msg = btn.dataset.msg
+    const skill = btn.dataset.skill
+    const skills = skill ? [skill] : selectedSkills
+    // 同时选中对应 skill
+    if (skill) {
+      const matchSkill = agentSkills.find(s => s.id === skill)
+      if (matchSkill) selectSkill(matchSkill)
+      selectedSkills = [skill]
+    }
+    sendAgentMessage(msg, skills)
+  })
+
+  // 会话面板
+  agentSessionsBtn.addEventListener('click', () => {
+    agentSessionsPanel.classList.toggle('visible')
+    if (agentSessionsPanel.classList.contains('visible')) {
+      fetchSessions()
+    }
+  })
+
+  agentSessionsClose.addEventListener('click', () => {
+    agentSessionsPanel.classList.remove('visible')
+  })
+
+  agentNewChatBtn.addEventListener('click', () => {
+    startNewChat()
+    agentSessionsPanel.classList.remove('visible')
+  })
+
+  // 初始化
+  async function initAgent() {
+    // 尝试从 Electron 获取 DSA 配置
+    try {
+      if (window.electronAPI && window.electronAPI.getDsaConfig) {
+        const config = await window.electronAPI.getDsaConfig()
+        if (config && config.port) {
+          dsaPort = config.port
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 检查健康状态
+    const connected = await checkAgentService()
+    if (connected) {
+      fetchSkills()
+      fetchSessions()
+    }
+
+    // 监听 DSA 状态变化
+    if (window.electronAPI && window.electronAPI.onDsaStatusChanged) {
+      window.electronAPI.onDsaStatusChanged((data) => {
+        if (data.status === 'running') {
+          if (data.port) dsaPort = data.port
+          checkAgentService().then(ok => {
+            if (ok) {
+              fetchSkills()
+              fetchSessions()
+            }
+          })
+        } else {
+          agentConnected = false
+          agentServiceStatus.className = 'agent-service-status disconnected'
+          agentStatusLabel.textContent = 'DSA 未连接'
+        }
+      })
+    }
+  }
+
+  // 定期检查服务状态
+  setInterval(() => {
+    if (!agentIsStreaming) {
+      checkAgentService()
+    }
+  }, 30000)
+
+  initAgent()
+})()
