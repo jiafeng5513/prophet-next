@@ -479,6 +479,22 @@ window.electronAPI = {
     Object.keys(tabManager.listeners).forEach((key) => {
       tabManager.listeners[key] = []
     })
+  },
+
+  // DSA 集成
+  getDsaConfig: () => Promise.resolve({ port: 8000 }),
+  setDsaConfig: (config) => {
+    console.log('[browser-mock] setDsaConfig:', config)
+    return Promise.resolve({ success: true })
+  },
+  browseDsaPath: () => Promise.resolve(null),
+  browsePythonPath: () => Promise.resolve(null),
+  startDsaServer: () => Promise.resolve({ success: false, error: '浏览器模式不支持启动服务' }),
+  stopDsaServer: () => Promise.resolve({ success: true }),
+  getDsaStatus: () => Promise.resolve({ status: 'stopped', port: 8000 }),
+  checkDsaHealth: () => Promise.resolve({ healthy: false, status: 'stopped', port: 8000 }),
+  onDsaStatusChanged: (callback) => {
+    console.log('[browser-mock] onDsaStatusChanged registered')
   }
 }
 

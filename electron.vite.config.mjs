@@ -34,7 +34,8 @@ export default defineConfig({
           python: resolve(__dirname, 'src/renderer/python.html'),
           settings: resolve(__dirname, 'src/renderer/settings.html'),
           placeholder: resolve(__dirname, 'src/renderer/placeholder.html'),
-          stockAnalysis: resolve(__dirname, 'src/renderer/stock-analysis.html')
+          stockAnalysis: resolve(__dirname, 'src/renderer/stock-analysis.html'),
+          portfolio: resolve(__dirname, 'src/renderer/portfolio.html')
         }
       }
     },

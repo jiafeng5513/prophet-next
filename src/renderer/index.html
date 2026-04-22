@@ -7,7 +7,7 @@
              script-src 'self';
              style-src 'self' 'unsafe-inline';
              img-src 'self' data: https:;
-             connect-src 'self' https:;
+             connect-src 'self' https: http://127.0.0.1:*;
              font-src 'self' https:;
              object-src 'none';
              base-uri 'self';
@@ -507,6 +507,7 @@
       height: 30px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       padding: 0 12px;
       border-bottom: 1px solid #2d2d2d;
       flex-shrink: 0;
@@ -620,6 +621,472 @@
     .agent-send-btn:hover {
       background: rgba(255, 255, 255, 0.1);
       color: #cccccc;
+    }
+
+    .agent-send-btn.stop {
+      color: #f48771;
+    }
+
+    .agent-send-btn.stop:hover {
+      background: rgba(244, 135, 113, 0.15);
+    }
+
+    /* Agent 头部操作按钮 */
+    .agent-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .agent-header-btn {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #999;
+      font-size: 13px;
+    }
+
+    .agent-header-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #ccc;
+    }
+
+    /* 技能选择下拉区 */
+    .agent-toolbar {
+      display: flex;
+      align-items: center;
+      padding: 4px 12px;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .agent-skill-select-wrapper {
+      position: relative;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
+    .agent-skill-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: #999;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+      transition: all 0.15s;
+    }
+
+    .agent-skill-trigger:hover {
+      background: #2d2d2d;
+      border-color: #3d3d3d;
+      color: #ccc;
+    }
+
+    .agent-skill-trigger .skill-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .agent-skill-trigger .skill-arrow {
+      font-size: 8px;
+      flex-shrink: 0;
+      transition: transform 0.15s;
+    }
+
+    .agent-skill-trigger.open .skill-arrow {
+      transform: rotate(180deg);
+    }
+
+    .agent-skill-dropdown {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 0;
+      min-width: 200px;
+      max-width: 280px;
+      max-height: 240px;
+      overflow-y: auto;
+      background: #252526;
+      border: 1px solid #3d3d3d;
+      border-radius: 6px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+      z-index: 50;
+      padding: 4px;
+      display: none;
+    }
+
+    .agent-skill-dropdown.visible {
+      display: block;
+    }
+
+    .agent-skill-dropdown::-webkit-scrollbar { width: 4px; }
+    .agent-skill-dropdown::-webkit-scrollbar-thumb { background: #424242; border-radius: 2px; }
+
+    .agent-skill-option {
+      display: flex;
+      flex-direction: column;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .agent-skill-option:hover {
+      background: #2d2d2d;
+    }
+
+    .agent-skill-option.selected {
+      background: #094771;
+    }
+
+    .agent-skill-option-name {
+      font-size: 12px;
+      color: #ccc;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .agent-skill-option.selected .agent-skill-option-name::before {
+      content: '✓';
+      font-size: 10px;
+      color: #89d185;
+    }
+
+    .agent-skill-option-desc {
+      font-size: 10px;
+      color: #666;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 会话侧边栏 */
+    .agent-sessions-panel {
+      position: absolute;
+      left: 0;
+      top: 30px;
+      bottom: 0;
+      width: 220px;
+      background: #252526;
+      border-right: 1px solid #2d2d2d;
+      display: flex;
+      flex-direction: column;
+      z-index: 30;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+    }
+
+    .agent-sessions-panel.visible {
+      transform: translateX(0);
+    }
+
+    .agent-sessions-header {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      border-bottom: 1px solid #2d2d2d;
+      flex-shrink: 0;
+    }
+
+    .agent-sessions-header span {
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .agent-sessions-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+
+    .agent-sessions-list::-webkit-scrollbar { width: 4px; }
+    .agent-sessions-list::-webkit-scrollbar-thumb { background: #424242; border-radius: 2px; }
+
+    .agent-session-item {
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+
+    .agent-session-item:hover {
+      background: #2d2d2d;
+    }
+
+    .agent-session-item.active {
+      background: #094771;
+    }
+
+    .agent-session-title {
+      font-size: 12px;
+      color: #ccc;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-session-meta {
+      font-size: 10px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    .agent-session-delete {
+      float: right;
+      visibility: hidden;
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 2px;
+    }
+
+    .agent-session-item:hover .agent-session-delete {
+      visibility: visible;
+    }
+
+    .agent-session-delete:hover {
+      color: #f48771;
+    }
+
+    /* 聊天消息 */
+    .agent-msg {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .agent-msg-user {
+      align-items: flex-end;
+    }
+
+    .agent-msg-assistant {
+      align-items: flex-start;
+    }
+
+    .agent-msg-role {
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 2px;
+      padding: 0 4px;
+    }
+
+    .agent-msg-bubble {
+      max-width: 95%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .agent-msg-user .agent-msg-bubble {
+      background: #0e639c;
+      color: #fff;
+      border-bottom-right-radius: 2px;
+    }
+
+    .agent-msg-assistant .agent-msg-bubble {
+      background: #2d2d2d;
+      color: #ddd;
+      border-bottom-left-radius: 2px;
+    }
+
+    /* Markdown 渲染 */
+    .agent-msg-bubble h1,
+    .agent-msg-bubble h2,
+    .agent-msg-bubble h3,
+    .agent-msg-bubble h4 {
+      margin: 8px 0 4px;
+      color: #e0e0e0;
+    }
+
+    .agent-msg-bubble h1 { font-size: 16px; }
+    .agent-msg-bubble h2 { font-size: 14px; }
+    .agent-msg-bubble h3 { font-size: 13px; }
+
+    .agent-msg-bubble p {
+      margin: 4px 0;
+    }
+
+    .agent-msg-bubble ul,
+    .agent-msg-bubble ol {
+      padding-left: 20px;
+      margin: 4px 0;
+    }
+
+    .agent-msg-bubble code {
+      background: rgba(0,0,0,0.3);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .agent-msg-bubble pre {
+      background: rgba(0,0,0,0.3);
+      padding: 8px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 4px 0;
+    }
+
+    .agent-msg-bubble pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .agent-msg-bubble table {
+      border-collapse: collapse;
+      margin: 6px 0;
+      width: 100%;
+      font-size: 12px;
+    }
+
+    .agent-msg-bubble th,
+    .agent-msg-bubble td {
+      border: 1px solid #444;
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .agent-msg-bubble th {
+      background: rgba(0,0,0,0.3);
+    }
+
+    .agent-msg-bubble strong {
+      color: #fff;
+    }
+
+    .agent-msg-bubble a {
+      color: #3794ff;
+    }
+
+    /* 进度步骤 */
+    .agent-progress {
+      margin-bottom: 12px;
+    }
+
+    .agent-progress-step {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #888;
+    }
+
+    .agent-progress-icon {
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .agent-progress-icon.spinning {
+      animation: agent-spin 1s linear infinite;
+    }
+
+    @keyframes agent-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .agent-progress-step.done .agent-progress-icon {
+      color: #89d185;
+    }
+
+    .agent-progress-step.error .agent-progress-icon {
+      color: #f48771;
+    }
+
+    .agent-progress-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-progress-duration {
+      color: #666;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    /* 快速问题 */
+    .agent-quick-questions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 16px;
+      width: 100%;
+      padding: 0 8px;
+    }
+
+    .agent-quick-btn {
+      padding: 6px 10px;
+      background: #2d2d2d;
+      border: 1px solid #3d3d3d;
+      border-radius: 6px;
+      color: #aaa;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+
+    .agent-quick-btn:hover {
+      background: #3d3d3d;
+      color: #ccc;
+      border-color: #555;
+    }
+
+    /* 服务状态 */
+    .agent-service-status {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      font-size: 10px;
+      color: #666;
+      border-top: 1px solid #2d2d2d;
+      flex-shrink: 0;
+    }
+
+    .agent-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #666;
+    }
+
+    .agent-service-status.connected .agent-status-dot {
+      background: #89d185;
+    }
+
+    .agent-service-status.disconnected .agent-status-dot {
+      background: #f48771;
     }
 
     /* ===================== */
@@ -868,6 +1335,9 @@
           <div class="activity-bar-item" id="sidebar-market-btn" title="市场分析">
             <img src="/market_analyze_mode.svg" alt="市场分析" width="24" height="24">
           </div>
+          <div class="activity-bar-item" id="sidebar-portfolio-btn" title="持仓管理">
+            <img src="/portfolio_mode.svg" alt="持仓" width="24" height="24">
+          </div>
         </div>
         <div class="activity-bar-bottom">
           <div class="activity-bar-item" id="sidebar-settings-btn" title="设置">
@@ -899,23 +1369,57 @@
       <div class="agent-panel" id="agent-panel">
         <div class="agent-resize-handle" id="agent-resize-handle"></div>
         <div class="agent-panel-header">
-          <span>Agent</span>
+          <span>聊天</span>
+          <div class="agent-header-actions">
+            <button class="agent-header-btn" id="agent-sessions-btn" title="历史会话">☰</button>
+            <button class="agent-header-btn" id="agent-new-chat-btn" title="新对话">+</button>
+          </div>
+        </div>
+        <!-- 会话历史侧边栏 -->
+        <div class="agent-sessions-panel" id="agent-sessions-panel">
+          <div class="agent-sessions-header">
+            <span>历史会话</span>
+            <button class="agent-header-btn" id="agent-sessions-close" title="关闭">✕</button>
+          </div>
+          <div class="agent-sessions-list" id="agent-sessions-list"></div>
         </div>
         <div class="agent-panel-body">
           <div class="agent-messages" id="agent-messages">
-            <div class="agent-empty">
+            <div class="agent-empty" id="agent-empty">
               <img src="/chat.svg" alt="" width="40" height="40">
-              <div>开始与 Agent 对话</div>
+              <div>向 AI 询问个股分析</div>
+              <div style="font-size:11px;color:#555;margin-top:4px;">获取基于技能视角的交易建议与实时决策报告</div>
+              <div class="agent-quick-questions" id="agent-quick-questions">
+                <button class="agent-quick-btn" data-msg="用缠论分析茅台" data-skill="chan_theory">🔮 用缠论分析茅台</button>
+                <button class="agent-quick-btn" data-msg="波浪理论看宁德时代" data-skill="wave_theory">🌊 波浪理论看宁德时代</button>
+                <button class="agent-quick-btn" data-msg="分析比亚迪趋势" data-skill="bull_trend">📈 分析比亚迪趋势</button>
+                <button class="agent-quick-btn" data-msg="分析贵州茅台最新舆情" data-skill="">📰 分析贵州茅台最新舆情</button>
+              </div>
             </div>
           </div>
           <div class="agent-input-area">
             <div class="agent-input-wrapper">
-              <textarea class="agent-input" id="agent-input" rows="1" placeholder="输入消息..."></textarea>
+              <textarea class="agent-input" id="agent-input" rows="1" placeholder="输入股票代码或问题..."></textarea>
               <button class="agent-send-btn" id="agent-send-btn" title="发送">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5v-5l8-1.5-8-1.5z"/></svg>
               </button>
             </div>
+            <div class="agent-toolbar">
+              <span style="font-size:11px;color:#666;">Skills</span>
+              <div class="agent-skill-select-wrapper" id="agent-skill-select-wrapper">
+                <button class="agent-skill-trigger" id="agent-skill-trigger">
+                  <span class="skill-label" id="agent-skill-label">选择技能</span>
+                  <span class="skill-arrow">▾</span>
+                </button>
+                <div class="agent-skill-dropdown" id="agent-skill-dropdown"></div>
+              </div>
+            </div>
           </div>
+        </div>
+        <!-- 服务状态栏 -->
+        <div class="agent-service-status" id="agent-service-status">
+          <span class="agent-status-dot"></span>
+          <span id="agent-status-label">检查中...</span>
         </div>
       </div>
     </div>
