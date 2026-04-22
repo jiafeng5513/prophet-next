@@ -9,7 +9,7 @@
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "start": "electron-vite preview",
-    "dev": "chcp 65001 >nul && electron-vite dev",
+    "dev": "electron-vite dev",
     "dev:browser": "vite --config vite.browser.config.mjs",
     "build": "electron-vite build",
     "postinstall": "electron-builder install-app-deps",

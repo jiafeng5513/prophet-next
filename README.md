@@ -174,4 +174,9 @@ https://github.com/tradingview/charting-library-examples/tree/master/react-nativ
 https://github.com/ZhuLinsen/daily_stock_analysis这个项目中有两个功能我比较感兴趣：首页的股票分析功能，和第二个页面的问股功能，并且想将其集成到当前项目中，请帮我分析可行的方案。daily_stock_analysis的代码已经同步到D:\ProjectsSoftware\Treading\daily_stock_analysis
 
 
-终端输
+1. mac熄屏后，程序会默认回到首页，如果此时正在执行分析，即使后台分析还在持续，UI上会显示分析失败
+2. 引入DSA中更多的设置项目
+3. 设置页重构
+4. 问股功能集成到agent侧窗
+5. 一键标记买卖点
+6. 利用uv自动管理python环境，启动启动后端
