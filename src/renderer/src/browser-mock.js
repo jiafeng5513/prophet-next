@@ -495,6 +495,9 @@ window.electronAPI = {
   checkDsaHealth: () => Promise.resolve({ healthy: false, status: 'stopped', port: 8000 }),
   onDsaStatusChanged: (callback) => {
     console.log('[browser-mock] onDsaStatusChanged registered')
+  },
+  onBackendProgress: (callback) => {
+    console.log('[browser-mock] onBackendProgress registered')
   }
 }
 

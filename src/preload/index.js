@@ -82,5 +82,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDsaStatus: () => ipcRenderer.invoke('get-dsa-status'),
   checkDsaHealth: () => ipcRenderer.invoke('check-dsa-health'),
   onDsaStatusChanged: (callback) =>
-    ipcRenderer.on('dsa-status-changed', (event, data) => callback(data))
+    ipcRenderer.on('dsa-status-changed', (event, data) => callback(data)),
+
+  // 后端进度信息（状态栏用）
+  onBackendProgress: (callback) =>
+    ipcRenderer.on('backend-progress', (event, data) => callback(data))
 })

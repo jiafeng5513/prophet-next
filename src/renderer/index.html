@@ -1301,6 +1301,155 @@
     .tree-item.dragging {
       opacity: 0.5;
     }
+
+    /* ===================== */
+    /* VSCode 风格底部状态栏 */
+    /* ===================== */
+    .status-bar {
+      height: 22px;
+      display: flex;
+      align-items: center;
+      background: #007acc;
+      color: #ffffff;
+      font-size: 12px;
+      padding: 0 8px;
+      flex-shrink: 0;
+      user-select: none;
+      z-index: 100;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    .status-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
+    .status-bar-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 6px;
+      height: 22px;
+      cursor: default;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.1s;
+    }
+
+    .status-bar-item:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .status-bar-item.clickable {
+      cursor: pointer;
+    }
+
+    .status-bar-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-bar-dot.running {
+      background: #89d185;
+    }
+
+    .status-bar-dot.starting {
+      background: #dcdcaa;
+      animation: status-pulse 1.2s ease-in-out infinite;
+    }
+
+    .status-bar-dot.stopped {
+      background: #f48771;
+    }
+
+    .status-bar-dot.error {
+      background: #f48771;
+    }
+
+    @keyframes status-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* 进度条 */
+    .status-bar-progress {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      padding: 0 6px;
+      height: 22px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .status-bar-progress.visible {
+      display: flex;
+    }
+
+    .status-bar-progress-bar {
+      width: 80px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .status-bar-progress-fill {
+      height: 100%;
+      background: #ffffff;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .status-bar-progress-fill.indeterminate {
+      width: 30%;
+      animation: status-progress-indeterminate 1.5s ease-in-out infinite;
+    }
+
+    @keyframes status-progress-indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+
+    .status-bar-progress-text {
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+
+    /* 旋转动画图标 */
+    .status-bar-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 1.5px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: status-spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes status-spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 
@@ -1423,6 +1572,27 @@
         <div class="agent-service-status" id="agent-service-status">
           <span class="agent-status-dot"></span>
           <span id="agent-status-label">检查中...</span>
+        </div>
+      </div>
+    </div>
+    <!-- VSCode 风格底部状态栏 -->
+    <div class="status-bar" id="status-bar">
+      <div class="status-bar-left">
+        <div class="status-bar-item" id="status-bar-backend" title="后端服务状态">
+          <span class="status-bar-dot stopped" id="status-bar-dot"></span>
+          <span id="status-bar-backend-label">后端: 未启动</span>
+        </div>
+        <div class="status-bar-progress" id="status-bar-progress">
+          <span class="status-bar-spinner"></span>
+          <div class="status-bar-progress-bar">
+            <div class="status-bar-progress-fill indeterminate" id="status-bar-progress-fill"></div>
+          </div>
+          <span class="status-bar-progress-text" id="status-bar-progress-text"></span>
+        </div>
+      </div>
+      <div class="status-bar-right">
+        <div class="status-bar-item" id="status-bar-port" title="服务端口">
+          <span id="status-bar-port-label"></span>
         </div>
       </div>
     </div>

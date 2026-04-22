@@ -1836,3 +1836,106 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
 
   initAgent()
 })()
+
+// =====================
+// 底部状态栏
+// =====================
+;(function initStatusBar() {
+  const statusBarDot = document.getElementById('status-bar-dot')
+  const statusBarBackendLabel = document.getElementById('status-bar-backend-label')
+  const statusBarProgress = document.getElementById('status-bar-progress')
+  const statusBarProgressFill = document.getElementById('status-bar-progress-fill')
+  const statusBarProgressText = document.getElementById('status-bar-progress-text')
+  const statusBarPortLabel = document.getElementById('status-bar-port-label')
+
+  if (!statusBarDot) return // 安全检查
+
+  let progressHideTimer = null
+
+  function updateBackendStatus(status, port) {
+    // 更新状态点样式
+    statusBarDot.className = 'status-bar-dot ' + status
+
+    switch (status) {
+      case 'running':
+        statusBarBackendLabel.textContent = '后端: 运行中'
+        hideProgress(3000) // 服务就绪后 3 秒隐藏进度
+        break
+      case 'starting':
+        statusBarBackendLabel.textContent = '后端: 启动中...'
+        break
+      case 'stopped':
+        statusBarBackendLabel.textContent = '后端: 已停止'
+        hideProgress(0)
+        break
+      case 'error':
+        statusBarBackendLabel.textContent = '后端: 错误'
+        hideProgress(0)
+        break
+      default:
+        statusBarBackendLabel.textContent = '后端: ' + status
+    }
+
+    // 更新端口显示
+    if (port && status === 'running') {
+      statusBarPortLabel.textContent = `端口: ${port}`
+    } else {
+      statusBarPortLabel.textContent = ''
+    }
+  }
+
+  function showProgress(message) {
+    if (progressHideTimer) {
+      clearTimeout(progressHideTimer)
+      progressHideTimer = null
+    }
+    statusBarProgress.classList.add('visible')
+    statusBarProgressText.textContent = message
+    // 使用不确定进度条
+    statusBarProgressFill.className = 'status-bar-progress-fill indeterminate'
+  }
+
+  function hideProgress(delay) {
+    if (delay > 0) {
+      if (progressHideTimer) clearTimeout(progressHideTimer)
+      progressHideTimer = setTimeout(() => {
+        statusBarProgress.classList.remove('visible')
+        statusBarProgressText.textContent = ''
+        progressHideTimer = null
+      }, delay)
+    } else {
+      statusBarProgress.classList.remove('visible')
+      statusBarProgressText.textContent = ''
+    }
+  }
+
+  // 监听 DSA 状态变化
+  if (window.electronAPI && window.electronAPI.onDsaStatusChanged) {
+    window.electronAPI.onDsaStatusChanged((data) => {
+      updateBackendStatus(data.status, data.port)
+    })
+  }
+
+  // 监听后端进度
+  if (window.electronAPI && window.electronAPI.onBackendProgress) {
+    window.electronAPI.onBackendProgress((data) => {
+      if (data.phase === 'ready' || data.phase === 'stopped') {
+        hideProgress(2000)
+      } else if (data.phase === 'error') {
+        showProgress(data.message)
+        hideProgress(5000)
+      } else {
+        showProgress(data.message)
+      }
+    })
+  }
+
+  // 初始状态检查
+  if (window.electronAPI && window.electronAPI.getDsaStatus) {
+    window.electronAPI.getDsaStatus().then((data) => {
+      if (data) {
+        updateBackendStatus(data.status, data.port)
+      }
+    })
+  }
+})()
