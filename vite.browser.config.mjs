@@ -30,7 +30,8 @@ export default defineConfig({
         python: resolve(__dirname, 'src/renderer/python.html'),
         settings: resolve(__dirname, 'src/renderer/settings.html'),
         placeholder: resolve(__dirname, 'src/renderer/placeholder.html'),
-        portfolio: resolve(__dirname, 'src/renderer/portfolio.html')
+        portfolio: resolve(__dirname, 'src/renderer/portfolio.html'),
+        backtest: resolve(__dirname, 'src/renderer/backtest.html')
       }
     }
   },

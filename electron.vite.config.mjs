@@ -35,7 +35,8 @@ export default defineConfig({
           settings: resolve(__dirname, 'src/renderer/settings.html'),
           placeholder: resolve(__dirname, 'src/renderer/placeholder.html'),
           stockAnalysis: resolve(__dirname, 'src/renderer/stock-analysis.html'),
-          portfolio: resolve(__dirname, 'src/renderer/portfolio.html')
+          portfolio: resolve(__dirname, 'src/renderer/portfolio.html'),
+          backtest: resolve(__dirname, 'src/renderer/backtest.html')
         }
       }
     },
