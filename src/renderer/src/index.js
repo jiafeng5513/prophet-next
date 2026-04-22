@@ -5,6 +5,7 @@ const sidebarDevelopingBtn = document.getElementById('sidebar-developing-btn')
 const sidebarNewsBtn = document.getElementById('sidebar-news-btn')
 const sidebarMarketBtn = document.getElementById('sidebar-market-btn')
 const sidebarPortfolioBtn = document.getElementById('sidebar-portfolio-btn')
+const sidebarBacktestBtn = document.getElementById('sidebar-backtest-btn')
 const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn')
 const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
@@ -138,6 +139,10 @@ sidebarMarketBtn.addEventListener('click', () => {
 
 sidebarPortfolioBtn.addEventListener('click', () => {
   window.electronAPI.switchMode('portfolio')
+})
+
+sidebarBacktestBtn.addEventListener('click', () => {
+  window.electronAPI.switchMode('backtest')
 })
 
 sidebarSettingsBtn.addEventListener('click', () => {
@@ -1137,6 +1142,9 @@ function updateSidebarActiveState(mode) {
       break
     case 'portfolio':
       sidebarPortfolioBtn.classList.add('active')
+      break
+    case 'backtest':
+      sidebarBacktestBtn.classList.add('active')
       break
     case 'settings':
       sidebarSettingsBtn.classList.add('active')
