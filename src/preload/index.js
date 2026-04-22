@@ -76,7 +76,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // DSA (daily_stock_analysis) 集成
   getDsaConfig: () => ipcRenderer.invoke('get-dsa-config'),
   setDsaConfig: (config) => ipcRenderer.invoke('set-dsa-config', config),
-  browseDsaPath: () => ipcRenderer.invoke('browse-dsa-path'),
   browsePythonPath: () => ipcRenderer.invoke('browse-python-path'),
   startDsaServer: () => ipcRenderer.invoke('start-dsa-server'),
   stopDsaServer: () => ipcRenderer.invoke('stop-dsa-server'),

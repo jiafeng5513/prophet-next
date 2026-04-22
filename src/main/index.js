@@ -20,9 +20,18 @@ import {
   renameSync,
   rmSync
 } from 'fs'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
+
+// 修复 Windows 控制台中文乱码：将代码页设置为 UTF-8 (65001)
+if (process.platform === 'win32') {
+  try {
+    execSync('chcp 65001', { stdio: 'ignore' })
+  } catch {
+    // ignore
+  }
+}
 
 // 全局的变量参数
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
@@ -95,12 +104,13 @@ function setDsaConfig(dsaConfig) {
   writeConfig(config)
 }
 
-function getDefaultDsaPath() {
-  // 开发模式下使用同级目录
+function getBackendPath() {
+  // 后端已内置到 backend/ 目录
   if (is.dev) {
-    return join(dirname(app.getAppPath()), 'daily_stock_analysis')
+    return join(app.getAppPath(), 'backend')
   }
-  return ''
+  // 打包后 backend/ 与 exe 同级
+  return join(dirname(app.getPath('exe')), 'backend')
 }
 
 // 生成 DSA 的 .env 文件
@@ -172,19 +182,18 @@ async function startFastApiServer() {
   }
 
   const dsaConfig = getDsaConfig()
-  const dsaPath = dsaConfig.dsaPath || getDefaultDsaPath()
-  const pythonPath = dsaConfig.pythonPath || 'python'
+  const backendDir = getBackendPath()
   fastApiPort = dsaConfig.port || 8000
 
-  if (!dsaPath || !existsSync(dsaPath)) {
-    const msg = `DSA 项目路径不存在: ${dsaPath}`
+  if (!existsSync(backendDir)) {
+    const msg = `后端目录不存在: ${backendDir}`
     console.error('[FastAPI]', msg)
     fastApiStatus = 'error'
     broadcastDsaStatus()
     return { success: false, error: msg }
   }
 
-  const serverPy = join(dsaPath, 'server.py')
+  const serverPy = join(backendDir, 'server.py')
   if (!existsSync(serverPy)) {
     const msg = `未找到 server.py: ${serverPy}`
     console.error('[FastAPI]', msg)
@@ -194,14 +203,21 @@ async function startFastApiServer() {
   }
 
   // 生成 .env 配置
-  writeDsaEnvFile(dsaPath)
+  writeDsaEnvFile(backendDir)
+
+  // 确保 data/ 目录指向用户数据目录（SQLite 等持久化数据）
+  const userDataDir = join(app.getPath('userData'), 'dsa-data')
+  if (!existsSync(userDataDir)) {
+    mkdirSync(userDataDir, { recursive: true })
+  }
 
   fastApiStatus = 'starting'
   broadcastDsaStatus()
 
   return new Promise((resolve) => {
+    // 使用 uv run 自动管理虚拟环境和依赖
     const args = [
-      '-m',
+      'run',
       'uvicorn',
       'server:app',
       '--host',
@@ -210,17 +226,19 @@ async function startFastApiServer() {
       String(fastApiPort)
     ]
 
-    console.log(`[FastAPI] 启动命令: ${pythonPath} ${args.join(' ')}`)
-    console.log(`[FastAPI] 工作目录: ${dsaPath}`)
+    console.log(`[FastAPI] 启动命令: uv ${args.join(' ')}`)
+    console.log(`[FastAPI] 工作目录: ${backendDir}`)
 
-    fastApiProcess = spawn(pythonPath, args, {
-      cwd: dsaPath,
+    fastApiProcess = spawn('uv', args, {
+      cwd: backendDir,
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
       env: {
         ...process.env,
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1',
-        PYTHONLEGACYWINDOWSSTDIO: '0'
+        PYTHONLEGACYWINDOWSSTDIO: '0',
+        DSA_DATA_DIR: userDataDir
       }
     })
 
@@ -1257,25 +1275,14 @@ ipcMain.on('resize-explorer-panel', (event, width) => {
 // DSA (daily_stock_analysis) IPC
 // =====================
 ipcMain.handle('get-dsa-config', () => {
-  return getDsaConfig()
+  const cfg = getDsaConfig()
+  cfg.backendPath = getBackendPath()
+  return cfg
 })
 
 ipcMain.handle('set-dsa-config', (event, dsaConfig) => {
   setDsaConfig(dsaConfig)
   return { success: true }
-})
-
-ipcMain.handle('browse-dsa-path', async () => {
-  const dsaConfig = getDsaConfig()
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: '选择 daily_stock_analysis 项目目录',
-    defaultPath: dsaConfig.dsaPath || getDefaultDsaPath(),
-    properties: ['openDirectory']
-  })
-  if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0]
-  }
-  return null
 })
 
 ipcMain.handle('browse-python-path', async () => {
@@ -1393,6 +1400,15 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
+
+  // 自动拉起后端服务
+  startFastApiServer().then((result) => {
+    if (result.success) {
+      console.log('[FastAPI] 后端服务已自动启动')
+    } else {
+      console.warn('[FastAPI] 后端服务自动启动失败:', result.error)
+    }
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

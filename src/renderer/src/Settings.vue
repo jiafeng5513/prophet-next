@@ -98,25 +98,14 @@
         <template v-if="activeCategory === 'dsa_service'">
           <div class="section-card">
             <div class="section-title">DSA 服务连接</div>
-            <div class="section-desc">配置 daily_stock_analysis 后端服务的路径与启动参数。</div>
+            <div class="section-desc">后端服务已内置在项目中，使用 uv 自动管理 Python 虚拟环境与依赖。</div>
 
             <div class="field-item">
-              <label>DSA 项目路径</label>
+              <label>后端路径（内置）</label>
               <div class="field-row">
-                <input type="text" :value="dsaLocal.dsaPath" readonly class="field-input flex-1" />
-                <button class="btn btn-browse" @click="browseDsa">浏览...</button>
+                <input type="text" :value="dsaLocal.backendPath" readonly class="field-input flex-1" />
               </div>
-              <div class="field-desc">daily_stock_analysis 项目的本地路径，包含 server.py</div>
-            </div>
-
-            <div class="field-item">
-              <label>Python 解释器路径</label>
-              <div class="field-row">
-                <input type="text" :value="dsaLocal.pythonPath" readonly class="field-input flex-1"
-                  placeholder="python（使用系统默认）" />
-                <button class="btn btn-browse" @click="browsePython">浏览...</button>
-              </div>
-              <div class="field-desc">用于运行 DSA 后端的 Python 解释器，留空则使用系统 PATH 中的 python</div>
+              <div class="field-desc">内置后端目录，由应用自动管理，无需手动修改</div>
             </div>
 
             <div class="field-item">
@@ -561,8 +550,7 @@ const localConfig = reactive({
 
 // DSA 本地连接配置
 const dsaLocal = reactive({
-  dsaPath: '',
-  pythonPath: '',
+  backendPath: '',
   port: 8000,
 })
 
@@ -790,40 +778,21 @@ async function onDataSourceChange() {
 async function loadDsaLocal() {
   if (!window.electronAPI?.getDsaConfig) return
   const cfg = await window.electronAPI.getDsaConfig()
-  dsaLocal.dsaPath = cfg.dsaPath || ''
-  dsaLocal.pythonPath = cfg.pythonPath || ''
+  dsaLocal.backendPath = cfg.backendPath || ''
   dsaLocal.port = cfg.port || 8000
 }
 
 async function saveDsaLocal() {
   if (!window.electronAPI?.setDsaConfig) return
   await window.electronAPI.setDsaConfig({
-    dsaPath: dsaLocal.dsaPath,
-    pythonPath: dsaLocal.pythonPath,
     port: dsaLocal.port,
   })
-}
-
-async function browseDsa() {
-  if (!window.electronAPI?.browseDsaPath) return
-  const p = await window.electronAPI.browseDsaPath()
-  if (p) { dsaLocal.dsaPath = p; await saveDsaLocal() }
-}
-
-async function browsePython() {
-  if (!window.electronAPI?.browsePythonPath) return
-  const p = await window.electronAPI.browsePythonPath()
-  if (p) { dsaLocal.pythonPath = p; await saveDsaLocal() }
 }
 
 // =============================
 // DSA 服务管理
 // =============================
 async function startServer() {
-  if (!dsaLocal.dsaPath) {
-    await showConfirm('提示', '请先设置 DSA 项目路径', '确定', '确定')
-    return
-  }
   await saveDsaLocal()
   dsaStatus.value = 'starting'
   if (window.electronAPI?.startDsaServer) {
