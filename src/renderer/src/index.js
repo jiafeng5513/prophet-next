@@ -1226,7 +1226,7 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
   const agentStatusLabel = document.getElementById('agent-status-label')
   const agentQuickQuestions = document.getElementById('agent-quick-questions')
 
-  let dsaPort = 8000
+  let dsaPort = 8100
   let agentSessionId = null
   let agentSkills = []
   let selectedSkills = []

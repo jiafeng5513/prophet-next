@@ -482,7 +482,7 @@ window.electronAPI = {
   },
 
   // DSA 集成
-  getDsaConfig: () => Promise.resolve({ port: 8000 }),
+  getDsaConfig: () => Promise.resolve({ port: 8100 }),
   setDsaConfig: (config) => {
     console.log('[browser-mock] setDsaConfig:', config)
     return Promise.resolve({ success: true })
@@ -491,8 +491,8 @@ window.electronAPI = {
   browsePythonPath: () => Promise.resolve(null),
   startDsaServer: () => Promise.resolve({ success: false, error: '浏览器模式不支持启动服务' }),
   stopDsaServer: () => Promise.resolve({ success: true }),
-  getDsaStatus: () => Promise.resolve({ status: 'stopped', port: 8000 }),
-  checkDsaHealth: () => Promise.resolve({ healthy: false, status: 'stopped', port: 8000 }),
+  getDsaStatus: () => Promise.resolve({ status: 'stopped', port: 8100 }),
+  checkDsaHealth: () => Promise.resolve({ healthy: false, status: 'stopped', port: 8100 }),
   onDsaStatusChanged: (callback) => {
     console.log('[browser-mock] onDsaStatusChanged registered')
   },

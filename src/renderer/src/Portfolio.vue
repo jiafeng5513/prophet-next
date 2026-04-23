@@ -629,16 +629,16 @@ const API_BASE = '/api/v1/portfolio'
 
 function getBaseUrl() {
   if (window.electronAPI) {
-    return window.electronAPI.getDsaConfig().then(cfg => `http://127.0.0.1:${cfg.port || 8000}`)
+    return window.electronAPI.getDsaConfig().then(cfg => `http://127.0.0.1:${cfg.port || 8100}`)
   }
-  return Promise.resolve('http://127.0.0.1:8000')
+  return Promise.resolve('http://127.0.0.1:8100')
 }
 
 export default {
   name: 'Portfolio',
   data() {
     return {
-      baseUrl: 'http://127.0.0.1:8000',
+      baseUrl: 'http://127.0.0.1:8100',
       // Tabs
       tabs: [
         { key: 'overview', label: '概览' },
@@ -717,9 +717,9 @@ export default {
   async mounted() {
     try {
       const cfg = window.electronAPI ? await window.electronAPI.getDsaConfig() : {}
-      this.baseUrl = `http://127.0.0.1:${cfg.port || 8000}`
+      this.baseUrl = `http://127.0.0.1:${cfg.port || 8100}`
     } catch {
-      this.baseUrl = 'http://127.0.0.1:8000'
+      this.baseUrl = 'http://127.0.0.1:8100'
     }
     await this.checkService()
     await this.loadAccounts()
