@@ -1169,7 +1169,7 @@ onUnmounted(() => {
 }
 
 .report-body h1 { font-size: 22px; border-bottom: 1px solid #333; padding-bottom: 8px; }
-.report-body h2 { font-size: 18px; }
+.report-body h2 { font-size: 18px; border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; }
 .report-body h3 { font-size: 15px; }
 
 .report-body p {
@@ -1185,8 +1185,17 @@ onUnmounted(() => {
   margin: 4px 0;
 }
 
+.report-body li::marker {
+  color: #666;
+}
+
 .report-body strong {
   color: #fff;
+}
+
+.report-body em {
+  color: #bbb;
+  font-style: italic;
 }
 
 .report-body code {
@@ -1203,29 +1212,40 @@ onUnmounted(() => {
   border-radius: 6px;
   overflow-x: auto;
   margin: 12px 0;
+  border: 1px solid #333;
 }
 
 .report-body pre code {
   background: none;
   padding: 0;
+  color: #d4d4d4;
 }
 
 .report-body table {
   width: 100%;
   border-collapse: collapse;
   margin: 12px 0;
+  font-size: 13px;
 }
 
-.report-body th, .report-body td {
-  padding: 8px 12px;
-  border: 1px solid #333;
-  text-align: left;
-}
-
-.report-body th {
+.report-body thead th {
   background: #2d2d2d;
   font-weight: 600;
   color: #e0e0e0;
+}
+
+.report-body th, .report-body td {
+  padding: 10px 14px;
+  border: 1px solid #3a3a3a;
+  text-align: left;
+}
+
+.report-body tbody tr:nth-child(even) {
+  background: #252526;
+}
+
+.report-body tbody tr:hover {
+  background: #2a2d2e;
 }
 
 .report-body blockquote {
@@ -1234,6 +1254,10 @@ onUnmounted(() => {
   padding: 8px 16px;
   background: #252526;
   color: #bbb;
+}
+
+.report-body blockquote p {
+  margin: 4px 0;
 }
 
 .report-body a {
@@ -1249,6 +1273,12 @@ onUnmounted(() => {
   border: none;
   border-top: 1px solid #333;
   margin: 16px 0;
+}
+
+.report-body img {
+  max-width: 100%;
+  border-radius: 4px;
+  margin: 8px 0;
 }
 
 /* 错误面板 */

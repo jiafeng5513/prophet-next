@@ -1,3 +1,5 @@
+import MarkdownIt from 'markdown-it'
+
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
 const sidebarTradingBtn = document.getElementById('sidebar-trading-btn')
@@ -1239,52 +1241,17 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
     return `http://127.0.0.1:${dsaPort}`
   }
 
-  // 简易 Markdown 渲染
+  // Markdown 渲染（使用 markdown-it）
+  const agentMd = MarkdownIt({
+    html: false,
+    linkify: true,
+    typographer: true,
+    breaks: true
+  })
+
   function renderMarkdown(text) {
     if (!text) return ''
-    let html = text
-    // 代码块
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
-    // 行内代码
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-    // 标题
-    html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // 加粗
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // 斜体
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // 链接
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-    // 无序列表
-    html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>')
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    // 有序列表
-    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    // 表格
-    html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
-      const cells = content.split('|').map(c => c.trim())
-      if (cells.every(c => /^[-:]+$/.test(c))) return ''
-      const tag = 'td'
-      return '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>'
-    })
-    html = html.replace(/(<tr>.*<\/tr>\n?)+/g, '<table>$&</table>')
-    // 换行
-    html = html.replace(/\n\n/g, '</p><p>')
-    html = html.replace(/\n/g, '<br>')
-    html = '<p>' + html + '</p>'
-    html = html.replace(/<p><\/p>/g, '')
-    html = html.replace(/<p>(<h[1-4]>)/g, '$1')
-    html = html.replace(/(<\/h[1-4]>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<ul>)/g, '$1')
-    html = html.replace(/(<\/ul>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<table>)/g, '$1')
-    html = html.replace(/(<\/table>)<\/p>/g, '$1')
-    html = html.replace(/<p>(<pre>)/g, '$1')
-    html = html.replace(/(<\/pre>)<\/p>/g, '$1')
-    return html
+    return agentMd.render(text)
   }
 
   // 检查服务状态
