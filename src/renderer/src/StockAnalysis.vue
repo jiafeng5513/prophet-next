@@ -715,6 +715,7 @@ onUnmounted(() => {
   background: #1e1e1e;
   color: #cccccc;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border-left: 1px solid #333;
 }
 
 /* 历史记录面板 */
@@ -1124,8 +1125,6 @@ onUnmounted(() => {
   padding: 24px 32px;
   max-width: 900px;
   margin: 0 auto;
-  overflow-y: auto;
-  height: 100%;
   box-sizing: border-box;
 }
 
