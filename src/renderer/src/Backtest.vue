@@ -416,7 +416,7 @@ export default {
   name: 'Backtest',
   data() {
     return {
-      baseUrl: 'http://127.0.0.1:8000',
+      baseUrl: 'http://127.0.0.1:8100',
       tabs: [
         { key: 'run', label: '运行回测' },
         { key: 'results', label: '回测结果' },
@@ -457,9 +457,9 @@ export default {
   async mounted() {
     try {
       const cfg = window.electronAPI ? await window.electronAPI.getDsaConfig() : {}
-      this.baseUrl = `http://127.0.0.1:${cfg.port || 8000}`
+      this.baseUrl = `http://127.0.0.1:${cfg.port || 8100}`
     } catch {
-      this.baseUrl = 'http://127.0.0.1:8000'
+      this.baseUrl = 'http://127.0.0.1:8100'
     }
     await this.checkService()
   },

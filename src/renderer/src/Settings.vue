@@ -112,7 +112,7 @@
               <label>服务端口</label>
               <input type="number" v-model.number="dsaLocal.port" min="1024" max="65535"
                 @change="saveDsaLocal" class="field-input" />
-              <div class="field-desc">FastAPI 服务监听端口，默认 8000</div>
+              <div class="field-desc">FastAPI 服务监听端口，默认 8100</div>
             </div>
           </div>
 
@@ -551,7 +551,7 @@ const localConfig = reactive({
 // DSA 本地连接配置
 const dsaLocal = reactive({
   backendPath: '',
-  port: 8000,
+  port: 8100,
 })
 
 // DSA 后端配置
@@ -588,7 +588,7 @@ const confirmDialog = reactive({
 // =============================
 // 计算属性
 // =============================
-const baseUrl = computed(() => `http://127.0.0.1:${dsaLocal.port || 8000}`)
+const baseUrl = computed(() => `http://127.0.0.1:${dsaLocal.port || 8100}`)
 
 const statusInfo = computed(() => {
   const map = {
@@ -779,7 +779,7 @@ async function loadDsaLocal() {
   if (!window.electronAPI?.getDsaConfig) return
   const cfg = await window.electronAPI.getDsaConfig()
   dsaLocal.backendPath = cfg.backendPath || ''
-  dsaLocal.port = cfg.port || 8000
+  dsaLocal.port = cfg.port || 8100
 }
 
 async function saveDsaLocal() {

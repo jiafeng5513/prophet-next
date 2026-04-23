@@ -166,7 +166,7 @@ const taskList = ref([])
 const serviceStatus = ref('unknown') // unknown, connected, disconnected
 let searchTimer = null
 let eventSource = null
-let dsaPort = 8000
+let dsaPort = 8100
 
 const quickStocks = [
   { code: '600519', name: '贵州茅台' },
@@ -654,7 +654,7 @@ onMounted(async () => {
   // 从主进程获取 DSA 端口
   if (window.electronAPI && window.electronAPI.getDsaConfig) {
     const config = await window.electronAPI.getDsaConfig()
-    dsaPort = config.port || 8000
+    dsaPort = config.port || 8100
   }
 
   // 监听 DSA 状态变化

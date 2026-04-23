@@ -142,7 +142,7 @@ function writeDsaEnvFile(dsaPath) {
   lines.push('AGENT_SKILLS=all')
 
   // 端口配置
-  const port = dsaConfig.port || 8000
+  const port = dsaConfig.port || 8100
   lines.push(`# FastAPI port: ${port}`)
 
   const envPath = join(dsaPath, '.env')
@@ -161,7 +161,7 @@ function writeDsaEnvFile(dsaPath) {
 // =====================
 let fastApiProcess = null
 let fastApiStatus = 'stopped' // 'stopped' | 'starting' | 'running' | 'error'
-let fastApiPort = 8000
+let fastApiPort = 8100
 
 function getFastApiUrl() {
   return `http://127.0.0.1:${fastApiPort}`
@@ -182,7 +182,7 @@ async function startFastApiServer() {
 
   const dsaConfig = getDsaConfig()
   const backendDir = getBackendPath()
-  fastApiPort = dsaConfig.port || 8000
+  fastApiPort = dsaConfig.port || 8100
 
   if (!existsSync(backendDir)) {
     const msg = `后端目录不存在: ${backendDir}`
