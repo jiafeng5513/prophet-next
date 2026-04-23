@@ -921,7 +921,7 @@
       color: #e0e0e0;
     }
 
-    .agent-msg-bubble h1 { font-size: 16px; }
+    .agent-msg-bubble h1 { font-size: 16px; border-bottom: 1px solid #444; padding-bottom: 4px; }
     .agent-msg-bubble h2 { font-size: 14px; }
     .agent-msg-bubble h3 { font-size: 13px; }
 
@@ -935,24 +935,31 @@
       margin: 4px 0;
     }
 
+    .agent-msg-bubble li {
+      margin: 2px 0;
+    }
+
     .agent-msg-bubble code {
       background: rgba(0,0,0,0.3);
       padding: 1px 4px;
       border-radius: 3px;
       font-size: 12px;
+      color: #ce9178;
     }
 
     .agent-msg-bubble pre {
-      background: rgba(0,0,0,0.3);
-      padding: 8px;
+      background: #1a1a1a;
+      padding: 10px;
       border-radius: 4px;
       overflow-x: auto;
-      margin: 4px 0;
+      margin: 6px 0;
+      border: 1px solid #333;
     }
 
     .agent-msg-bubble pre code {
       background: none;
       padding: 0;
+      color: #d4d4d4;
     }
 
     .agent-msg-bubble table {
@@ -962,11 +969,39 @@
       font-size: 12px;
     }
 
+    .agent-msg-bubble thead th {
+      background: #1a1a1a;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+
     .agent-msg-bubble th,
     .agent-msg-bubble td {
       border: 1px solid #444;
-      padding: 4px 8px;
+      padding: 5px 8px;
       text-align: left;
+    }
+
+    .agent-msg-bubble tbody tr:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .agent-msg-bubble blockquote {
+      border-left: 3px solid #4a9eff;
+      margin: 6px 0;
+      padding: 4px 12px;
+      background: rgba(0,0,0,0.2);
+      color: #bbb;
+    }
+
+    .agent-msg-bubble blockquote p {
+      margin: 2px 0;
+    }
+
+    .agent-msg-bubble hr {
+      border: none;
+      border-top: 1px solid #444;
+      margin: 8px 0;
     }
 
     .agent-msg-bubble th {
