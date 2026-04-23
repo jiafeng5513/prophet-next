@@ -214,113 +214,143 @@ async function startFastApiServer() {
   broadcastDsaStatus()
 
   return new Promise((resolve) => {
-    // 使用 uv run 自动管理虚拟环境和依赖
-    const args = [
-      'run',
-      'uvicorn',
-      'server:app',
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(fastApiPort)
-    ]
-
-    console.log(`[FastAPI] 启动命令: uv ${args.join(' ')}`)
-    console.log(`[FastAPI] 工作目录: ${backendDir}`)
-    broadcastBackendProgress('正在启动后端服务...', 'starting')
-
+    const args = ['run', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', String(fastApiPort)]
     // 在 Windows 上使用 uv.exe，避免 shell: true 导致的编码问题和进程包装
     const uvCmd = process.platform === 'win32' ? 'uv.exe' : 'uv'
+    let started = false
+    let didRetryWithMirror = false
 
-    fastApiProcess = spawn(uvCmd, args, {
-      cwd: backendDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: false,
-      windowsHide: true,
-      env: {
+    const shouldRetryWithMirror = (logText) => {
+      const t = (logText || '').toLowerCase()
+      return (
+        t.includes('tls handshake eof') ||
+        t.includes('handshake failed') ||
+        t.includes('failed to download') ||
+        t.includes('request failed after') ||
+        t.includes('certificate') ||
+        t.includes('connect')
+      )
+    }
+
+    const spawnFastApi = (useMirror = false) => {
+      const uvEnv = {
         ...process.env,
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1',
         PYTHONLEGACYWINDOWSSTDIO: '0',
-        DSA_DATA_DIR: userDataDir
+        DSA_DATA_DIR: userDataDir,
+        // 使用系统证书可避免部分 macOS 网络环境下 rustls 握手失败
+        UV_NATIVE_TLS: process.env.UV_NATIVE_TLS || '1'
       }
-    })
+      if (useMirror) {
+        uvEnv.UV_INDEX_URL =
+          process.env.UV_INDEX_URL || 'https://pypi.tuna.tsinghua.edu.cn/simple'
+      }
 
-    let started = false
+      console.log(`[FastAPI] 启动命令: uv ${args.join(' ')}`)
+      console.log(`[FastAPI] 工作目录: ${backendDir}`)
+      if (useMirror) {
+        console.log(`[FastAPI] 使用镜像源重试: ${uvEnv.UV_INDEX_URL}`)
+        broadcastBackendProgress('默认源失败，正在切换镜像源重试...', 'retry')
+      } else {
+        broadcastBackendProgress('正在启动后端服务...', 'starting')
+      }
 
-    fastApiProcess.stdout.on('data', (data) => {
-      const output = data.toString('utf-8')
-      console.log('[FastAPI stdout]', output.trim())
-      // 广播日志到状态栏
-      broadcastBackendProgress(output.trim(), 'running')
-      if (!started && output.includes('Uvicorn running')) {
-        started = true
-        fastApiStatus = 'running'
+      fastApiProcess = spawn(uvCmd, args, {
+        cwd: backendDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false,
+        windowsHide: true,
+        env: uvEnv
+      })
+
+      let stderrLog = ''
+
+      fastApiProcess.stdout.on('data', (data) => {
+        const output = data.toString('utf-8')
+        console.log('[FastAPI stdout]', output.trim())
+        // 广播日志到状态栏
+        broadcastBackendProgress(output.trim(), 'running')
+        if (!started && output.includes('Uvicorn running')) {
+          started = true
+          fastApiStatus = 'running'
+          broadcastDsaStatus()
+          broadcastBackendProgress('服务已就绪', 'ready')
+          resolve({ success: true, status: 'running' })
+        }
+      })
+
+      fastApiProcess.stderr.on('data', (data) => {
+        const output = data.toString('utf-8')
+        stderrLog += output
+        console.log('[FastAPI stderr]', output.trim())
+
+        // 解析 stderr 中的进度信息并广播到状态栏
+        if (output.includes('Creating virtual environment')) {
+          broadcastBackendProgress('正在创建 Python 虚拟环境...', 'env')
+        } else if (output.includes('Installed') && output.includes('packages')) {
+          const match = output.match(/Installed (\d+) packages/)
+          if (match) {
+            broadcastBackendProgress(`已安装 ${match[1]} 个依赖包`, 'install')
+          }
+        } else if (output.includes('Downloading')) {
+          const match = output.match(/Downloading (\S+)/)
+          if (match) {
+            broadcastBackendProgress(`正在下载: ${match[1]}`, 'download')
+          }
+        } else if (output.includes('Building')) {
+          const match = output.match(/Building (\S+)/)
+          if (match) {
+            broadcastBackendProgress(`正在构建: ${match[1]}`, 'build')
+          }
+        } else if (output.includes('Using') && output.includes('interpreter')) {
+          broadcastBackendProgress('正在配置 Python 解释器...', 'env')
+        } else if (output.includes('Resolved') || output.includes('Resolving')) {
+          broadcastBackendProgress('正在解析依赖...', 'resolve')
+        }
+
+        // uvicorn 输出到 stderr 也是正常的
+        if (!started && output.includes('Uvicorn running')) {
+          started = true
+          fastApiStatus = 'running'
+          broadcastDsaStatus()
+          broadcastBackendProgress('服务已就绪', 'ready')
+          resolve({ success: true, status: 'running' })
+        }
+      })
+
+      fastApiProcess.on('error', (err) => {
+        console.error('[FastAPI] 启动失败:', err.message)
+        fastApiProcess = null
+        fastApiStatus = 'error'
         broadcastDsaStatus()
-        broadcastBackendProgress('服务已就绪', 'ready')
-        resolve({ success: true, status: 'running' })
-      }
-    })
-
-    fastApiProcess.stderr.on('data', (data) => {
-      const output = data.toString('utf-8')
-      console.log('[FastAPI stderr]', output.trim())
-
-      // 解析 stderr 中的进度信息并广播到状态栏
-      if (output.includes('Creating virtual environment')) {
-        broadcastBackendProgress('正在创建 Python 虚拟环境...', 'env')
-      } else if (output.includes('Installed') && output.includes('packages')) {
-        const match = output.match(/Installed (\d+) packages/)
-        if (match) {
-          broadcastBackendProgress(`已安装 ${match[1]} 个依赖包`, 'install')
+        broadcastBackendProgress(`启动失败: ${err.message}`, 'error')
+        if (!started) {
+          resolve({ success: false, error: err.message })
         }
-      } else if (output.includes('Downloading')) {
-        const match = output.match(/Downloading (\S+)/)
-        if (match) {
-          broadcastBackendProgress(`正在下载: ${match[1]}`, 'download')
-        }
-      } else if (output.includes('Building')) {
-        const match = output.match(/Building (\S+)/)
-        if (match) {
-          broadcastBackendProgress(`正在构建: ${match[1]}`, 'build')
-        }
-      } else if (output.includes('Using') && output.includes('interpreter')) {
-        broadcastBackendProgress('正在配置 Python 解释器...', 'env')
-      } else if (output.includes('Resolved') || output.includes('Resolving')) {
-        broadcastBackendProgress('正在解析依赖...', 'resolve')
-      }
+      })
 
-      // uvicorn 输出到 stderr 也是正常的
-      if (!started && output.includes('Uvicorn running')) {
-        started = true
-        fastApiStatus = 'running'
+      fastApiProcess.on('exit', (code) => {
+        console.log(`[FastAPI] 进程退出, code=${code}`)
+        const canRetry = !started && !didRetryWithMirror && shouldRetryWithMirror(stderrLog)
+        fastApiProcess = null
+
+        if (canRetry) {
+          didRetryWithMirror = true
+          spawnFastApi(true)
+          return
+        }
+
+        fastApiStatus = 'stopped'
         broadcastDsaStatus()
-        broadcastBackendProgress('服务已就绪', 'ready')
-        resolve({ success: true, status: 'running' })
-      }
-    })
+        broadcastBackendProgress('后端服务已停止', 'stopped')
+        if (!started) {
+          resolve({ success: false, error: `进程退出 code=${code}` })
+        }
+      })
+    }
 
-    fastApiProcess.on('error', (err) => {
-      console.error('[FastAPI] 启动失败:', err.message)
-      fastApiProcess = null
-      fastApiStatus = 'error'
-      broadcastDsaStatus()
-      broadcastBackendProgress(`启动失败: ${err.message}`, 'error')
-      if (!started) {
-        resolve({ success: false, error: err.message })
-      }
-    })
-
-    fastApiProcess.on('exit', (code) => {
-      console.log(`[FastAPI] 进程退出, code=${code}`)
-      fastApiProcess = null
-      fastApiStatus = 'stopped'
-      broadcastDsaStatus()
-      broadcastBackendProgress('后端服务已停止', 'stopped')
-      if (!started) {
-        resolve({ success: false, error: `进程退出 code=${code}` })
-      }
-    })
+    spawnFastApi(false)
 
     // 超时 30 秒
     setTimeout(() => {

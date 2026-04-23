@@ -67,6 +67,63 @@
     winget install --id=astral-sh.uv -e
     ```
 
+### macOS
+1. install Homebrew (if not installed)
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+
+2. install fnm and Node.js
+    ```bash
+    # install fnm (Fast Node Manager)
+    brew install fnm
+
+    # initialize fnm for current shell session
+    eval "$(fnm env --use-on-cd)"
+
+    # download and install Node.js
+    fnm use --install-if-missing 20
+
+    # verify Node.js and NPM versions
+    node -v
+    npm -v
+
+    # optional: list all available remote versions
+    fnm list-remote
+
+    # optional: list all installed versions
+    fnm list
+
+    # optional: install and set another version
+    fnm install 22
+    fnm default 22
+
+    # optional: install nrm to manage npm source
+    npm install -g nrm
+    # optional: `nrm ls` to show all available source, `nrm use` to set it
+    ```
+
+3. enable fnm auto-load in zsh
+    ```bash
+    # append fnm initialization into ~/.zshrc
+    echo '' >> ~/.zshrc
+    echo '# fnm initialize' >> ~/.zshrc
+    echo 'eval "$(fnm env --use-on-cd)"' >> ~/.zshrc
+
+    # reload current shell config
+    source ~/.zshrc
+    ```
+
+4. install vue
+    ```bash
+    npm i @vue/cli -g
+    ```
+
+5. install uv
+    ```bash
+    brew install uv
+    ```
+
 ## Recommended IDE Setup
 
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
