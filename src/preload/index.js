@@ -86,5 +86,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 后端进度信息（状态栏用）
   onBackendProgress: (callback) =>
-    ipcRenderer.on('backend-progress', (event, data) => callback(data))
+    ipcRenderer.on('backend-progress', (event, data) => callback(data)),
+
+  // 配置导入/导出
+  exportConfig: (content, defaultFileName) =>
+    ipcRenderer.invoke('export-config', content, defaultFileName),
+  importConfig: () => ipcRenderer.invoke('import-config'),
 })
