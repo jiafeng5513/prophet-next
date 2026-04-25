@@ -20,9 +20,22 @@ import {
   renameSync,
   rmSync
 } from 'fs'
-import { spawn } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
+
+// 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
+function decodeOutput(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    try {
+      return new TextDecoder('gbk').decode(buffer)
+    } catch {
+      return buffer.toString('utf-8')
+    }
+  }
+}
 
 // 全局的变量参数
 const ACTIVITY_BAR_WIDTH = 48 // VSCode 风格侧边栏宽度
@@ -210,6 +223,9 @@ async function startFastApiServer() {
     mkdirSync(userDataDir, { recursive: true })
   }
 
+  // 清理上次可能残留的进程（端口占用）
+  killProcessOnPort(fastApiPort)
+
   fastApiStatus = 'starting'
   broadcastDsaStatus()
 
@@ -267,7 +283,7 @@ async function startFastApiServer() {
       let stderrLog = ''
 
       fastApiProcess.stdout.on('data', (data) => {
-        const output = data.toString('utf-8')
+        const output = decodeOutput(data)
         console.log('[FastAPI stdout]', output.trim())
         // 广播日志到状态栏
         broadcastBackendProgress(output.trim(), 'running')
@@ -281,7 +297,7 @@ async function startFastApiServer() {
       })
 
       fastApiProcess.stderr.on('data', (data) => {
-        const output = data.toString('utf-8')
+        const output = decodeOutput(data)
         stderrLog += output
         console.log('[FastAPI stderr]', output.trim())
 
@@ -377,6 +393,30 @@ async function startFastApiServer() {
   })
 }
 
+// 按端口号查杀残留进程（启动前清理用）
+function killProcessOnPort(port) {
+  if (process.platform !== 'win32') return
+  try {
+    const result = spawnSync('netstat', ['-ano'], {
+      encoding: 'utf-8', windowsHide: true, timeout: 5000
+    })
+    if (!result.stdout) return
+    for (const line of result.stdout.split('\n')) {
+      if (line.includes(`:${port}`) && line.includes('LISTENING')) {
+        const pid = line.trim().split(/\s+/).pop()
+        if (pid && pid !== '0') {
+          console.log(`[FastAPI] 发现端口 ${port} 被 PID ${pid} 占用，正在终止...`)
+          spawnSync('taskkill', ['/pid', pid, '/f', '/t'], {
+            windowsHide: true, timeout: 5000
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[FastAPI] 检查端口占用失败:', e)
+  }
+}
+
 function stopFastApiServer() {
   if (!fastApiProcess) {
     fastApiStatus = 'stopped'
@@ -384,11 +424,14 @@ function stopFastApiServer() {
     return { success: true }
   }
 
-  console.log('[FastAPI] 正在停止服务...')
+  const pid = fastApiProcess.pid
+  console.log('[FastAPI] 正在停止服务... PID:', pid)
   try {
-    // Windows 下用 taskkill 终止进程树
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/pid', String(fastApiProcess.pid), '/f', '/t'])
+      // 同步终止进程树，确保 app 退出前子进程已被杀死
+      spawnSync('taskkill', ['/pid', String(pid), '/f', '/t'], {
+        windowsHide: true, timeout: 5000
+      })
     } else {
       fastApiProcess.kill('SIGTERM')
     }
@@ -1534,6 +1577,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopFastApiServer()
+  // 兜底：按端口号清理可能的残留进程
+  killProcessOnPort(fastApiPort)
 })
 
 app.on('activate', () => {
