@@ -4,7 +4,7 @@
 </br>
 </br>
 </br>
-<div align=center><img src="doc/screenshot.png"/></div>
+<div align=center><img src="doc/screenshot_chart.png"/></div>
 
 
 ## Develop Environment Setup
@@ -178,13 +178,3 @@ $ npm run build:linux
 20. [klinecharts](https://github.com/klinecharts/preview)
 21. [preview.klinecharts](https://preview.klinecharts.com/)
 22. [daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)
-
-## api提供商
-1. [newsdata](https://newsdata.io/search-dashboard)
-2. [Tushare]()
-3. [BraveSearch]()
-4. [SerpAPI]()
-5. [Tavily]()
-6. [Bocha]()
-7. [SearXNG]()
-
