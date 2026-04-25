@@ -179,86 +179,12 @@ $ npm run build:linux
 21. [preview.klinecharts](https://preview.klinecharts.com/)
 22. [daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)
 
+## api提供商
+1. [newsdata](https://newsdata.io/search-dashboard)
+2. [Tushare]()
+3. [BraveSearch]()
+4. [SerpAPI]()
+5. [Tavily]()
+6. [Bocha]()
+7. [SearXNG]()
 
-## 开发计划
-1. [done]开发模式和交易模式的切换逻辑: 用一个开关手动切换
-2. 主logo的UX设计
-3. agent窗口和侧边栏开关按钮，模仿vscode右上角
-4. 两个模式的UI梳理
-5. python指标
-6. 数据持久化和本地缓存
-7. 工作区模式（程序第一次启动，要询问工作区，持久化数据和python脚本要放进去）
-8. binance数据源
-
-## 目前的主要疑惑：
-1. K线页面和代码页面显然都有打开多个页面的需求
-2. 代码调试的时候可能需要同时显示K线页面
-3. 一个工程可能存在多个代码文件，多个策略，多个指标，显然需要一个类似vscode的“资源管理器”
-4. Agent在开发模式下能够进行开发辅助，在交易模式下能够直接获得交易信息
-
-
-## 构想
-程序第一次启动，要询问工作区，工作区用于存储持久化数据和python脚本，存放用于python运行的虚拟环境
-K线视图里，除了内置的indicators列表，还要有一个自定义指标的列表，其中的指标是工作区中存储的python指标
-还应该有一个策略列表，其中的条目是存储工作区中存储的python策略，目前我们只考虑单一策略，未来可以考虑权重式多策略和多策略排行回测
-
-
-仔细思考后，我决定进行一个较大的UI逻辑更新：
-1. 将程序分成交易模式(trading_mode), 开发模式(developing_mode), 新闻模式(news_mode), 市场分析模式(market_analyze_mode)
-2. 模式切换按钮放在左侧的侧边栏中，可以使用src\renderer\public中的图标
-3. 模式切换按钮不再起到新建tab页面的作用，而是切换不同的模式，不同模式的解释如下：
-4. 交易模式显示k线图也就是chart页面，tab栏中的新建页面按钮保留，功能还是新建chart页面
-5. 开发模式，显示代码编辑页面，tab栏中无新建页面按钮
-6. 新闻模式和市场分析模式目前没有内容，我们日后再进行详细开发，目前只需要显示“正在开发中”即可
-7. 从A模式切换到B模式之后，保留A模式打开的所有标签页状态，以便于日后切换回A模式时恢复之前打开的标签页
-8. 设置、新闻模式、市场分析模式这三个模式不适用多tab页面，当切换到这个模式时不显示tab栏
-
-
-接下来我们实现“工作区”，并为开发模式增加一些功能
-1. 在设置里添加一个项目“工作区目录”，默认为程序安装路径下的ProphetWorkSpace文件夹，在设置里可以更改成其他位置
-2. 程序启动的时候，如果工作区目录不存在，则创建
-3. 在开发模式中新增类似visual studio code左侧侧边栏和编辑器中间的“资源管理器”视图
-4. 资源管理器视图默认打开工作区目录
-
-
-对于工作区和开发模式进行一些更新
-1. 在工作区中，默认创建两个文件夹：一个是indicator，用于存放指标脚本，一个是strategy，用于存放策略脚本
-2. 每个指标和策略都有可能是多个脚本构成的，因此每一个策略和指标应该被装进文件夹里。我们应该提供一个指标和一个策略的示例。
-3. 资源管理器视图应该支持新建，拖动，删除，重命名等操作，开源项目monaco-tree-editor或者其他类似的npm包或者项目或许可以参考
-
-调优修复
-1. 资源管理器在空白处右键不应该显示重命名和删除，不允许通过这种方式删除和重命名工作区目录
-
-分析切换本项目为react native的可能性
-https://github.com/tradingview/charting-library-examples/tree/master/react-native这里提供了charting-library和react-native的集成示例，
-
-分析daily_stock_analysis
-https://github.com/ZhuLinsen/daily_stock_analysis这个项目中有两个功能我比较感兴趣：首页的股票分析功能，和第二个页面的问股功能，并且想将其集成到当前项目中，请帮我分析可行的方案。daily_stock_analysis的代码已经同步到D:\ProjectsSoftware\Treading\daily_stock_analysis
-
-
-1. mac熄屏后，程序会默认回到首页，如果此时正在执行分析，即使后台分析还在持续，UI上会显示分析失败
-2. 引入DSA中更多的设置项目
-3. 设置页重构
-4. 问股功能集成到agent侧窗
-5. 一键标记买卖点
-6. 利用uv自动管理python环境，启动启动后端
-
-
-之前我们已经从daily_stock_analysis的代码（D:\ProjectsSoftware\Treading\daily_stock_analysis）中获取了股票分析功能并进行了一些集成，接下来我们将问股功能移植到这边预留的右侧栏agent位置。
-
-
-接下来，我们移植DSA的整个后端到本项目中。对于此我有以下要求：
-1. 整个后端放进一个文件夹
-2. prophet启动时，自动拉起后端服务
-
-
-需要一个类似vscode的底部状态栏，用于显示服务状态，服务正在准备例如uv正在创建环境的时候，显示进度
-
-
-之前我们已经从daily_stock_analysis的代码（D:\ProjectsSoftware\Treading\daily_stock_analysis）中集成了很多功能，但集成和迁移并不完美，例如存在以下问题：
-
-1. 设置页面比较混乱，
-2. 问股（即prophet的聊天）和首页（即prophet的市场分析）这两个功能的页面表现不好，很多daily_stock_analysis中的视觉表现例如图形和表格，移植之后显示的有问题
-3. 服务端应该和daily_stock_analysis采用不同的端口号，例如8100，以便于我同时启动两个程序进行对比
-
-目前先想到了这么多，我觉得还有很多问题需要处理，请帮我分析一下可能存在的迁移问题，并形成一个开发计划，保存到doc文件夹中

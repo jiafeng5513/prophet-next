@@ -881,7 +881,8 @@ function createView(type, options = {}) {
     placeholder: 'placeholder.html',
     'stock-analysis': 'stock-analysis.html',
     portfolio: 'portfolio.html',
-    backtest: 'backtest.html'
+    backtest: 'backtest.html',
+    news: 'news.html'
   }
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
@@ -969,7 +970,7 @@ function switchMode(newMode) {
   } else if (newMode === 'news') {
     const state = modeState.news
     if (!state.viewId) {
-      state.viewId = createView('placeholder')
+      state.viewId = createView('news')
     }
     newActiveViewId = state.viewId
   } else if (newMode === 'market_analyze') {

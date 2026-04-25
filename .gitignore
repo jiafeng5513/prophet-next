@@ -13,3 +13,4 @@ backend/*.pyc
 backend/.env
 backend/data/
 backend/logs/
+doc/api_keys.md
