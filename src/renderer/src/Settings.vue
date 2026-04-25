@@ -7,6 +7,8 @@
         <p class="header-desc">管理本地应用配置与 DSA 后端服务参数。</p>
       </div>
       <div class="header-actions" v-if="activeCategory !== 'local' && activeCategory !== 'dsa_service'">
+        <button class="btn btn-secondary" @click="importConfig" :disabled="!dsaServerRunning || isSaving" title="从 .env 文件导入配置">导入</button>
+        <button class="btn btn-secondary" @click="exportConfig" :disabled="!dsaServerRunning || dsaItems.length === 0" title="导出当前配置为 .env 文件">导出</button>
         <button class="btn btn-secondary" @click="resetDraft" :disabled="!hasDirty || isSaving">重置</button>
         <button class="btn btn-primary" @click="saveDsaBackendConfig" :disabled="!hasDirty || isSaving">
           {{ isSaving ? '保存中...' : `保存配置${dirtyCount ? ` (${dirtyCount})` : ''}` }}
@@ -23,16 +25,34 @@
     <div class="settings-body">
       <!-- 左侧导航 -->
       <aside class="category-nav">
-        <div
-          v-for="cat in allCategories"
-          :key="cat.key"
-          :class="['nav-item', { active: activeCategory === cat.key }]"
-          @click="activeCategory = cat.key"
-        >
-          <div class="nav-title">{{ cat.title }}</div>
-          <div class="nav-desc">{{ cat.description }}</div>
-          <span class="nav-badge" v-if="cat.count">{{ cat.count }}</span>
-        </div>
+        <div class="nav-group-label">本地配置</div>
+        <template v-for="cat in localCategories" :key="cat.key">
+          <div
+            :class="['nav-item', { active: activeCategory === cat.key }]"
+            @click="activeCategory = cat.key"
+          >
+            <span class="nav-icon">{{ cat.icon }}</span>
+            <div class="nav-text">
+              <div class="nav-title">{{ cat.title }}</div>
+              <div class="nav-desc">{{ cat.description }}</div>
+            </div>
+            <span class="nav-badge" v-if="cat.count">{{ cat.count }}</span>
+          </div>
+        </template>
+        <div class="nav-group-label">DSA 后端配置</div>
+        <template v-for="cat in dsaCategories" :key="cat.key">
+          <div
+            :class="['nav-item', { active: activeCategory === cat.key }]"
+            @click="activeCategory = cat.key"
+          >
+            <span class="nav-icon">{{ cat.icon }}</span>
+            <div class="nav-text">
+              <div class="nav-title">{{ cat.title }}</div>
+              <div class="nav-desc">{{ cat.description }}</div>
+            </div>
+            <span class="nav-badge" v-if="cat.count">{{ cat.count }}</span>
+          </div>
+        </template>
       </aside>
 
       <!-- 右侧内容 -->
@@ -152,83 +172,180 @@
           </div>
 
           <!-- LLM 渠道编辑器 -->
-          <div v-else-if="activeCategory === 'ai_model'" class="section-card">
-            <div class="section-title">AI 模型接入</div>
-            <div class="section-desc">统一管理模型渠道、基础地址、API Key、主模型与备选模型。</div>
+          <div v-else-if="activeCategory === 'ai_model'" class="llm-editor">
 
-            <!-- 渠道列表 -->
-            <div class="channels-wrapper">
-              <div v-for="(ch, idx) in channels" :key="idx" class="channel-card">
-                <div class="channel-header">
-                  <select v-model="ch.preset" @change="onChannelPresetChange(idx)" class="field-input channel-preset-select">
-                    <option v-for="(p, pk) in channelPresets" :key="pk" :value="pk">{{ p.label }}</option>
-                  </select>
-                  <button class="btn btn-icon btn-danger-icon" @click="removeChannel(idx)" title="删除渠道">✕</button>
-                </div>
-                <div class="channel-body">
-                  <div class="channel-field">
-                    <label>渠道名称</label>
-                    <input type="text" v-model="ch.name" class="field-input" placeholder="如 my_deepseek" @change="markChannelsDirty" />
-                  </div>
-                  <div class="channel-field">
-                    <label>协议</label>
-                    <select v-model="ch.protocol" class="field-input" @change="markChannelsDirty">
-                      <option v-for="po in protocolOptions" :key="po.value" :value="po.value">{{ po.label }}</option>
-                    </select>
-                  </div>
-                  <div class="channel-field">
-                    <label>Base URL</label>
-                    <input type="text" v-model="ch.baseUrl" class="field-input" placeholder="留空使用默认" @change="markChannelsDirty" />
-                  </div>
-                  <div class="channel-field">
-                    <label>API Key</label>
-                    <div class="field-row">
-                      <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.apiKey"
-                        class="field-input flex-1" placeholder="输入 API Key" @change="markChannelsDirty" />
-                      <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
-                    </div>
-                  </div>
-                  <div class="channel-field">
-                    <label>模型列表</label>
-                    <input type="text" v-model="ch.models" class="field-input"
-                      :placeholder="channelPresets[ch.preset]?.placeholder || 'model-1,model-2'" @change="markChannelsDirty" />
-                    <div class="field-desc">逗号分隔的模型名称</div>
-                  </div>
-                  <div class="channel-field">
-                    <label class="checkbox-row">
+            <!-- ① 快速添加渠道 -->
+            <div class="llm-group">
+              <div class="llm-group-title">快速添加渠道</div>
+              <div class="channel-add-bar">
+                <select v-model="addPresetKey" class="field-input channel-add-select">
+                  <option value="">选择服务商...</option>
+                  <option v-for="(p, pk) in channelPresets" :key="pk" :value="pk">{{ p.label }}</option>
+                </select>
+                <button class="btn btn-primary" @click="addChannelFromPreset" :disabled="!addPresetKey">+ 添加渠道</button>
+                <span class="channel-count-badge" v-if="channels.length">{{ enabledChannelCount }}/{{ channels.length }} 已启用</span>
+              </div>
+            </div>
+
+            <!-- ② 渠道列表 -->
+            <div class="llm-group">
+              <div class="llm-group-title">渠道列表</div>
+              <div class="channels-wrapper" v-if="channels.length">
+                <div v-for="(ch, idx) in channels" :key="idx" class="channel-card" :class="{ expanded: expandedChannels[idx] }">
+                  <!-- 折叠行 -->
+                  <div class="channel-row" @click="toggleChannelExpand(idx)">
+                    <span class="channel-expand-arrow" :class="{ open: expandedChannels[idx] }">▶</span>
+                    <label class="channel-enable-check" @click.stop>
                       <input type="checkbox" v-model="ch.enabled" @change="markChannelsDirty" />
-                      <span>启用此渠道</span>
                     </label>
+                    <span class="channel-row-name">{{ ch.name || '未命名渠道' }}</span>
+                    <span class="channel-row-badge">{{ protocolLabel(ch.protocol) }}</span>
+                    <span class="channel-row-models">{{ channelModelCount(ch) }}个模型</span>
+                    <span class="channel-status-dot" :class="channelStatusClass(ch)"></span>
+                    <span v-if="!ch.apiKey" class="channel-row-warn">未填 Key</span>
+                    <button class="btn btn-icon btn-danger-icon channel-row-delete" @click.stop="removeChannel(idx)" title="删除渠道">✕</button>
                   </div>
-                  <!-- 测试按钮 -->
-                  <div class="channel-actions">
-                    <button class="btn btn-secondary" @click="testChannel(idx)"
-                      :disabled="ch.testing || !ch.apiKey || !ch.name">
-                      {{ ch.testing ? '测试中...' : '测试连接' }}
-                    </button>
-                    <button class="btn btn-secondary" @click="discoverModels(idx)"
-                      :disabled="ch.discovering || !ch.apiKey || !ch.name">
-                      {{ ch.discovering ? '发现中...' : '发现模型' }}
-                    </button>
-                    <span v-if="ch.testResult" :class="['test-result', ch.testResult.ok ? 'success' : 'error']">
-                      {{ ch.testResult.message }}
-                    </span>
+                  <!-- 展开区 -->
+                  <div v-show="expandedChannels[idx]" class="channel-body">
+                    <div class="channel-field">
+                      <label>渠道名称</label>
+                      <input type="text" v-model="ch.name" class="field-input" placeholder="如 my_deepseek" @change="markChannelsDirty" />
+                    </div>
+                    <div class="channel-field">
+                      <label>协议</label>
+                      <select v-model="ch.protocol" class="field-input" @change="markChannelsDirty">
+                        <option v-for="po in protocolOptions" :key="po.value" :value="po.value">{{ po.label }}</option>
+                      </select>
+                    </div>
+                    <div class="channel-field">
+                      <label>Base URL</label>
+                      <input type="text" v-model="ch.baseUrl" class="field-input" placeholder="留空使用默认" @change="markChannelsDirty" />
+                    </div>
+                    <div class="channel-field">
+                      <label>API Key</label>
+                      <div class="field-row">
+                        <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.apiKey"
+                          class="field-input flex-1" placeholder="输入 API Key" @change="markChannelsDirty" />
+                        <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                      </div>
+                    </div>
+                    <div class="channel-field">
+                      <label>模型列表</label>
+                      <input type="text" v-model="ch.models" class="field-input"
+                        :placeholder="channelPresets[ch.preset]?.placeholder || 'model-1,model-2'" @change="markChannelsDirty" />
+                      <div class="field-desc">逗号分隔的模型名称</div>
+                    </div>
+                    <div class="channel-actions">
+                      <button class="btn btn-secondary" @click="discoverModels(idx)"
+                        :disabled="ch.discovering || !ch.apiKey || !ch.name">
+                        {{ ch.discovering ? '发现中...' : '获取模型' }}
+                      </button>
+                      <button class="btn btn-secondary" @click="testChannel(idx)"
+                        :disabled="ch.testing || !ch.apiKey || !ch.name">
+                        {{ ch.testing ? '测试中...' : '测试连接' }}
+                      </button>
+                      <span v-if="ch.testResult" :class="['test-result', ch.testResult.ok ? 'success' : 'error']">
+                        {{ ch.testResult.message }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <button class="btn btn-secondary add-channel-btn" @click="addChannel">+ 添加渠道</button>
+              <div v-else class="channel-empty-hint">暂无渠道，请在上方选择服务商添加。</div>
             </div>
 
-            <!-- 保存渠道 -->
+            <!-- ③ 运行时参数 -->
+            <div class="llm-group">
+              <div class="llm-group-title">运行时参数</div>
+              <div class="runtime-params-list">
+                <!-- 分析主模型 -->
+                <div class="field-item">
+                  <div class="field-label-row"><label>分析主模型</label></div>
+                  <select :value="getDraftValue('LITELLM_MODEL')"
+                    @change="setDraft('LITELLM_MODEL', $event.target.value)"
+                    class="field-input">
+                    <option value="">自动（使用第一个可用模型）</option>
+                    <option v-for="m in allChannelModels" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                  <div class="field-desc">分析和对话使用的默认模型。自动模式下按渠道优先级选取第一个可用模型。</div>
+                </div>
+                <!-- Agent 主模型 -->
+                <div class="field-item">
+                  <div class="field-label-row"><label>Agent 主模型</label></div>
+                  <select :value="getDraftValue('AGENT_LITELLM_MODEL')"
+                    @change="setDraft('AGENT_LITELLM_MODEL', $event.target.value)"
+                    class="field-input">
+                    <option value="">自动（继承分析主模型）</option>
+                    <option v-for="m in allChannelModels" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                  <div class="field-desc">Agent 专用模型。自动模式下直接使用分析主模型。</div>
+                </div>
+                <!-- 备选模型（多选） -->
+                <div class="field-item">
+                  <div class="field-label-row"><label>备选模型</label></div>
+                  <div class="fallback-model-list" v-if="allChannelModels.length">
+                    <label v-for="m in allChannelModels" :key="m.value" class="fallback-model-option">
+                      <input type="checkbox"
+                        :checked="isFallbackSelected(m.value)"
+                        @change="toggleFallbackModel(m.value, $event.target.checked)" />
+                      <span>{{ m.label }}</span>
+                    </label>
+                  </div>
+                  <div v-else class="field-desc" style="color:#666;">请先在渠道中配置模型</div>
+                  <div class="field-desc">主模型失败时按勾选顺序依次尝试</div>
+                </div>
+                <!-- Vision 模型 -->
+                <div class="field-item">
+                  <div class="field-label-row"><label>Vision 模型</label></div>
+                  <select :value="getDraftValue('VISION_MODEL')"
+                    @change="setDraft('VISION_MODEL', $event.target.value)"
+                    class="field-input">
+                    <option value="">自动（跟随 Vision 默认逻辑）</option>
+                    <option v-for="m in allChannelModels" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                  <div class="field-desc">图片理解专用模型。自动模式下优先使用分析主模型，再按 Gemini → Anthropic → OpenAI 推断。</div>
+                </div>
+              </div>
+              <!-- Temperature 滑动条 -->
+              <div class="field-item temperature-field">
+                <div class="field-label-row">
+                  <label>Temperature</label>
+                  <span class="temperature-value">{{ temperatureDisplay }}</span>
+                </div>
+                <input type="range" min="0" max="2" step="0.1"
+                  :value="getDraftValue('LLM_TEMPERATURE') || '0.7'"
+                  @input="setDraft('LLM_TEMPERATURE', $event.target.value)"
+                  class="temperature-slider" />
+                <div class="temperature-labels">
+                  <span>精确 (0)</span>
+                  <span>平衡 (1)</span>
+                  <span>创意 (2)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ④ 高级路由配置 -->
+            <div class="llm-group">
+              <div class="llm-group-title">高级路由配置</div>
+              <div class="field-item">
+                <div class="field-label-row"><label>高级模型路由 YAML 配置文件路径</label></div>
+                <input type="text" :value="getDraftValue('LITELLM_CONFIG')"
+                  @input="setDraft('LITELLM_CONFIG', $event.target.value)"
+                  class="field-input" placeholder="如 /path/to/litellm_config.yaml" />
+                <div class="field-desc">指定 LiteLLM 路由配置文件。配置此项后将使用高级路由模式。</div>
+              </div>
+            </div>
+
+            <!-- 保存按钮 -->
             <div class="channel-save-row" v-if="channelsDirty">
               <button class="btn btn-primary" @click="saveChannels" :disabled="isSavingChannels">
-                {{ isSavingChannels ? '保存中...' : '保存渠道配置' }}
+                {{ isSavingChannels ? '保存中...' : '保存 AI 配置' }}
               </button>
             </div>
           </div>
 
-          <!-- 通用 schema 字段列表 -->
-          <div v-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length" class="section-card">
+          <!-- 通用 schema 字段列表（ai_model 已由专用编辑器处理） -->
+          <div v-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length && activeCategory !== 'ai_model'" class="section-card">
             <div class="section-title">{{ currentCategoryTitle }}</div>
             <div class="section-desc">{{ currentCategoryDesc }}</div>
 
@@ -440,6 +557,125 @@ const fieldTitleMap = {
   BACKTEST_MIN_AGE_DAYS: '回测最小历史天数',
   BACKTEST_ENGINE_VERSION: '回测引擎版本',
   BACKTEST_NEUTRAL_BAND_PCT: '回测中性区间阈值（%）',
+  // 报告配置
+  REPORT_TYPE: '报告类型',
+  REPORT_LANGUAGE: '报告语言',
+  REPORT_TEMPLATES_DIR: '报告模板目录',
+  REPORT_RENDERER_ENABLED: '启用报告渲染',
+  REPORT_INTEGRITY_ENABLED: '报告完整性校验',
+  REPORT_INTEGRITY_RETRY: '完整性校验重试次数',
+  REPORT_HISTORY_COMPARE_N: '历史对比报告数',
+  // Telegram
+  TELEGRAM_BOT_TOKEN: 'Telegram Bot Token',
+  TELEGRAM_CHAT_ID: 'Telegram Chat ID',
+  TELEGRAM_MESSAGE_THREAD_ID: 'Telegram 消息线程 ID',
+  TELEGRAM_WEBHOOK_SECRET: 'Telegram Webhook Secret',
+  // Email
+  EMAIL_SENDER: '发件人邮箱',
+  EMAIL_SENDER_NAME: '发件人名称',
+  EMAIL_PASSWORD: '邮箱密码/授权码',
+  EMAIL_RECEIVERS: '收件人列表',
+  // Discord
+  DISCORD_BOT_TOKEN: 'Discord Bot Token',
+  DISCORD_BOT_STATUS: 'Discord Bot 状态',
+  DISCORD_MAIN_CHANNEL_ID: 'Discord 主频道 ID',
+  DISCORD_WEBHOOK_URL: 'Discord Webhook URL',
+  DISCORD_INTERACTIONS_PUBLIC_KEY: 'Discord 交互公钥',
+  // Slack
+  SLACK_WEBHOOK_URL: 'Slack Webhook URL',
+  SLACK_BOT_TOKEN: 'Slack Bot Token',
+  SLACK_CHANNEL_ID: 'Slack 频道 ID',
+  // 飞书扩展
+  FEISHU_VERIFICATION_TOKEN: '飞书验证 Token',
+  FEISHU_ENCRYPT_KEY: '飞书加密密钥',
+  FEISHU_STREAM_ENABLED: '飞书事件流模式',
+  FEISHU_FOLDER_TOKEN: '飞书文档目录 Token',
+  FEISHU_MAX_BYTES: '飞书消息最大字节',
+  // 钉钉扩展
+  DINGTALK_STREAM_ENABLED: '钉钉事件流模式',
+  // 企业微信扩展
+  WECOM_CORPID: '企业微信 Corp ID',
+  WECOM_TOKEN: '企业微信 Token',
+  WECOM_ENCODING_AES_KEY: '企业微信加密密钥',
+  WECOM_AGENT_ID: '企业微信 Agent ID',
+  WECHAT_MAX_BYTES: '微信消息最大字节',
+  WECHAT_MSG_TYPE: '微信消息类型',
+  // PushPlus / PushOver / ServerChan
+  PUSHPLUS_TOPIC: 'PushPlus 话题',
+  PUSHOVER_USER_KEY: 'Pushover User Key',
+  PUSHOVER_API_TOKEN: 'Pushover API Token',
+  SERVERCHAN3_SENDKEY: 'Server酱 SendKey',
+  // 自定义 Webhook
+  CUSTOM_WEBHOOK_URLS: '自定义 Webhook URLs',
+  CUSTOM_WEBHOOK_BEARER_TOKEN: 'Webhook Bearer Token',
+  WEBHOOK_VERIFY_SSL: 'Webhook 验证 SSL',
+  // AstrBot
+  ASTRBOT_TOKEN: 'AstrBot Token',
+  ASTRBOT_URL: 'AstrBot URL',
+  // 通知行为
+  SINGLE_STOCK_NOTIFY: '单股通知模式',
+  ANALYSIS_DELAY: '分析延迟（秒）',
+  MERGE_EMAIL_NOTIFICATION: '合并邮件通知',
+  MARKDOWN_TO_IMAGE_CHANNELS: 'MD 转图渠道',
+  MARKDOWN_TO_IMAGE_MAX_CHARS: 'MD 转图最大字符数',
+  MD2IMG_ENGINE: 'MD 转图引擎',
+  DISCORD_MAX_WORDS: 'Discord 最大字数',
+  // Longbridge 数据源
+  LONGBRIDGE_APP_KEY: 'Longbridge App Key',
+  LONGBRIDGE_APP_SECRET: 'Longbridge App Secret',
+  LONGBRIDGE_ACCESS_TOKEN: 'Longbridge Access Token',
+  // 实时数据扩展
+  ENABLE_EASTMONEY_PATCH: '东方财富增强',
+  REALTIME_CACHE_TTL: '实时缓存 TTL（秒）',
+  CIRCUIT_BREAKER_COOLDOWN: '熔断冷却（秒）',
+  PREFETCH_REALTIME_QUOTES: '预取实时行情',
+  // 基本面管线
+  ENABLE_FUNDAMENTAL_PIPELINE: '启用基本面管线',
+  FUNDAMENTAL_STAGE_TIMEOUT_SECONDS: '阶段超时（秒）',
+  FUNDAMENTAL_FETCH_TIMEOUT_SECONDS: '请求超时（秒）',
+  FUNDAMENTAL_RETRY_MAX: '最大重试次数',
+  FUNDAMENTAL_CACHE_TTL_SECONDS: '缓存 TTL（秒）',
+  FUNDAMENTAL_CACHE_MAX_ENTRIES: '最大缓存条数',
+  // 组合风控
+  PORTFOLIO_RISK_CONCENTRATION_ALERT_PCT: '集中度预警(%)',
+  PORTFOLIO_RISK_DRAWDOWN_ALERT_PCT: '回撤预警(%)',
+  PORTFOLIO_RISK_STOP_LOSS_ALERT_PCT: '止损预警(%)',
+  PORTFOLIO_RISK_STOP_LOSS_NEAR_RATIO: '止损接近比率',
+  PORTFOLIO_RISK_LOOKBACK_DAYS: '风控回看天数',
+  PORTFOLIO_FX_UPDATE_ENABLED: '外汇更新',
+  // Agent 扩展
+  AGENT_NL_ROUTING: '自然语言路由',
+  AGENT_DEEP_RESEARCH_BUDGET: '深度研究 Token 预算',
+  AGENT_DEEP_RESEARCH_TIMEOUT: '深度研究超时（秒）',
+  AGENT_EVENT_MONITOR_ENABLED: '事件监控',
+  AGENT_EVENT_MONITOR_INTERVAL_MINUTES: '监控间隔（分钟）',
+  AGENT_EVENT_ALERT_RULES_JSON: '事件告警规则 JSON',
+  // 视觉模型
+  VISION_PROVIDER_PRIORITY: '视觉模型优先级',
+  // Gemini 扩展
+  GEMINI_REQUEST_DELAY: 'Gemini 请求间隔（秒）',
+  GEMINI_MAX_RETRIES: 'Gemini 最大重试',
+  GEMINI_RETRY_DELAY: 'Gemini 重试延迟（秒）',
+  // 社交情绪
+  SOCIAL_SENTIMENT_API_KEY: '社交情绪 API Key',
+  SOCIAL_SENTIMENT_API_URL: '社交情绪 API URL',
+  // 调度扩展
+  SCHEDULE_ENABLED: '启用定时任务',
+  SCHEDULE_RUN_IMMEDIATELY: '启动时立即执行',
+  RUN_IMMEDIATELY: '立即运行一次',
+  MARKET_REVIEW_ENABLED: '市场复盘',
+  MARKET_REVIEW_REGION: '市场复盘区域',
+  TRADING_DAY_CHECK_ENABLED: '交易日检查',
+  // 系统扩展
+  HTTPS_PROXY: 'HTTPS 代理',
+  LOG_DIR: '日志目录',
+  DEBUG: '调试模式',
+  ADMIN_AUTH_ENABLED: '启用管理认证',
+  DATABASE_PATH: '数据库路径',
+  CONFIG_VALIDATE_MODE: '配置验证模式',
+  PYTDX_HOST: 'Pytdx 服务器',
+  PYTDX_PORT: 'Pytdx 端口',
+  PYTDX_SERVERS: 'Pytdx 服务器列表',
 }
 const fieldDescMap = {
   STOCK_LIST: '使用逗号分隔股票代码，例如：600519,300750。',
@@ -496,6 +732,118 @@ const fieldDescMap = {
   BACKTEST_MIN_AGE_DAYS: '仅回测早于该天数的分析记录。',
   BACKTEST_ENGINE_VERSION: '回测引擎版本标识，用于区分结果版本。',
   BACKTEST_NEUTRAL_BAND_PCT: '中性区间阈值百分比，例如 2 表示 -2%~+2%。',
+  // 报告
+  REPORT_TYPE: '默认报告类型：brief / detailed。',
+  REPORT_LANGUAGE: '报告语言：zh（中文） / en（英文） / auto（自动检测）。',
+  REPORT_TEMPLATES_DIR: '自定义 Jinja2 报告模板所在目录。',
+  REPORT_RENDERER_ENABLED: '启用服务端报告渲染器。',
+  REPORT_INTEGRITY_ENABLED: '启用报告完整性校验，确保关键字段不为空。',
+  REPORT_INTEGRITY_RETRY: '完整性校验失败时的最大重试次数。',
+  REPORT_HISTORY_COMPARE_N: '生成报告时对比的历史报告数量。',
+  // Telegram
+  TELEGRAM_BOT_TOKEN: 'Telegram Bot Token，从 @BotFather 获取。',
+  TELEGRAM_CHAT_ID: '目标 Chat ID（群组或个人）。',
+  TELEGRAM_MESSAGE_THREAD_ID: '话题群组的线程 ID（可选）。',
+  TELEGRAM_WEBHOOK_SECRET: 'Telegram Webhook 回调签名密钥。',
+  // Email
+  EMAIL_SENDER: '发件人邮箱地址。',
+  EMAIL_SENDER_NAME: '邮件显示的发件人名称。',
+  EMAIL_PASSWORD: 'SMTP 授权码或邮箱密码。',
+  EMAIL_RECEIVERS: '收件人邮箱列表，逗号分隔。',
+  // Discord
+  DISCORD_BOT_TOKEN: 'Discord Bot Token，从 Developer Portal 获取。',
+  DISCORD_WEBHOOK_URL: 'Discord 频道 Webhook URL。',
+  // Slack
+  SLACK_WEBHOOK_URL: 'Slack Incoming Webhook URL。',
+  SLACK_BOT_TOKEN: 'Slack Bot OAuth Token。',
+  SLACK_CHANNEL_ID: '目标 Slack 频道 ID。',
+  // 飞书扩展
+  FEISHU_VERIFICATION_TOKEN: '飞书事件回调验证 Token。',
+  FEISHU_ENCRYPT_KEY: '飞书事件订阅加密密钥。',
+  FEISHU_STREAM_ENABLED: '启用飞书长连接事件流模式。',
+  FEISHU_FOLDER_TOKEN: '飞书云文档目标文件夹 Token。',
+  FEISHU_MAX_BYTES: '飞书单条消息最大字节数。',
+  // 钉钉
+  DINGTALK_STREAM_ENABLED: '启用钉钉 Stream 事件流模式。',
+  // 企业微信
+  WECOM_CORPID: '企业微信企业 ID。',
+  WECOM_TOKEN: '企业微信应用回调 Token。',
+  WECOM_ENCODING_AES_KEY: '企业微信应用回调加密密钥。',
+  WECOM_AGENT_ID: '企业微信应用 Agent ID。',
+  WECHAT_MAX_BYTES: '微信消息最大字节数。',
+  WECHAT_MSG_TYPE: '微信消息格式：text / markdown。',
+  // PushPlus / PushOver / ServerChan
+  PUSHPLUS_TOPIC: 'PushPlus 群组推送话题 ID。',
+  PUSHOVER_USER_KEY: 'Pushover User Key，从 Dashboard 获取。',
+  PUSHOVER_API_TOKEN: 'Pushover Application API Token。',
+  SERVERCHAN3_SENDKEY: 'Server酱 V3 SendKey。',
+  // 自定义 Webhook
+  CUSTOM_WEBHOOK_URLS: '自定义 Webhook 地址，逗号分隔。',
+  CUSTOM_WEBHOOK_BEARER_TOKEN: '自定义 Webhook Bearer Token 认证。',
+  WEBHOOK_VERIFY_SSL: '发送 Webhook 时是否验证 SSL 证书。',
+  // AstrBot
+  ASTRBOT_TOKEN: 'AstrBot 认证 Token。',
+  ASTRBOT_URL: 'AstrBot 服务地址。',
+  // 通知行为
+  SINGLE_STOCK_NOTIFY: '启用后每只股票单独发送一条通知。',
+  ANALYSIS_DELAY: '每支股票分析之间的延迟（秒）。',
+  MERGE_EMAIL_NOTIFICATION: '将多只股票分析合并为一封邮件发送。',
+  MARKDOWN_TO_IMAGE_CHANNELS: '自动将 Markdown 转为图片的通知渠道列表。',
+  MARKDOWN_TO_IMAGE_MAX_CHARS: '超过此字符数时自动转为图片。',
+  MD2IMG_ENGINE: 'Markdown 转图引擎：playwright / imgkit。',
+  DISCORD_MAX_WORDS: 'Discord 单条消息最大字数限制。',
+  // Longbridge
+  LONGBRIDGE_APP_KEY: 'Longbridge OpenAPI App Key。',
+  LONGBRIDGE_APP_SECRET: 'Longbridge OpenAPI App Secret。',
+  LONGBRIDGE_ACCESS_TOKEN: 'Longbridge OpenAPI Access Token。',
+  // 实时数据扩展
+  ENABLE_EASTMONEY_PATCH: '启用东方财富增强数据补丁。',
+  REALTIME_CACHE_TTL: '实时行情缓存有效期（秒）。',
+  CIRCUIT_BREAKER_COOLDOWN: '数据源熔断冷却时间（秒）。',
+  PREFETCH_REALTIME_QUOTES: '分析前预取实时行情数据。',
+  // 基本面管线
+  ENABLE_FUNDAMENTAL_PIPELINE: '启用基本面数据获取管线。',
+  FUNDAMENTAL_STAGE_TIMEOUT_SECONDS: '管线每阶段超时时间（秒）。',
+  FUNDAMENTAL_FETCH_TIMEOUT_SECONDS: '单次数据请求超时时间（秒）。',
+  FUNDAMENTAL_RETRY_MAX: '数据获取失败时最大重试次数。',
+  FUNDAMENTAL_CACHE_TTL_SECONDS: '基本面数据缓存有效期（秒）。',
+  FUNDAMENTAL_CACHE_MAX_ENTRIES: '基本面缓存最大条目数。',
+  // 组合风控
+  PORTFOLIO_RISK_CONCENTRATION_ALERT_PCT: '单一持仓占比超过此阈值时触发预警。',
+  PORTFOLIO_RISK_DRAWDOWN_ALERT_PCT: '组合最大回撤超过此阈值时触发预警。',
+  PORTFOLIO_RISK_STOP_LOSS_ALERT_PCT: '止损位触发预警的百分比阈值。',
+  PORTFOLIO_RISK_STOP_LOSS_NEAR_RATIO: '价格接近止损位时的预警比率。',
+  PORTFOLIO_RISK_LOOKBACK_DAYS: '风控回溯计算的天数。',
+  PORTFOLIO_FX_UPDATE_ENABLED: '启用港股/美股汇率自动更新。',
+  // Agent 扩展
+  AGENT_NL_ROUTING: '启用自然语言智能路由匹配策略。',
+  AGENT_DEEP_RESEARCH_BUDGET: '深度研究模式的 Token 预算上限。',
+  AGENT_DEEP_RESEARCH_TIMEOUT: '深度研究模式的执行超时（秒）。',
+  AGENT_EVENT_MONITOR_ENABLED: '启用事件监控，自动检测重大市场事件。',
+  AGENT_EVENT_MONITOR_INTERVAL_MINUTES: '事件监控检查间隔（分钟）。',
+  AGENT_EVENT_ALERT_RULES_JSON: '事件告警规则 JSON 配置。',
+  // 视觉
+  VISION_PROVIDER_PRIORITY: '视觉模型供应商优先级，逗号分隔。',
+  // Gemini 扩展
+  GEMINI_REQUEST_DELAY: 'Gemini API 请求间隔（秒），防限流。',
+  GEMINI_MAX_RETRIES: 'Gemini API 最大重试次数。',
+  GEMINI_RETRY_DELAY: 'Gemini API 重试间隔（秒）。',
+  // 社交情绪
+  SOCIAL_SENTIMENT_API_KEY: '社交情绪分析 API 密钥。',
+  SOCIAL_SENTIMENT_API_URL: '社交情绪分析 API 地址。',
+  // 调度
+  SCHEDULE_ENABLED: '是否启用定时任务调度器。',
+  SCHEDULE_RUN_IMMEDIATELY: '应用启动时立即执行一次分析。',
+  RUN_IMMEDIATELY: '强制立即运行一次分析。',
+  MARKET_REVIEW_ENABLED: '启用每日市场复盘功能。',
+  MARKET_REVIEW_REGION: '市场复盘区域：cn（A股） / us（美股） / hk（港股）。',
+  TRADING_DAY_CHECK_ENABLED: '启用交易日检查，非交易日跳过定时任务。',
+  // 系统
+  HTTPS_PROXY: 'HTTPS 代理地址，可留空。',
+  LOG_DIR: '日志文件存储目录。',
+  DEBUG: '启用调试模式，输出详细日志。',
+  DATABASE_PATH: 'SQLite 数据库文件路径。',
+  CONFIG_VALIDATE_MODE: '配置验证模式：strict / warn / off。',
 }
 
 function getFieldTitle(key, fallback) {
@@ -569,6 +917,8 @@ const isSaving = ref(false)
 const channels = ref([])
 const channelsDirty = ref(false)
 const isSavingChannels = ref(false)
+const expandedChannels = reactive({})
+const addPresetKey = ref('')
 
 // toast
 const toast = ref(null)
@@ -632,6 +982,8 @@ const filteredActiveItems = computed(() => {
     const hasChannels = Boolean((rawMap.get('LLM_CHANNELS') || '').trim())
     const hasLitellmConfig = Boolean((rawMap.get('LITELLM_CONFIG') || '').trim())
     return raw.filter(item => {
+      // 已在 AI 编辑器中手动管理的 key
+      if (AI_MODEL_MANAGED_KEYS.has(item.key)) return false
       if (hasChannels && LLM_CHANNEL_KEY_RE.test(item.key)) return false
       if (hasChannels && !hasLitellmConfig && AI_MODEL_HIDDEN_KEYS.has(item.key)) return false
       return true
@@ -641,38 +993,56 @@ const filteredActiveItems = computed(() => {
 })
 
 // 导航栏分类
-const allCategories = computed(() => {
-  const localCats = [
-    { key: 'local', title: '本地设置', description: '工作区、主题与标签页配置。', count: 0 },
-    { key: 'dsa_service', title: 'DSA 服务', description: '后端服务连接与启停管理。', count: 0 },
-  ]
+const categoryIconMap = {
+  local: '⚙️',
+  dsa_service: '🔌',
+  base: '📋',
+  ai_model: '🧠',
+  data_source: '📊',
+  notification: '🔔',
+  system: '🛠️',
+  agent: '🤖',
+  backtest: '📈',
+  uncategorized: '📦',
+}
+
+const localCategories = computed(() => [
+  { key: 'local', icon: '⚙️', title: '本地设置', description: '工作区、主题与标签页配置。', count: 0 },
+  { key: 'dsa_service', icon: '🔌', title: 'DSA 服务', description: '后端服务连接与启停管理。', count: 0 },
+])
+
+const dsaCategories = computed(() => {
   if (!dsaServerRunning.value || dsaItems.value.length === 0) {
-    // 仍显示 DSA 分类但无计数
-    const dsaCats = DSA_CATEGORIES.filter(c => c !== 'uncategorized').map(c => ({
+    return DSA_CATEGORIES.filter(c => c !== 'uncategorized').map(c => ({
       key: c,
+      icon: categoryIconMap[c] || '📦',
       title: categoryTitleMap[c] || c,
       description: categoryDescMap[c] || '',
       count: 0,
     }))
-    return [...localCats, ...dsaCats]
   }
-  const dsaCats = []
+  const cats = []
   for (const cat of DSA_CATEGORIES) {
     const items = itemsByCategory.value[cat]
     if (!items || items.length === 0) continue
-    dsaCats.push({
+    cats.push({
       key: cat,
+      icon: categoryIconMap[cat] || '📦',
       title: categoryTitleMap[cat] || cat,
       description: categoryDescMap[cat] || '',
       count: items.length,
     })
   }
-  return [...localCats, ...dsaCats]
+  return cats
 })
 
+const allCategories = computed(() => [
+  ...localCategories.value,
+  ...dsaCategories.value,
+])
+
 const currentCategoryTitle = computed(() => {
-  if (activeCategory.value === 'ai_model') return '当前分类配置项'
-  return '当前分类配置项'
+  return categoryTitleMap[activeCategory.value] || '当前分类配置项'
 })
 const currentCategoryDesc = computed(() => {
   return categoryDescMap[activeCategory.value] || '使用统一字段卡片维护当前分类的系统配置。'
@@ -924,6 +1294,99 @@ async function saveDsaBackendConfig() {
 }
 
 // =============================
+// 配置导入/导出
+// =============================
+async function exportConfig() {
+  if (dsaItems.value.length === 0) return
+  // 构建 .env 格式内容
+  const lines = []
+  lines.push(`# Prophet DSA Config Export`)
+  lines.push(`# ${new Date().toISOString()}`)
+  lines.push('')
+  for (const item of dsaItems.value) {
+    const val = getDraftValue(item.key)
+    if (item.schema?.isSensitive && val === dsaMaskToken.value) continue
+    lines.push(`${item.key}=${val}`)
+  }
+  const content = lines.join('\n')
+  if (window.electronAPI?.exportConfig) {
+    const result = await window.electronAPI.exportConfig(content, 'prophet-config.env')
+    if (result.success) {
+      showToast('success', '配置已导出')
+    } else if (result.error) {
+      showToast('error', `导出失败: ${result.error}`)
+    }
+  } else {
+    // 浏览器模式降级：下载文件
+    const blob = new Blob([content], { type: 'text/plain' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'prophet-config.env'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    showToast('success', '配置已导出')
+  }
+}
+
+async function importConfig() {
+  let content = ''
+  let fileName = ''
+
+  if (window.electronAPI?.importConfig) {
+    const result = await window.electronAPI.importConfig()
+    if (!result.success) return
+    content = result.content
+    fileName = result.path
+  } else {
+    // 浏览器模式降级：使用 file input
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.env,.json'
+    const file = await new Promise(resolve => {
+      input.onchange = () => resolve(input.files[0])
+      input.click()
+    })
+    if (!file) return
+    content = await file.text()
+    fileName = file.name
+  }
+
+  // 解析 .env 格式
+  const items = []
+  const existingKeys = new Set(dsaItems.value.map(i => i.key))
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx <= 0) continue
+    const key = trimmed.substring(0, eqIdx).trim()
+    const val = trimmed.substring(eqIdx + 1).trim()
+    if (existingKeys.has(key)) {
+      items.push({ key, value: val })
+    }
+  }
+
+  if (items.length === 0) {
+    showToast('error', '未找到可导入的配置项')
+    return
+  }
+
+  const ok = await showConfirm(
+    '导入配置',
+    `将从文件导入 ${items.length} 项配置，已有值将被覆盖。确定继续？`,
+    '导入',
+    '取消'
+  )
+  if (!ok) return
+
+  // 写入 draft
+  for (const { key, value } of items) {
+    draftValues[key] = value
+  }
+  showToast('success', `已导入 ${items.length} 项配置，请点击「保存配置」生效`)
+}
+
+// =============================
 // LLM 渠道管理
 // =============================
 function parseChannels() {
@@ -966,6 +1429,7 @@ function parseChannels() {
 }
 
 function addChannel() {
+  const newIdx = channels.value.length
   channels.value.push(reactive({
     name: '',
     preset: 'custom',
@@ -979,11 +1443,43 @@ function addChannel() {
     discovering: false,
     testResult: null,
   }))
+  expandedChannels[newIdx] = true
   channelsDirty.value = true
+}
+
+function addChannelFromPreset() {
+  const pk = addPresetKey.value
+  if (!pk) return
+  const preset = channelPresets[pk]
+  if (!preset) return
+  const newIdx = channels.value.length
+  channels.value.push(reactive({
+    name: pk,
+    preset: pk,
+    protocol: preset.protocol,
+    baseUrl: preset.baseUrl,
+    apiKey: '',
+    models: '',
+    enabled: true,
+    showKey: false,
+    testing: false,
+    discovering: false,
+    testResult: null,
+  }))
+  expandedChannels[newIdx] = true
+  channelsDirty.value = true
+  addPresetKey.value = ''
 }
 
 function removeChannel(idx) {
   channels.value.splice(idx, 1)
+  // re-index expandedChannels
+  const updated = {}
+  for (let i = 0; i < channels.value.length; i++) {
+    updated[i] = i < idx ? !!expandedChannels[i] : !!expandedChannels[i + 1]
+  }
+  Object.keys(expandedChannels).forEach(k => delete expandedChannels[k])
+  Object.assign(expandedChannels, updated)
   channelsDirty.value = true
 }
 
@@ -1000,6 +1496,80 @@ function onChannelPresetChange(idx) {
 function markChannelsDirty() {
   channelsDirty.value = true
 }
+
+function toggleChannelExpand(idx) {
+  expandedChannels[idx] = !expandedChannels[idx]
+}
+
+function protocolLabel(protocol) {
+  const match = protocolOptions.find(p => p.value === protocol)
+  return match ? match.label : protocol
+}
+
+function channelModelCount(ch) {
+  if (!ch.models) return 0
+  return ch.models.split(',').filter(m => m.trim()).length
+}
+
+function channelStatusClass(ch) {
+  if (!ch.apiKey) return 'status-warn'
+  if (ch.testResult?.ok) return 'status-ok'
+  if (ch.testResult && !ch.testResult.ok) return 'status-error'
+  return 'status-idle'
+}
+
+const enabledChannelCount = computed(() => channels.value.filter(c => c.enabled).length)
+
+// 备选模型多选辅助
+function isFallbackSelected(modelValue) {
+  const current = getDraftValue('LITELLM_FALLBACK_MODELS') || ''
+  const list = current.split(',').map(m => m.trim()).filter(Boolean)
+  return list.includes(modelValue)
+}
+
+function toggleFallbackModel(modelValue, checked) {
+  const current = getDraftValue('LITELLM_FALLBACK_MODELS') || ''
+  const list = current.split(',').map(m => m.trim()).filter(Boolean)
+  if (checked) {
+    if (!list.includes(modelValue)) list.push(modelValue)
+  } else {
+    const idx = list.indexOf(modelValue)
+    if (idx >= 0) list.splice(idx, 1)
+  }
+  setDraft('LITELLM_FALLBACK_MODELS', list.join(','))
+}
+
+// 运行时参数：在 dsaItems 中查找单个 key
+function findDsaItem(key) {
+  return (dsaItems.value || []).find(i => i.key === key)
+}
+
+const temperatureDisplay = computed(() => {
+  const v = getDraftValue('LLM_TEMPERATURE')
+  return v !== undefined && v !== '' ? parseFloat(v).toFixed(1) : '0.7'
+})
+
+// 从已配置渠道中收集所有可用模型（protocol/model 格式）
+const allChannelModels = computed(() => {
+  const result = []
+  for (const ch of channels.value) {
+    if (!ch.models) continue
+    const models = ch.models.split(',').map(m => m.trim()).filter(Boolean)
+    const protocol = ch.protocol || 'openai'
+    for (const model of models) {
+      // 如果模型已包含 / 前缀则原样使用，否则加上 protocol/
+      const fullName = model.includes('/') ? model : `${protocol}/${model}`
+      result.push({ label: `${model}  (${ch.name})`, value: fullName })
+    }
+  }
+  return result
+})
+
+// 这些 key 已在 AI 模型编辑器中手动管理，不再显示在通用字段列表中
+const AI_MODEL_MANAGED_KEYS = new Set([
+  'LITELLM_MODEL', 'AGENT_LITELLM_MODEL', 'LITELLM_FALLBACK_MODELS',
+  'VISION_MODEL', 'LLM_TEMPERATURE', 'LITELLM_CONFIG',
+])
 
 async function saveChannels() {
   isSavingChannels.value = true
@@ -1049,13 +1619,14 @@ async function testChannel(idx) {
     const resp = await fetch(`${baseUrl.value}/api/v1/system/config/llm/test-channel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toSnake({
-        channelName: ch.name,
+      body: JSON.stringify({
+        name: ch.name,
         protocol: ch.protocol,
-        baseUrl: ch.baseUrl,
-        apiKey: ch.apiKey,
-        models: ch.models,
-      })),
+        base_url: ch.baseUrl,
+        api_key: ch.apiKey,
+        models: ch.models ? ch.models.split(',').map(m => m.trim()).filter(Boolean) : [],
+        enabled: ch.enabled,
+      }),
     })
     const data = toCamel(await resp.json())
     ch.testResult = {
@@ -1077,12 +1648,12 @@ async function discoverModels(idx) {
     const resp = await fetch(`${baseUrl.value}/api/v1/system/config/llm/discover-models`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toSnake({
-        channelName: ch.name,
+      body: JSON.stringify({
+        name: ch.name,
         protocol: ch.protocol,
-        baseUrl: ch.baseUrl,
-        apiKey: ch.apiKey,
-      })),
+        base_url: ch.baseUrl,
+        api_key: ch.apiKey,
+      }),
     })
     const data = toCamel(await resp.json())
     if (data.models && data.models.length > 0) {
@@ -1226,10 +1797,21 @@ watch(activeCategory, (cat) => {
   min-width: 240px;
   border-right: 1px solid #333;
   overflow-y: auto;
-  padding: 12px 0;
+  padding: 8px 0;
   flex-shrink: 0;
 }
+.nav-group-label {
+  padding: 12px 16px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  letter-spacing: 0.5px;
+}
 .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 16px;
   cursor: pointer;
   border-left: 3px solid transparent;
@@ -1242,6 +1824,16 @@ watch(activeCategory, (cat) => {
 .nav-item.active {
   background: rgba(74, 158, 255, 0.08);
   border-left-color: #4a9eff;
+}
+.nav-icon {
+  font-size: 16px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.nav-text {
+  flex: 1;
+  min-width: 0;
 }
 .nav-title {
   font-size: 13px;
@@ -1470,30 +2062,134 @@ watch(activeCategory, (cat) => {
 }
 
 /* 渠道编辑器 */
+.llm-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.llm-group {
+  background: #252526;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 14px;
+}
+.llm-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ddd;
+  margin-bottom: 10px;
+}
+.channel-add-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.channel-add-select {
+  width: 200px;
+}
+.channel-count-badge {
+  margin-left: auto;
+  font-size: 12px;
+  color: #888;
+  background: #333;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.channel-empty-hint {
+  font-size: 13px;
+  color: #666;
+  padding: 8px 0;
+}
 .channels-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 .channel-card {
   background: #1e1e1e;
   border: 1px solid #3a3a3a;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
+  transition: border-color 0.2s;
 }
-.channel-header {
+.channel-card.expanded {
+  border-color: #4a9eff;
+}
+.channel-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: #2a2a2a;
-  border-bottom: 1px solid #3a3a3a;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
 }
-.channel-preset-select {
-  flex: 1;
+.channel-row:hover {
+  background: #2a2a2a;
+}
+.channel-expand-arrow {
+  font-size: 10px;
+  color: #666;
+  transition: transform 0.2s;
+  display: inline-block;
+  width: 14px;
+  flex-shrink: 0;
+}
+.channel-expand-arrow.open {
+  transform: rotate(90deg);
+}
+.channel-enable-check {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.channel-enable-check input[type="checkbox"] {
+  margin: 0;
+}
+.channel-row-name {
+  font-size: 13px;
+  color: #ddd;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.channel-row-badge {
+  font-size: 11px;
+  color: #999;
+  background: #333;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.channel-row-models {
+  font-size: 11px;
+  color: #777;
+  flex-shrink: 0;
+}
+.channel-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.channel-status-dot.status-ok { background: #2ea043; }
+.channel-status-dot.status-error { background: #da3633; }
+.channel-status-dot.status-warn { background: #d29922; }
+.channel-status-dot.status-idle { background: #555; }
+.channel-row-warn {
+  font-size: 11px;
+  color: #d29922;
+  flex-shrink: 0;
+}
+.channel-row-delete {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .channel-body {
   padding: 12px;
+  border-top: 1px solid #3a3a3a;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1519,11 +2215,85 @@ watch(activeCategory, (cat) => {
 .test-result.error {
   color: #da3633;
 }
-.add-channel-btn {
-  align-self: flex-start;
-}
 .channel-save-row {
+  margin-top: 4px;
+}
+/* 运行时参数 */
+.runtime-params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.temperature-field {
   margin-top: 12px;
+}
+.temperature-value {
+  font-size: 13px;
+  color: #4a9eff;
+  font-weight: 600;
+  margin-left: auto;
+}
+.temperature-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #2ea043, #d29922, #da3633);
+  outline: none;
+  margin: 8px 0 4px;
+}
+.temperature-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #4a9eff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.temperature-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #4a9eff;
+  cursor: pointer;
+}
+.temperature-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #666;
+}
+/* 备选模型多选 */
+.fallback-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+}
+.fallback-model-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.fallback-model-option input[type="checkbox"] {
+  margin: 0;
+}
+.fallback-model-option:hover {
+  color: #fff;
 }
 
 /* 空状态 / 加载 / 错误 */

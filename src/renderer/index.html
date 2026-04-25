@@ -869,6 +869,42 @@
       color: #f48771;
     }
 
+    /* 会话搜索 */
+    .agent-sessions-search {
+      padding: 6px 8px;
+      border-bottom: 1px solid #2d2d2d;
+      flex-shrink: 0;
+    }
+
+    .agent-sessions-search-input {
+      width: 100%;
+      padding: 4px 8px;
+      background: #2d2d2d;
+      border: 1px solid #3d3d3d;
+      border-radius: 4px;
+      color: #ccc;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .agent-sessions-search-input:focus {
+      border-color: #0e639c;
+    }
+
+    .agent-sessions-search-input::placeholder {
+      color: #555;
+    }
+
+    /* 会话分组 */
+    .agent-session-group-label {
+      padding: 8px 8px 4px;
+      font-size: 10px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-weight: 600;
+    }
+
     /* 聊天消息 */
     .agent-msg {
       margin-bottom: 12px;
@@ -1568,6 +1604,9 @@
             <span>历史会话</span>
             <button class="agent-header-btn" id="agent-sessions-close" title="关闭">✕</button>
           </div>
+          <div class="agent-sessions-search">
+            <input type="text" id="agent-sessions-search-input" class="agent-sessions-search-input" placeholder="搜索会话..." />
+          </div>
           <div class="agent-sessions-list" id="agent-sessions-list"></div>
         </div>
         <div class="agent-panel-body">
@@ -1577,10 +1616,7 @@
               <div>向 AI 询问个股分析</div>
               <div style="font-size:11px;color:#555;margin-top:4px;">获取基于技能视角的交易建议与实时决策报告</div>
               <div class="agent-quick-questions" id="agent-quick-questions">
-                <button class="agent-quick-btn" data-msg="用缠论分析茅台" data-skill="chan_theory">🔮 用缠论分析茅台</button>
-                <button class="agent-quick-btn" data-msg="波浪理论看宁德时代" data-skill="wave_theory">🌊 波浪理论看宁德时代</button>
-                <button class="agent-quick-btn" data-msg="分析比亚迪趋势" data-skill="bull_trend">📈 分析比亚迪趋势</button>
-                <button class="agent-quick-btn" data-msg="分析贵州茅台最新舆情" data-skill="">📰 分析贵州茅台最新舆情</button>
+                <!-- Dynamic quick questions populated from skills API -->
               </div>
             </div>
           </div>

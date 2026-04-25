@@ -79,7 +79,7 @@
       <!-- 内容区 -->
       <div class="content-area">
         <!-- 欢迎页 -->
-        <div v-if="!reportHtml && !analyzing" class="welcome">
+        <div v-if="!reportData && !analyzing" class="welcome">
           <div class="welcome-icon">📊</div>
           <h2>股票智能分析</h2>
           <p>输入股票代码或名称，AI 将从技术面、基本面、舆情等多维度进行深度分析</p>
@@ -112,7 +112,7 @@
         </div>
 
         <!-- 分析报告 -->
-        <div v-if="reportHtml && !analyzing" class="report-container">
+        <div v-if="reportData && !analyzing" class="report-container">
           <div class="report-header">
             <h2>
               {{ reportStockCode }}
@@ -120,7 +120,29 @@
             </h2>
             <span class="report-time" v-if="reportTime">{{ reportTime }}</span>
           </div>
-          <div class="report-body" v-html="reportHtml"></div>
+          <ReportOverview
+            :meta="reportData.meta"
+            :summary="reportData.summary"
+            :conclusion="reportData.conclusion"
+          />
+          <StrategyGrid
+            :strategy="reportData.strategyPoints"
+            :battle-plan="reportData.battlePlan"
+          />
+          <ReportNews :items="newsItems" />
+          <div class="report-sections">
+            <CollapsiblePanel
+              v-for="section in reportSections"
+              :key="section.key"
+              :title="section.title"
+              :default-open="section.defaultOpen !== false"
+            >
+              <div class="report-body" v-html="section.html"></div>
+            </CollapsiblePanel>
+          </div>
+          <div class="report-footer" v-if="reportData.metaInfo">
+            <span class="meta-text">{{ reportData.metaInfo }}</span>
+          </div>
         </div>
 
         <!-- 错误提示 -->
@@ -137,12 +159,37 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import python from 'highlight.js/lib/languages/python'
+import json from 'highlight.js/lib/languages/json'
+import bash from 'highlight.js/lib/languages/bash'
+import sql from 'highlight.js/lib/languages/sql'
+import 'highlight.js/styles/github-dark.css'
+
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('sql', sql)
+import ReportOverview from './components/report/ReportOverview.vue'
+import StrategyGrid from './components/report/StrategyGrid.vue'
+import CollapsiblePanel from './components/report/CollapsiblePanel.vue'
+import ReportNews from './components/report/ReportNews.vue'
 
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   typographer: true,
-  breaks: true
+  breaks: true,
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return '<pre class="hljs"><code>' + hljs.highlight(str, { language: lang }).value + '</code></pre>'
+      } catch (_) { /* ignore */ }
+    }
+    return ''
+  }
 })
 
 // 状态
@@ -157,6 +204,9 @@ const currentProgress = ref(0)
 const currentMessage = ref('')
 const currentTaskId = ref('')
 const reportHtml = ref('')
+const reportData = ref(null)
+const reportSections = ref([])
+const newsItems = ref([])
 const reportStockCode = ref('')
 const reportStockName = ref('')
 const reportTime = ref('')
@@ -273,7 +323,9 @@ async function handleAnalyze() {
   currentProgress.value = 0
   currentMessage.value = '提交分析请求...'
   errorMsg.value = ''
-  reportHtml.value = ''
+  reportData.value = null
+  reportSections.value = []
+  newsItems.value = []
 
   try {
     const resp = await fetch(`${getBaseUrl()}/api/v1/analysis/analyze`, {
@@ -373,6 +425,7 @@ function connectSSE() {
           const reportData = await resp.json()
           analyzing.value = false
           renderReport(reportData)
+          fetchNews(data.task_id)
         } else {
           analyzing.value = false
           errorMsg.value = '加载报告失败'
@@ -407,6 +460,23 @@ function connectSSE() {
   }
 }
 
+// 获取新闻资讯
+async function fetchNews(taskId) {
+  newsItems.value = []
+  if (!taskId || serviceStatus.value !== 'connected') return
+  try {
+    const resp = await fetch(`${getBaseUrl()}/api/v1/history/${taskId}/news?limit=10`, {
+      signal: AbortSignal.timeout(5000)
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      newsItems.value = data.items || []
+    }
+  } catch {
+    // 新闻获取失败不影响主报告展示
+  }
+}
+
 // 渲染报告
 // /api/v1/history/{task_id} 返回: { meta, summary, strategy, details }
 // details.raw_result 包含 LLM 原始输出（dashboard、各类分析文本等）
@@ -422,79 +492,43 @@ function renderReport(data) {
   reportStockName.value = meta.stock_name || raw.name || currentStockName.value
   reportTime.value = meta.created_at ? formatTime(meta.created_at) : ''
 
-  const lines = []
-
-  // 核心结论
-  const conclusion = dashboard.core_conclusion
-  if (conclusion) {
-    if (conclusion.one_sentence) {
-      lines.push(`> ${conclusion.signal_type || ''} **${conclusion.one_sentence}**`)
-      if (conclusion.time_sensitivity) lines.push(`> 时效性: ${conclusion.time_sensitivity}`)
-      lines.push('')
-    }
-    if (conclusion.position_advice) {
-      const pa = conclusion.position_advice
-      if (pa.no_position) lines.push(`- **空仓建议**: ${pa.no_position}`)
-      if (pa.has_position) lines.push(`- **持仓建议**: ${pa.has_position}`)
-      lines.push('')
-    }
-  }
-
-  // 分析摘要
-  const summaryText = summary.analysis_summary || raw.analysis_summary
-  if (summaryText) {
-    lines.push('## 📋 分析摘要\n')
-    lines.push(summaryText + '\n')
-  }
-
-  // 评分标签
-  const tags = []
-  const advice = summary.operation_advice || raw.operation_advice
-  const trend = summary.trend_prediction || raw.trend_prediction
-  const score = summary.sentiment_score != null ? summary.sentiment_score : raw.sentiment_score
-  const label = summary.sentiment_label || raw.confidence_level
-  if (advice) tags.push(`**操作建议**: ${advice}`)
-  if (trend) tags.push(`**趋势判断**: ${trend}`)
-  if (score != null) tags.push(`**情绪评分**: ${score}/100`)
-  if (label) tags.push(`**信心**: ${label}`)
-  if (tags.length > 0) {
-    lines.push(tags.join(' | ') + '\n')
-  }
-
-  // 策略点位
   const st = strategy.ideal_buy ? strategy : (dashboard.battle_plan?.sniper_points || {})
-  if (st.ideal_buy || st.secondary_buy || st.stop_loss || st.take_profit) {
-    lines.push('## 🎯 策略点位\n')
-    lines.push('| 项目 | 价位 |')
-    lines.push('|------|------|')
-    if (st.ideal_buy) lines.push(`| 理想买入 | ${st.ideal_buy} |`)
-    if (st.secondary_buy) lines.push(`| 第二买入 | ${st.secondary_buy} |`)
-    if (st.stop_loss) lines.push(`| 止损位 | ${st.stop_loss} |`)
-    if (st.take_profit) lines.push(`| 止盈位 | ${st.take_profit} |`)
-    lines.push('')
+
+  // 构建元信息
+  const metaParts = []
+  if (meta.report_type) metaParts.push(`报告类型: ${meta.report_type}`)
+  if (meta.model_used) metaParts.push(`模型: ${meta.model_used}`)
+  if (meta.current_price != null) metaParts.push(`当前价: ${meta.current_price}`)
+  if (meta.change_pct != null) metaParts.push(`涨跌幅: ${meta.change_pct}%`)
+
+  // 结构化数据供组件使用
+  reportData.value = {
+    meta: {
+      ...meta,
+      current_price: meta.current_price,
+      change_pct: meta.change_pct
+    },
+    summary: {
+      ...summary,
+      operation_advice: summary.operation_advice || raw.operation_advice,
+      trend_prediction: summary.trend_prediction || raw.trend_prediction,
+      sentiment_score: summary.sentiment_score != null ? summary.sentiment_score : raw.sentiment_score,
+      sentiment_label: summary.sentiment_label || raw.confidence_level,
+      analysis_summary: summary.analysis_summary || raw.analysis_summary
+    },
+    conclusion: dashboard.core_conclusion || null,
+    strategyPoints: st,
+    battlePlan: dashboard.battle_plan || {},
+    metaInfo: metaParts.length > 0 ? metaParts.join(' · ') : ''
   }
 
-  // 仓位策略
-  const posStrategy = dashboard.battle_plan?.position_strategy
-  if (posStrategy) {
-    if (posStrategy.suggested_position) lines.push(`- **建议仓位**: ${posStrategy.suggested_position}`)
-    if (posStrategy.entry_plan) lines.push(`- **入场计划**: ${posStrategy.entry_plan}`)
-    if (posStrategy.risk_control) lines.push(`- **风控策略**: ${posStrategy.risk_control}`)
-    lines.push('')
-  }
-
-  // 行动清单
-  const checklist = dashboard.battle_plan?.action_checklist
-  if (checklist && checklist.length > 0) {
-    lines.push('## ✅ 行动清单\n')
-    checklist.forEach((item) => lines.push(`- ${item}`))
-    lines.push('')
-  }
+  // 构建可折叠的详细分析区域
+  const sections = []
 
   // 数据透视
   const dp = dashboard.data_perspective
   if (dp) {
-    lines.push('## 📊 数据透视\n')
+    const lines = []
     if (dp.trend_status) {
       const ts = dp.trend_status
       lines.push(`**趋势**: ${ts.ma_alignment || ''} (强度 ${ts.trend_score || '-'}/100)\n`)
@@ -517,6 +551,9 @@ function renderReport(data) {
       lines.push(`**量能**: ${va.volume_status || ''} (量比 ${va.volume_ratio || '-'}, 换手率 ${va.turnover_rate || '-'}%)\n`)
       if (va.volume_meaning) lines.push(`> ${va.volume_meaning}\n`)
     }
+    if (lines.length > 0) {
+      sections.push({ key: 'data_perspective', title: '📊 数据透视', html: md.render(lines.join('\n')), defaultOpen: true })
+    }
   }
 
   // 详细分析文本（来自 raw_result）
@@ -534,38 +571,28 @@ function renderReport(data) {
   textSections.forEach(({ key, title }) => {
     const text = raw[key]
     if (text && text.trim()) {
-      lines.push(`## ${title}\n`)
-      lines.push(text + '\n')
+      sections.push({ key, title, html: md.render(text), defaultOpen: false })
     }
   })
 
   // 情报汇总
   const intel = dashboard.intelligence
   if (intel) {
+    const lines = []
     if (intel.earnings_outlook) lines.push(`**盈利展望**: ${intel.earnings_outlook}\n`)
     if (intel.sentiment_summary) lines.push(`**情绪总结**: ${intel.sentiment_summary}\n`)
+    if (lines.length > 0) {
+      sections.push({ key: 'intelligence', title: '🔍 情报汇总', html: md.render(lines.join('\n')), defaultOpen: true })
+    }
   }
 
   // 风险提示
   const riskWarning = raw.risk_warning
   if (riskWarning && riskWarning.trim()) {
-    lines.push('## ⚠️ 风险提示\n')
-    lines.push('> ' + riskWarning.replace(/\n/g, '\n> ') + '\n')
+    sections.push({ key: 'risk_warning', title: '⚠️ 风险提示', html: md.render('> ' + riskWarning.replace(/\n/g, '\n> ')), defaultOpen: true })
   }
 
-  // 元信息
-  const metaInfo = []
-  if (meta.report_type) metaInfo.push(`报告类型: ${meta.report_type}`)
-  if (meta.model_used) metaInfo.push(`模型: ${meta.model_used}`)
-  if (meta.current_price != null) metaInfo.push(`当前价: ${meta.current_price}`)
-  if (meta.change_pct != null) metaInfo.push(`涨跌幅: ${meta.change_pct}%`)
-  if (metaInfo.length > 0) {
-    lines.push('---\n')
-    lines.push('*' + metaInfo.join(' · ') + '*\n')
-  }
-
-  const reportContent = lines.join('\n')
-  reportHtml.value = md.render(reportContent || '暂无报告内容')
+  reportSections.value = sections
 
   nextTick(() => {
     const container = document.querySelector('.report-container')
@@ -606,6 +633,7 @@ async function loadTaskResult(task) {
         analyzing.value = false
         errorMsg.value = ''
         renderReport(data)
+        fetchNews(task.task_id)
       }
     } catch (e) {
       errorMsg.value = `加载失败: ${e.message}`
@@ -617,7 +645,9 @@ async function loadTaskResult(task) {
     currentProgress.value = task.progress || 0
     currentMessage.value = task.message || '等待中...'
     analyzing.value = true
-    reportHtml.value = ''
+    reportData.value = null
+    reportSections.value = []
+    newsItems.value = []
   }
 }
 
@@ -1123,7 +1153,7 @@ onUnmounted(() => {
 /* 报告 */
 .report-container {
   padding: 24px 32px;
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -1314,6 +1344,24 @@ onUnmounted(() => {
 
 .retry-btn:hover {
   background: #37373d;
+}
+
+/* 报告区域 */
+.report-sections {
+  margin-top: 16px;
+}
+
+.report-footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #333;
+  text-align: center;
+}
+
+.meta-text {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
 }
 
 /* 滚动条 */

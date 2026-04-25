@@ -1365,6 +1365,46 @@ ipcMain.handle('browse-python-path', async () => {
   return null
 })
 
+// 配置导出
+ipcMain.handle('export-config', async (_event, content, defaultFileName) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '导出配置',
+    defaultPath: defaultFileName || 'prophet-config.env',
+    filters: [
+      { name: 'Env File', extensions: ['env'] },
+      { name: 'JSON File', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+  if (result.canceled || !result.filePath) return { success: false }
+  try {
+    writeFileSync(result.filePath, content, 'utf-8')
+    return { success: true, path: result.filePath }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// 配置导入
+ipcMain.handle('import-config', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '导入配置',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Env File', extensions: ['env'] },
+      { name: 'JSON File', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+  if (result.canceled || result.filePaths.length === 0) return { success: false }
+  try {
+    const content = readFileSync(result.filePaths[0], 'utf-8')
+    return { success: true, content, path: result.filePaths[0] }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
 ipcMain.handle('start-dsa-server', async () => {
   return await startFastApiServer()
 })

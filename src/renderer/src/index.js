@@ -1,4 +1,25 @@
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import python from 'highlight.js/lib/languages/python'
+import json from 'highlight.js/lib/languages/json'
+import bash from 'highlight.js/lib/languages/bash'
+import sql from 'highlight.js/lib/languages/sql'
+import xml from 'highlight.js/lib/languages/xml'
+import css from 'highlight.js/lib/languages/css'
+import 'highlight.js/styles/github-dark.css'
+
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('js', javascript)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('py', python)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('sh', bash)
+hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('html', xml)
+hljs.registerLanguage('xml', xml)
+hljs.registerLanguage('css', css)
 
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
@@ -1246,7 +1267,15 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
     html: false,
     linkify: true,
     typographer: true,
-    breaks: true
+    breaks: true,
+    highlight: function (str, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          return '<pre class="hljs"><code>' + hljs.highlight(str, { language: lang }).value + '</code></pre>'
+        } catch (_) { /* ignore */ }
+      }
+      return ''
+    }
   })
 
   function renderMarkdown(text) {
@@ -1285,10 +1314,50 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
         const data = await resp.json()
         agentSkills = data.skills || []
         renderSkills(data.default_skill_id)
+        renderQuickQuestions()
       }
     } catch {
       // ignore
     }
+  }
+
+  // 技能 → 快速问题示例
+  const skillQuickMap = {
+    chan_theory: { icon: '🔮', stock: '茅台', prefix: '用缠论分析' },
+    wave_theory: { icon: '🌊', stock: '宁德时代', prefix: '波浪理论看' },
+    bull_trend: { icon: '📈', stock: '比亚迪', prefix: '分析趋势：' },
+    box_oscillation: { icon: '📦', stock: '中国平安', prefix: '箱体震荡分析' },
+    shrink_pullback: { icon: '🔻', stock: '招商银行', prefix: '缩量回踩分析' },
+    volume_breakout: { icon: '🚀', stock: '宁德时代', prefix: '放量突破分析' },
+    emotion_cycle: { icon: '🎭', stock: '东方财富', prefix: '情绪周期分析' },
+    dragon_head: { icon: '🐉', stock: '赛力斯', prefix: '龙头战法分析' },
+    ma_golden_cross: { icon: '✨', stock: '贵州茅台', prefix: '均线金叉分析' },
+    bottom_volume: { icon: '📊', stock: '隆基绿能', prefix: '底部放量分析' },
+  }
+  const defaultQuick = { icon: '📋', prefix: '分析' }
+
+  function renderQuickQuestions() {
+    agentQuickQuestions.innerHTML = ''
+    // 从 skills 列表生成，最多取 5 个
+    const list = agentSkills.slice(0, 5)
+    list.forEach(skill => {
+      const qm = skillQuickMap[skill.id] || defaultQuick
+      const stock = qm.stock || '贵州茅台'
+      const msg = `${qm.prefix}${stock}`
+      const btn = document.createElement('button')
+      btn.className = 'agent-quick-btn'
+      btn.dataset.msg = msg
+      btn.dataset.skill = skill.id
+      btn.textContent = `${qm.icon} ${msg}`
+      agentQuickQuestions.appendChild(btn)
+    })
+    // 加一个固定的舆情快捷
+    const newsBtn = document.createElement('button')
+    newsBtn.className = 'agent-quick-btn'
+    newsBtn.dataset.msg = '分析贵州茅台最新舆情'
+    newsBtn.dataset.skill = ''
+    newsBtn.textContent = '📰 分析贵州茅台最新舆情'
+    agentQuickQuestions.appendChild(newsBtn)
   }
 
   function renderSkills(defaultSkillId) {
@@ -1367,6 +1436,9 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
   })
 
   // 获取会话列表
+  let allSessions = []
+  const agentSessionsSearchInput = document.getElementById('agent-sessions-search-input')
+
   async function fetchSessions() {
     try {
       const resp = await fetch(`${getAgentBaseUrl()}/api/v1/agent/chat/sessions?limit=30`, {
@@ -1374,11 +1446,33 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
       })
       if (resp.ok) {
         const data = await resp.json()
-        renderSessions(data.sessions || [])
+        allSessions = data.sessions || []
+        renderSessions(allSessions)
       }
     } catch {
       // ignore
     }
+  }
+
+  // 会话时间分组
+  function groupSessionsByTime(sessions) {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const weekStart = todayStart - (now.getDay() || 7) * 86400000 + 86400000 // 本周一
+    const groups = { today: [], week: [], earlier: [] }
+
+    sessions.forEach(s => {
+      const ts = s.last_active || s.created_at
+      const t = ts ? new Date(ts).getTime() : 0
+      if (t >= todayStart) {
+        groups.today.push(s)
+      } else if (t >= weekStart) {
+        groups.week.push(s)
+      } else {
+        groups.earlier.push(s)
+      }
+    })
+    return groups
   }
 
   function renderSessions(sessions) {
@@ -1387,27 +1481,58 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
       agentSessionsList.innerHTML = '<div style="padding:12px;color:#666;font-size:12px;text-align:center;">暂无历史会话</div>'
       return
     }
-    sessions.forEach(s => {
-      const item = document.createElement('div')
-      item.className = 'agent-session-item' + (s.session_id === agentSessionId ? ' active' : '')
-      item.innerHTML = `
-        <div class="agent-session-title">${escapeHtml(s.title || '未命名会话')}</div>
-        <div class="agent-session-meta">
-          ${s.message_count || 0} 条消息
-          <button class="agent-session-delete" title="删除">✕</button>
-        </div>
-      `
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.agent-session-delete')) return
-        loadSession(s.session_id)
+
+    const groups = groupSessionsByTime(sessions)
+    const groupDefs = [
+      { key: 'today', label: '今天' },
+      { key: 'week', label: '本周' },
+      { key: 'earlier', label: '更早' },
+    ]
+
+    for (const { key, label } of groupDefs) {
+      const items = groups[key]
+      if (items.length === 0) continue
+      const groupLabel = document.createElement('div')
+      groupLabel.className = 'agent-session-group-label'
+      groupLabel.textContent = label
+      agentSessionsList.appendChild(groupLabel)
+
+      items.forEach(s => {
+        const item = document.createElement('div')
+        item.className = 'agent-session-item' + (s.session_id === agentSessionId ? ' active' : '')
+        item.innerHTML = `
+          <div class="agent-session-title">${escapeHtml(s.title || '未命名会话')}</div>
+          <div class="agent-session-meta">
+            ${s.message_count || 0} 条消息
+            <button class="agent-session-delete" title="删除">✕</button>
+          </div>
+        `
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('.agent-session-delete')) return
+          loadSession(s.session_id)
+        })
+        item.querySelector('.agent-session-delete').addEventListener('click', (e) => {
+          e.stopPropagation()
+          deleteSession(s.session_id)
+        })
+        agentSessionsList.appendChild(item)
       })
-      item.querySelector('.agent-session-delete').addEventListener('click', (e) => {
-        e.stopPropagation()
-        deleteSession(s.session_id)
-      })
-      agentSessionsList.appendChild(item)
-    })
+    }
   }
+
+  // 会话搜索
+  agentSessionsSearchInput.addEventListener('input', () => {
+    const query = agentSessionsSearchInput.value.trim().toLowerCase()
+    if (!query) {
+      renderSessions(allSessions)
+      return
+    }
+    const filtered = allSessions.filter(s => {
+      const title = (s.title || '').toLowerCase()
+      return title.includes(query)
+    })
+    renderSessions(filtered)
+  })
 
   async function loadSession(sessionId) {
     try {
