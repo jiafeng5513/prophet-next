@@ -128,7 +128,8 @@ class BrowserTabManager {
       chart: '/chart.html',
       python: '/python.html',
       settings: '/settings.html',
-      placeholder: '/placeholder.html'
+      placeholder: '/placeholder.html',
+      news: '/news.html'
     }
     const iframe = this.createIframe(srcMap[type] || '/placeholder.html', viewId)
     this.views.set(viewId, { iframe, type })
@@ -177,8 +178,14 @@ class BrowserTabManager {
         const vd = this.views.get(vid)
         if (vd) tabs.push({ viewId: vid, title: 'Python 编辑器', type: vd.type })
       })
-    } else if (newMode === 'news' || newMode === 'market_analyze') {
-      const state = this.modeState[newMode]
+    } else if (newMode === 'news') {
+      const state = this.modeState.news
+      if (!state.viewId) {
+        state.viewId = this.createView('news')
+      }
+      newActiveViewId = state.viewId
+    } else if (newMode === 'market_analyze') {
+      const state = this.modeState.market_analyze
       if (!state.viewId) {
         state.viewId = this.createView('placeholder')
       }
