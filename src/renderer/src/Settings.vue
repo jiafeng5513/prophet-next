@@ -349,84 +349,103 @@
             <div class="section-title">{{ currentCategoryTitle }}</div>
             <div class="section-desc">{{ currentCategoryDesc }}</div>
 
-            <div v-for="item in filteredActiveItems" :key="item.key" class="field-item">
-              <div class="field-label-row">
-                <label>{{ getFieldTitle(item.key, item.schema?.title) }}</label>
-                <span v-if="item.schema?.isSensitive" class="badge sensitive">敏感</span>
-                <span v-if="item.schema && !item.schema.isEditable" class="badge readonly">只读</span>
+            <!-- 分组渲染模式 -->
+            <template v-if="groupedActiveItems.length">
+              <div v-for="group in groupedActiveItems" :key="group.key" class="settings-group">
+                <div class="settings-group-title">{{ group.title }}</div>
+                <div class="settings-group-desc" v-if="group.desc">{{ group.desc }}</div>
+                <div class="settings-group-body">
+                  <template v-for="item in group.items" :key="item.key">
+                    <div class="field-item">
+                      <div class="field-label-row">
+                        <label>{{ getFieldTitle(item.key, item.schema?.title) }}</label>
+                        <span v-if="item.schema?.isSensitive" class="badge sensitive">敏感</span>
+                        <span v-if="item.schema && !item.schema.isEditable" class="badge readonly">只读</span>
+                      </div>
+                      <label v-if="item.schema?.uiControl === 'switch'" class="checkbox-row">
+                        <input type="checkbox" :checked="getDraftValue(item.key) === 'true'"
+                          @change="setDraft(item.key, $event.target.checked ? 'true' : 'false')"
+                          :disabled="item.schema && !item.schema.isEditable" />
+                        <span>{{ getDraftValue(item.key) === 'true' ? '已启用' : '已禁用' }}</span>
+                      </label>
+                      <select v-else-if="item.schema?.uiControl === 'select'"
+                        :value="getDraftValue(item.key)" @change="setDraft(item.key, $event.target.value)"
+                        class="field-input" :disabled="item.schema && !item.schema.isEditable">
+                        <option value="">-- 请选择 --</option>
+                        <option v-for="opt in normalizeOptions(item.schema?.options)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                      </select>
+                      <textarea v-else-if="item.schema?.uiControl === 'textarea'"
+                        :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                        class="field-input field-textarea" :disabled="item.schema && !item.schema.isEditable" rows="3"></textarea>
+                      <div v-else-if="item.schema?.uiControl === 'password'" class="field-row">
+                        <input :type="passwordVisibility[item.key] ? 'text' : 'password'"
+                          :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                          class="field-input flex-1" :placeholder="item.schema?.defaultValue || ''"
+                          :disabled="item.schema && !item.schema.isEditable" />
+                        <button class="btn btn-browse" @click="togglePasswordVisibility(item.key)">{{ passwordVisibility[item.key] ? '隐藏' : '显示' }}</button>
+                      </div>
+                      <input v-else-if="item.schema?.uiControl === 'number'" type="number"
+                        :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                        class="field-input" :min="item.schema?.validation?.min" :max="item.schema?.validation?.max"
+                        :step="item.schema?.dataType === 'number' ? 0.1 : 1" :disabled="item.schema && !item.schema.isEditable" />
+                      <input v-else-if="item.schema?.uiControl === 'time'" type="time"
+                        :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                        class="field-input" :disabled="item.schema && !item.schema.isEditable" />
+                      <input v-else type="text"
+                        :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                        class="field-input" :placeholder="item.schema?.defaultValue || ''"
+                        :disabled="item.schema && !item.schema.isEditable" />
+                      <div class="field-desc">{{ getFieldDesc(item.key, item.schema?.description) }}</div>
+                    </div>
+                  </template>
+                </div>
               </div>
+            </template>
 
-              <!-- switch -->
-              <label v-if="item.schema?.uiControl === 'switch'" class="checkbox-row">
-                <input type="checkbox" :checked="getDraftValue(item.key) === 'true'"
-                  @change="setDraft(item.key, $event.target.checked ? 'true' : 'false')"
+            <!-- 无分组的平铺渲染 -->
+            <template v-else>
+              <div v-for="item in filteredActiveItems" :key="item.key" class="field-item">
+                <div class="field-label-row">
+                  <label>{{ getFieldTitle(item.key, item.schema?.title) }}</label>
+                  <span v-if="item.schema?.isSensitive" class="badge sensitive">敏感</span>
+                  <span v-if="item.schema && !item.schema.isEditable" class="badge readonly">只读</span>
+                </div>
+                <label v-if="item.schema?.uiControl === 'switch'" class="checkbox-row">
+                  <input type="checkbox" :checked="getDraftValue(item.key) === 'true'"
+                    @change="setDraft(item.key, $event.target.checked ? 'true' : 'false')"
+                    :disabled="item.schema && !item.schema.isEditable" />
+                  <span>{{ getDraftValue(item.key) === 'true' ? '已启用' : '已禁用' }}</span>
+                </label>
+                <select v-else-if="item.schema?.uiControl === 'select'"
+                  :value="getDraftValue(item.key)" @change="setDraft(item.key, $event.target.value)"
+                  class="field-input" :disabled="item.schema && !item.schema.isEditable">
+                  <option value="">-- 请选择 --</option>
+                  <option v-for="opt in normalizeOptions(item.schema?.options)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                <textarea v-else-if="item.schema?.uiControl === 'textarea'"
+                  :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                  class="field-input field-textarea" :disabled="item.schema && !item.schema.isEditable" rows="3"></textarea>
+                <div v-else-if="item.schema?.uiControl === 'password'" class="field-row">
+                  <input :type="passwordVisibility[item.key] ? 'text' : 'password'"
+                    :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                    class="field-input flex-1" :placeholder="item.schema?.defaultValue || ''"
+                    :disabled="item.schema && !item.schema.isEditable" />
+                  <button class="btn btn-browse" @click="togglePasswordVisibility(item.key)">{{ passwordVisibility[item.key] ? '隐藏' : '显示' }}</button>
+                </div>
+                <input v-else-if="item.schema?.uiControl === 'number'" type="number"
+                  :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                  class="field-input" :min="item.schema?.validation?.min" :max="item.schema?.validation?.max"
+                  :step="item.schema?.dataType === 'number' ? 0.1 : 1" :disabled="item.schema && !item.schema.isEditable" />
+                <input v-else-if="item.schema?.uiControl === 'time'" type="time"
+                  :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                  class="field-input" :disabled="item.schema && !item.schema.isEditable" />
+                <input v-else type="text"
+                  :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)"
+                  class="field-input" :placeholder="item.schema?.defaultValue || ''"
                   :disabled="item.schema && !item.schema.isEditable" />
-                <span>{{ getDraftValue(item.key) === 'true' ? '已启用' : '已禁用' }}</span>
-              </label>
-
-              <!-- select -->
-              <select v-else-if="item.schema?.uiControl === 'select'"
-                :value="getDraftValue(item.key)"
-                @change="setDraft(item.key, $event.target.value)"
-                class="field-input"
-                :disabled="item.schema && !item.schema.isEditable">
-                <option value="">-- 请选择 --</option>
-                <option v-for="opt in normalizeOptions(item.schema?.options)" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-
-              <!-- textarea -->
-              <textarea v-else-if="item.schema?.uiControl === 'textarea'"
-                :value="getDraftValue(item.key)"
-                @input="setDraft(item.key, $event.target.value)"
-                class="field-input field-textarea"
-                :disabled="item.schema && !item.schema.isEditable"
-                rows="3"></textarea>
-
-              <!-- password -->
-              <div v-else-if="item.schema?.uiControl === 'password'" class="field-row">
-                <input :type="passwordVisibility[item.key] ? 'text' : 'password'"
-                  :value="getDraftValue(item.key)"
-                  @input="setDraft(item.key, $event.target.value)"
-                  class="field-input flex-1"
-                  :placeholder="item.schema?.defaultValue || ''"
-                  :disabled="item.schema && !item.schema.isEditable" />
-                <button class="btn btn-browse" @click="togglePasswordVisibility(item.key)">
-                  {{ passwordVisibility[item.key] ? '隐藏' : '显示' }}
-                </button>
+                <div class="field-desc">{{ getFieldDesc(item.key, item.schema?.description) }}</div>
               </div>
-
-              <!-- number -->
-              <input v-else-if="item.schema?.uiControl === 'number'"
-                type="number"
-                :value="getDraftValue(item.key)"
-                @input="setDraft(item.key, $event.target.value)"
-                class="field-input"
-                :min="item.schema?.validation?.min"
-                :max="item.schema?.validation?.max"
-                :step="item.schema?.dataType === 'number' ? 0.1 : 1"
-                :disabled="item.schema && !item.schema.isEditable" />
-
-              <!-- time -->
-              <input v-else-if="item.schema?.uiControl === 'time'"
-                type="time"
-                :value="getDraftValue(item.key)"
-                @input="setDraft(item.key, $event.target.value)"
-                class="field-input"
-                :disabled="item.schema && !item.schema.isEditable" />
-
-              <!-- default text -->
-              <input v-else
-                type="text"
-                :value="getDraftValue(item.key)"
-                @input="setDraft(item.key, $event.target.value)"
-                class="field-input"
-                :placeholder="item.schema?.defaultValue || ''"
-                :disabled="item.schema && !item.schema.isEditable" />
-
-              <div class="field-desc">{{ getFieldDesc(item.key, item.schema?.description) }}</div>
-            </div>
+            </template>
           </div>
 
           <div v-else-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length === 0 && activeCategory !== 'ai_model'" class="empty-state">
@@ -990,6 +1009,74 @@ const filteredActiveItems = computed(() => {
     })
   }
   return raw
+})
+
+// 分类下的字段分组定义（key → group key，未列出的归入 _other）
+const categoryGroupDefs = {
+  data_source: {
+    groups: [
+      { key: 'market_data', title: '行情数据源', desc: '行情数据提供商凭证与优先级配置。' },
+      { key: 'search_engine', title: '搜索引擎', desc: '网络搜索 API 密钥，用于新闻与资讯检索。' },
+      { key: 'news_analysis', title: '新闻与分析参数', desc: '新闻窗口、策略档位和偏离阈值。' },
+      { key: 'fundamental', title: '基本面管线', desc: '基本面数据获取与缓存策略。' },
+    ],
+    keyMap: {
+      TUSHARE_TOKEN: 'market_data',
+      TICKFLOW_API_KEY: 'market_data',
+      REALTIME_SOURCE_PRIORITY: 'market_data',
+      ENABLE_REALTIME_QUOTE: 'market_data',
+      ENABLE_REALTIME_TECHNICAL_INDICATORS: 'market_data',
+      ENABLE_CHIP_DISTRIBUTION: 'market_data',
+      ENABLE_EASTMONEY_PATCH: 'market_data',
+      REALTIME_CACHE_TTL: 'market_data',
+      CIRCUIT_BREAKER_COOLDOWN: 'market_data',
+      PREFETCH_REALTIME_QUOTES: 'market_data',
+      PYTDX_HOST: 'market_data',
+      PYTDX_PORT: 'market_data',
+      PYTDX_SERVERS: 'market_data',
+      LONGBRIDGE_APP_KEY: 'market_data',
+      LONGBRIDGE_APP_SECRET: 'market_data',
+      LONGBRIDGE_ACCESS_TOKEN: 'market_data',
+      ANSPIRE_API_KEYS: 'search_engine',
+      TAVILY_API_KEYS: 'search_engine',
+      SERPAPI_API_KEYS: 'search_engine',
+      BRAVE_API_KEYS: 'search_engine',
+      BOCHA_API_KEYS: 'search_engine',
+      MINIMAX_API_KEYS: 'search_engine',
+      SEARXNG_BASE_URLS: 'search_engine',
+      SEARXNG_PUBLIC_INSTANCES_ENABLED: 'search_engine',
+      NEWS_MAX_AGE_DAYS: 'news_analysis',
+      NEWS_STRATEGY_PROFILE: 'news_analysis',
+      BIAS_THRESHOLD: 'news_analysis',
+      ENABLE_FUNDAMENTAL_PIPELINE: 'fundamental',
+      FUNDAMENTAL_STAGE_TIMEOUT_SECONDS: 'fundamental',
+      FUNDAMENTAL_FETCH_TIMEOUT_SECONDS: 'fundamental',
+      FUNDAMENTAL_RETRY_MAX: 'fundamental',
+      FUNDAMENTAL_CACHE_TTL_SECONDS: 'fundamental',
+      FUNDAMENTAL_CACHE_MAX_ENTRIES: 'fundamental',
+    },
+  },
+}
+
+const groupedActiveItems = computed(() => {
+  const def = categoryGroupDefs[activeCategory.value]
+  if (!def) return []
+  const items = filteredActiveItems.value
+  if (!items.length) return []
+  const buckets = {}
+  for (const g of def.groups) buckets[g.key] = []
+  buckets._other = []
+  for (const item of items) {
+    const gk = def.keyMap[item.key] || '_other'
+    if (!buckets[gk]) buckets[gk] = []
+    buckets[gk].push(item)
+  }
+  const result = []
+  for (const g of def.groups) {
+    if (buckets[g.key].length) result.push({ ...g, items: buckets[g.key] })
+  }
+  if (buckets._other.length) result.push({ key: '_other', title: '其他', desc: '', items: buckets._other })
+  return result
 })
 
 // 导航栏分类
@@ -1886,6 +1973,37 @@ watch(activeCategory, (cat) => {
   font-size: 12px;
   color: #888;
   margin-bottom: 20px;
+}
+
+/* 设置分组卡片 */
+.settings-group {
+  background: #2a2a2b;
+  border: 1px solid #383838;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+.settings-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 2px;
+}
+.settings-group-desc {
+  font-size: 12px;
+  color: #777;
+  margin-bottom: 14px;
+}
+.settings-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-group-body .field-item {
+  margin-bottom: 0;
 }
 
 /* 字段 */
