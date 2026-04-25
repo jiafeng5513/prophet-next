@@ -118,8 +118,14 @@ function getBackendPath() {
   return join(dirname(app.getPath('exe')), 'backend')
 }
 
-// 生成 DSA 的 .env 文件
+// 生成 DSA 的 .env 文件（仅在不存在时创建，避免覆盖后端 API 已保存的配置）
 function writeDsaEnvFile(dsaPath) {
+  const envPath = join(dsaPath, '.env')
+  if (existsSync(envPath)) {
+    console.log('[DSA] .env 已存在，跳过初始化写入:', envPath)
+    return true
+  }
+
   const dsaConfig = getDsaConfig()
   const lines = []
 
@@ -158,7 +164,6 @@ function writeDsaEnvFile(dsaPath) {
   const port = dsaConfig.port || 8100
   lines.push(`# FastAPI port: ${port}`)
 
-  const envPath = join(dsaPath, '.env')
   try {
     writeFileSync(envPath, lines.join('\n') + '\n', 'utf-8')
     console.log('[DSA] 已写入 .env 文件:', envPath)

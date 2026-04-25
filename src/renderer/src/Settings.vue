@@ -1245,9 +1245,7 @@ async function loadDsaConfig() {
     for (const item of dsaItems.value) {
       const val = item.value ?? ''
       serverValues[item.key] = String(val)
-      if (!(item.key in draftValues)) {
-        draftValues[item.key] = String(val)
-      }
+      draftValues[item.key] = String(val)
     }
     // 解析 LLM 渠道
     parseChannels()
