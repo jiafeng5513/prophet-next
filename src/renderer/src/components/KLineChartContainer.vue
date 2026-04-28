@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, reactive, computed, onUnmounted, watch, nextTick } from 'vue'
-import { init, dispose } from 'klinecharts'
+import { init, dispose, ActionType, TooltipIconPosition } from 'klinecharts'
 import { registerProOverlays } from '@renderer/utils/overlayExtensions'
 
 // Register custom overlay extensions from klinecharts-pro
@@ -39,6 +39,140 @@ const subIndicatorList = ['VOL', 'MACD', 'KDJ', 'RSI', 'DMI', 'CR', 'WR', 'OBV',
 const activeMainIndicators = reactive(new Set())
 const activeSubIndicators = reactive(new Map())
 const indicatorModalVisible = ref(false)
+
+// ===== 指标设置弹窗 =====
+const indicatorSettingModal = reactive({
+  visible: false,
+  indicatorName: '',
+  paneId: '',
+  calcParams: []
+})
+
+// ===== 指标参数配置 (from KLineChart Pro) =====
+const indicatorParamConfig = {
+  MA: [
+    { paramNameKey: 'MA1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'MA2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'MA3', precision: 0, min: 1, styleKey: 'lines[2]' },
+    { paramNameKey: 'MA4', precision: 0, min: 1, styleKey: 'lines[3]' },
+    { paramNameKey: 'MA5', precision: 0, min: 1, styleKey: 'lines[4]' }
+  ],
+  EMA: [
+    { paramNameKey: 'EMA1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'EMA2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'EMA3', precision: 0, min: 1, styleKey: 'lines[2]' },
+    { paramNameKey: 'EMA4', precision: 0, min: 1, styleKey: 'lines[3]' },
+    { paramNameKey: 'EMA5', precision: 0, min: 1, styleKey: 'lines[4]' }
+  ],
+  SMA: [
+    { paramNameKey: 'SMA1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'SMA2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'SMA3', precision: 0, min: 1, styleKey: 'lines[2]' },
+    { paramNameKey: 'SMA4', precision: 0, min: 1, styleKey: 'lines[3]' },
+    { paramNameKey: 'SMA5', precision: 0, min: 1, styleKey: 'lines[4]' }
+  ],
+  BOLL: [
+    { paramNameKey: '周期', precision: 0, min: 1 },
+    { paramNameKey: '标准差', precision: 0, min: 1 }
+  ],
+  SAR: [
+    { paramNameKey: '起始值', precision: 0, min: 1 },
+    { paramNameKey: '增量', precision: 0, min: 1 },
+    { paramNameKey: '最大值', precision: 0, min: 1 }
+  ],
+  BBI: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 },
+    { paramNameKey: '周期3', precision: 0, min: 1 },
+    { paramNameKey: '周期4', precision: 0, min: 1 }
+  ],
+  VOL: [
+    { paramNameKey: 'MA1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'MA2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'MA3', precision: 0, min: 1, styleKey: 'lines[2]' },
+    { paramNameKey: 'MA4', precision: 0, min: 1, styleKey: 'lines[3]' },
+    { paramNameKey: 'MA5', precision: 0, min: 1, styleKey: 'lines[4]' }
+  ],
+  MACD: [
+    { paramNameKey: '快周期', precision: 0, min: 1 },
+    { paramNameKey: '慢周期', precision: 0, min: 1 },
+    { paramNameKey: '信号周期', precision: 0, min: 1 }
+  ],
+  KDJ: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 },
+    { paramNameKey: '周期3', precision: 0, min: 1 }
+  ],
+  RSI: [
+    { paramNameKey: 'RSI1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'RSI2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'RSI3', precision: 0, min: 1, styleKey: 'lines[2]' },
+    { paramNameKey: 'RSI4', precision: 0, min: 1, styleKey: 'lines[3]' },
+    { paramNameKey: 'RSI5', precision: 0, min: 1, styleKey: 'lines[4]' }
+  ],
+  DMI: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  CR: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 },
+    { paramNameKey: '周期3', precision: 0, min: 1 },
+    { paramNameKey: '周期4', precision: 0, min: 1 },
+    { paramNameKey: '周期5', precision: 0, min: 1 }
+  ],
+  WR: [
+    { paramNameKey: 'WR1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'WR2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'WR3', precision: 0, min: 1, styleKey: 'lines[2]' }
+  ],
+  OBV: [
+    { paramNameKey: '周期', precision: 0, min: 1 }
+  ],
+  CCI: [
+    { paramNameKey: '周期', precision: 0, min: 1 }
+  ],
+  BIAS: [
+    { paramNameKey: 'BIAS1', precision: 0, min: 1, styleKey: 'lines[0]' },
+    { paramNameKey: 'BIAS2', precision: 0, min: 1, styleKey: 'lines[1]' },
+    { paramNameKey: 'BIAS3', precision: 0, min: 1, styleKey: 'lines[2]' }
+  ],
+  MTM: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  ROC: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  TRIX: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  AVP: [],
+  AO: [],
+  BRAR: [
+    { paramNameKey: '周期', precision: 0, min: 1 }
+  ],
+  DMA: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 },
+    { paramNameKey: '周期3', precision: 0, min: 1 }
+  ],
+  EMV: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  PSY: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ],
+  PVT: [],
+  VR: [
+    { paramNameKey: '周期1', precision: 0, min: 1 },
+    { paramNameKey: '周期2', precision: 0, min: 1 }
+  ]
+}
 
 // ===== 画线工具 (Pro 风格: 5 组 + 磁吸 + 工具按钮) =====
 const DRAWING_GROUP_ID = 'drawing_tools'
@@ -135,7 +269,49 @@ const darkThemeStyles = {
     },
     tooltip: { text: { color: '#D1D4DC' } }
   },
-  indicator: { tooltip: { text: { color: '#D1D4DC' } } },
+  indicator: {
+    tooltip: {
+      text: { color: '#D1D4DC' },
+      icons: [
+        {
+          id: 'visible',
+          position: TooltipIconPosition.Middle,
+          marginLeft: 8, marginTop: 5, marginRight: 0, marginBottom: 0,
+          paddingLeft: 2, paddingTop: 2, paddingRight: 2, paddingBottom: 2,
+          icon: '\uD83D\uDC41', fontFamily: 'Arial', size: 18,
+          color: '#929AA5', activeColor: '#D1D4DC',
+          backgroundColor: 'transparent', activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+        },
+        {
+          id: 'invisible',
+          position: TooltipIconPosition.Middle,
+          marginLeft: 8, marginTop: 5, marginRight: 0, marginBottom: 0,
+          paddingLeft: 2, paddingTop: 2, paddingRight: 2, paddingBottom: 2,
+          icon: '\uD83D\uDC41', fontFamily: 'Arial', size: 18,
+          color: '#555555', activeColor: '#777777',
+          backgroundColor: 'transparent', activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+        },
+        {
+          id: 'setting',
+          position: TooltipIconPosition.Middle,
+          marginLeft: 6, marginTop: 5, marginRight: 0, marginBottom: 0,
+          paddingLeft: 2, paddingTop: 2, paddingRight: 2, paddingBottom: 2,
+          icon: '\u2699', fontFamily: 'Arial', size: 18,
+          color: '#929AA5', activeColor: '#D1D4DC',
+          backgroundColor: 'transparent', activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+        },
+        {
+          id: 'close',
+          position: TooltipIconPosition.Middle,
+          marginLeft: 6, marginTop: 5, marginRight: 0, marginBottom: 0,
+          paddingLeft: 2, paddingTop: 2, paddingRight: 2, paddingBottom: 2,
+          icon: '\u2716', fontFamily: 'Arial', size: 16,
+          color: '#929AA5', activeColor: '#D1D4DC',
+          backgroundColor: 'transparent', activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+        }
+      ]
+    }
+  },
   xAxis: {
     axisLine: { color: '#292929' }, tickLine: { color: '#292929' },
     tickText: { color: '#929AA5' }
@@ -167,13 +343,36 @@ function switchPeriod(period) {
 }
 
 // ===== 指标操作 =====
+function createIndicatorWithTooltip(indicatorName, isStack, paneOptions) {
+  if (!chartInstance) return null
+  const opts = indicatorName === 'VOL'
+    ? { gap: { bottom: 2 }, ...paneOptions }
+    : paneOptions
+  return chartInstance.createIndicator({
+    name: indicatorName,
+    createTooltipDataSource: ({ indicator, defaultStyles }) => {
+      const icons = []
+      if (indicator.visible) {
+        icons.push(defaultStyles.tooltip.icons[0]) // visible (eye)
+        icons.push(defaultStyles.tooltip.icons[2]) // setting (gear)
+        icons.push(defaultStyles.tooltip.icons[3]) // close (x)
+      } else {
+        icons.push(defaultStyles.tooltip.icons[1]) // invisible (dimmed eye)
+        icons.push(defaultStyles.tooltip.icons[2]) // setting (gear)
+        icons.push(defaultStyles.tooltip.icons[3]) // close (x)
+      }
+      return { icons }
+    }
+  }, isStack, opts) ?? null
+}
+
 function toggleMainIndicator(name) {
   if (!chartInstance) return
   if (activeMainIndicators.has(name)) {
     chartInstance.removeIndicator('candle_pane', name)
     activeMainIndicators.delete(name)
   } else {
-    chartInstance.createIndicator(name, true, { id: 'candle_pane' })
+    createIndicatorWithTooltip(name, true, { id: 'candle_pane' })
     activeMainIndicators.add(name)
   }
 }
@@ -184,9 +383,33 @@ function toggleSubIndicator(name) {
     chartInstance.removeIndicator(activeSubIndicators.get(name), name)
     activeSubIndicators.delete(name)
   } else {
-    const paneId = chartInstance.createIndicator(name, true)
+    const paneId = createIndicatorWithTooltip(name, true)
     if (paneId) activeSubIndicators.set(name, paneId)
   }
+}
+
+function openIndicatorSetting(indicatorName, paneId) {
+  if (!chartInstance) return
+  const indicator = chartInstance.getIndicatorByPaneId(paneId, indicatorName)
+  if (!indicator) return
+  indicatorSettingModal.visible = true
+  indicatorSettingModal.indicatorName = indicatorName
+  indicatorSettingModal.paneId = paneId
+  indicatorSettingModal.calcParams = [...indicator.calcParams]
+}
+
+function confirmIndicatorSetting() {
+  if (!chartInstance) return
+  const params = indicatorSettingModal.calcParams.map(v => Number(v))
+  chartInstance.overrideIndicator(
+    { name: indicatorSettingModal.indicatorName, calcParams: params },
+    indicatorSettingModal.paneId
+  )
+  indicatorSettingModal.visible = false
+}
+
+function closeIndicatorSetting() {
+  indicatorSettingModal.visible = false
 }
 
 // ===== 画线操作 =====
@@ -283,8 +506,33 @@ onMounted(() => {
   })
   if (!chartInstance) return
 
-  const volPaneId = chartInstance.createIndicator('VOL', true)
+  const volPaneId = createIndicatorWithTooltip('VOL', true)
   if (volPaneId) activeSubIndicators.set('VOL', volPaneId)
+
+  // 订阅指标 tooltip 图标点击事件
+  chartInstance.subscribeAction(ActionType.OnTooltipIconClick, (data) => {
+    if (!data.indicatorName) return
+    switch (data.iconId) {
+      case 'visible':
+        chartInstance.overrideIndicator({ name: data.indicatorName, visible: false }, data.paneId)
+        break
+      case 'invisible':
+        chartInstance.overrideIndicator({ name: data.indicatorName, visible: true }, data.paneId)
+        break
+      case 'setting':
+        openIndicatorSetting(data.indicatorName, data.paneId)
+        break
+      case 'close':
+        if (data.paneId === 'candle_pane') {
+          chartInstance.removeIndicator('candle_pane', data.indicatorName)
+          activeMainIndicators.delete(data.indicatorName)
+        } else {
+          chartInstance.removeIndicator(data.paneId, data.indicatorName)
+          activeSubIndicators.delete(data.indicatorName)
+        }
+        break
+    }
+  })
 
   updateTitle(displaySymbol.value)
   if (props.dataLoader) setupDataLoader(props.dataLoader)
@@ -714,6 +962,47 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- ===== 指标参数设置弹窗 ===== -->
+    <div v-if="indicatorSettingModal.visible" class="indicator-modal-mask" @click.self="closeIndicatorSetting">
+      <div class="indicator-setting-modal">
+        <div class="modal-header">
+          <span>{{ indicatorSettingModal.indicatorName }} 参数设置</span>
+          <span class="modal-close" @click="closeIndicatorSetting">✕</span>
+        </div>
+        <div class="modal-body">
+          <div
+            v-for="(param, idx) in indicatorSettingModal.calcParams" :key="idx"
+            class="setting-row"
+          >
+            <label class="setting-label">
+              {{ (indicatorParamConfig[indicatorSettingModal.indicatorName] && indicatorParamConfig[indicatorSettingModal.indicatorName][idx])
+                   ? indicatorParamConfig[indicatorSettingModal.indicatorName][idx].paramNameKey
+                   : '参数' + (idx + 1) }}
+            </label>
+            <div class="setting-input-group">
+              <button class="spin-btn" @click="indicatorSettingModal.calcParams[idx] = Math.max(1, Number(indicatorSettingModal.calcParams[idx]) - 1)">−</button>
+              <input
+                type="number"
+                class="setting-input"
+                :value="param"
+                :min="(indicatorParamConfig[indicatorSettingModal.indicatorName] && indicatorParamConfig[indicatorSettingModal.indicatorName][idx])
+                        ? indicatorParamConfig[indicatorSettingModal.indicatorName][idx].min : 1"
+                @input="indicatorSettingModal.calcParams[idx] = Number($event.target.value)"
+              />
+              <button class="spin-btn" @click="indicatorSettingModal.calcParams[idx] = Number(indicatorSettingModal.calcParams[idx]) + 1">+</button>
+            </div>
+          </div>
+          <div v-if="indicatorSettingModal.calcParams.length === 0" class="setting-empty">
+            此指标没有可调参数
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeIndicatorSetting">取消</button>
+          <button class="btn-confirm" @click="confirmIndicatorSetting">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1111,5 +1400,129 @@ onUnmounted(() => {
   background-color: var(--pro-selected);
   color: var(--pro-primary);
   border-color: var(--pro-primary);
+}
+
+/* ===== 指标参数设置弹窗 ===== */
+.indicator-setting-modal {
+  background-color: var(--pro-popover-bg);
+  border: 1px solid var(--pro-border);
+  border-radius: 8px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.setting-label {
+  color: var(--pro-text-second);
+  font-size: 13px;
+  min-width: 70px;
+}
+.setting-input {
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid var(--pro-border);
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--pro-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: dark;
+  -moz-appearance: textfield;
+}
+.setting-input:focus {
+  border-color: var(--pro-primary);
+}
+.setting-input::-webkit-inner-spin-button,
+.setting-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.setting-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--pro-border);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.setting-input-group:focus-within {
+  border-color: var(--pro-primary);
+}
+.setting-input-group .setting-input {
+  border: none;
+  border-radius: 0;
+  width: 80px;
+  text-align: center;
+  border-left: 1px solid var(--pro-border);
+  border-right: 1px solid var(--pro-border);
+}
+.setting-input-group .setting-input:focus {
+  border-color: var(--pro-border);
+}
+.spin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--pro-text-second);
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.spin-btn:hover {
+  background: var(--pro-hover-bg);
+  color: var(--pro-text);
+}
+.spin-btn:active {
+  background: rgba(22, 119, 255, 0.25);
+}
+.setting-empty {
+  color: var(--pro-text-second);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px 0;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--pro-border);
+}
+.btn-cancel, .btn-confirm {
+  padding: 6px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+.btn-cancel {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--pro-text-second);
+}
+.btn-cancel:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--pro-text);
+}
+.btn-confirm {
+  background-color: var(--pro-primary);
+  color: #fff;
+}
+.btn-confirm:hover {
+  background-color: #4096ff;
 }
 </style>
