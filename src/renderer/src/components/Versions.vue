@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { version } from '@tradingview/trading_platform/charting_library'
+import { version } from 'klinecharts'
 const nodeVersion = ref('')
 const chromeVersion = ref('')
 const electronVersion = ref('')
@@ -12,8 +12,7 @@ onMounted(() => {
     electronVersion.value = window.electronAPI.getVersion().electron
   }
 
-  var array = version().match(/(\d+)[.](\d+)[.](\d+)/g);
-  chartingLibraryVersion.value = array[0]
+  chartingLibraryVersion.value = version()
 })
 </script>
 
@@ -22,6 +21,6 @@ onMounted(() => {
     <li class="electron-version">Electron v{{ electronVersion }}</li>
     <li class="chrome-version">Chromium v{{ chromeVersion }}</li>
     <li class="node-version">Node v{{ nodeVersion }}</li>
-    <li class="node-version">charting library v{{ chartingLibraryVersion }}</li>
+    <li class="node-version">KLineChart v{{ chartingLibraryVersion }}</li>
   </ul>
 </template>

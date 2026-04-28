@@ -1,14 +1,18 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import TVChartContainer from '@renderer/components/TVChartContainer.vue'
-import BinanceDataFeed from '@renderer/service/dataSource/binance/datafeed'
-import OKXDataFeed from '@renderer/service/dataSource/okx/datafeed'
+import { ref, onMounted, onUnmounted } from 'vue'
+import KLineChartContainer from '@renderer/components/KLineChartContainer.vue'
+import BinanceDataLoader from '@renderer/service/dataSource/binance/dataLoader'
+import OKXDataLoader from '@renderer/service/dataSource/okx/dataLoader'
 
 // 数据源实例
-const dataFeed = ref(null)
+const dataLoader = ref(null)
 const errorMessage = ref('')
-const dataSource = ref('binance') // 当前使用的数据源
-const defaultSymbol = ref('Binance:BTC/USDT') // 默认交易对
+const dataSource = ref('binance')
+const defaultSymbol = ref('Binance:BTC/USDT')
+const defaultExchange = ref('Binance')
+
+// 当前 loader 实例引用（用于销毁）
+let currentLoader = null
 
 // 从主进程获取数据源设置（解决跨 partition localStorage 隔离问题）
 async function getDataSource() {
@@ -20,20 +24,23 @@ async function getDataSource() {
 }
 
 // 初始化数据源
-async function initDataFeed() {
+async function initDataLoader() {
   try {
     const currentDataSource = await getDataSource()
     console.log('[Chart] 正在初始化数据源:', currentDataSource)
     
-    // 根据设置创建对应的数据源实例
     if (currentDataSource === 'okx') {
-      dataFeed.value = new OKXDataFeed(undefined)
+      currentLoader = new OKXDataLoader()
+      dataLoader.value = currentLoader
       defaultSymbol.value = 'OKX:BTC/USDT'
+      defaultExchange.value = 'OKX'
       dataSource.value = 'okx'
       console.log('[Chart] OKX 数据源初始化成功')
     } else {
-      dataFeed.value = new BinanceDataFeed(undefined)
+      currentLoader = new BinanceDataLoader()
+      dataLoader.value = currentLoader
       defaultSymbol.value = 'Binance:BTC/USDT'
+      defaultExchange.value = 'Binance'
       dataSource.value = 'binance'
       console.log('[Chart] Binance 数据源初始化成功')
     }
@@ -44,7 +51,14 @@ async function initDataFeed() {
 }
 
 onMounted(async () => {
-  await initDataFeed()
+  await initDataLoader()
+})
+
+onUnmounted(() => {
+  if (currentLoader && currentLoader.destroy) {
+    currentLoader.destroy()
+    currentLoader = null
+  }
 })
 </script>
 
@@ -53,12 +67,12 @@ onMounted(async () => {
     <div v-if="errorMessage" class="error-message">
       {{ errorMessage }}
     </div>
-    <TVChartContainer
-      v-else-if="dataFeed"
-      :datafeed="dataFeed"
+    <KLineChartContainer
+      v-else-if="dataLoader"
+      :dataLoader="dataLoader"
       :symbol="defaultSymbol"
+      :exchange="defaultExchange"
       interval="15"
-      :fullscreen="true"
       class="chart-container"
     />
     <div v-else class="loading-message">

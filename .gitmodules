@@ -1,3 +1,6 @@
 [submodule "src/renderer/public/tradingview"]
 	path = src/renderer/public/tradingview
 	url = https://github.com/jiafeng5513/tradingview.git
+[submodule "libs/klinecharts"]
+	path = libs/klinecharts
+	url = https://github.com/jiafeng5513/KLineChart.git
