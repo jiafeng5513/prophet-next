@@ -138,8 +138,8 @@ onMounted(() => {
     }
 
     // 设置初始标题（只显示 symbol，不包含 "- Chart" 后缀）
-    const initialSymbol = props.symbol.replace(/^Binance:/, '') || props.symbol
-    // 移除可能的 "/" 分隔符，转换为 "BTCUSDT" 格式
+    const initialSymbol = props.symbol.replace(/^(Binance|OKX|SSE|SZSE|BSE):/i, '') || props.symbol
+    // 移除可能的 "/" 分隔符，转换为 "BTCUSDT" 格式（仅 crypto）
     const initialSymbolFormatted = initialSymbol.replace(/\//g, '')
     updateTitle(initialSymbolFormatted)
 
@@ -173,10 +173,24 @@ onMounted(() => {
           console.log('[TVChartContainer] Extracted symbol name:', symbolName)
 
           if (symbolName && symbolName.trim()) {
-            // 格式化 symbol 名称，移除 "Binance:" 或 "BINANCE:" 前缀（如果有，不区分大小写）
-            let displayName = symbolName.replace(/^Binance:/i, '').trim()
-            // 移除 "/" 分隔符，转换为 "BTCUSDT" 格式
+            // 格式化 symbol 名称，移除交易所前缀（如果有，不区分大小写）
+            let displayName = symbolName.replace(/^(Binance|OKX|SSE|SZSE|BSE):/i, '').trim()
+            // 移除 "/" 分隔符，转换为 "BTCUSDT" 格式（仅 crypto）
             displayName = displayName.replace(/\//g, '').trim()
+
+            // 尝试获取 symbol description（股票名称），用于 A 股等标的
+            try {
+              const resolvedInfo = chartWidget.activeChart().symbolExt()
+              if (
+                resolvedInfo &&
+                resolvedInfo.description &&
+                !/^[A-Z/]+$/.test(resolvedInfo.description)
+              ) {
+                displayName = `${displayName} ${resolvedInfo.description}`
+              }
+            } catch {
+              /* ignore */
+            }
 
             if (displayName) {
               updateTitle(displayName)

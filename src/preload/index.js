@@ -40,6 +40,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 关闭所有图表页面
   closeAllChartTabs: () => ipcRenderer.send('close-all-chart-tabs'),
 
+  // 标的浏览器操作
+  openSymbolInChart: (symbolInfo) => ipcRenderer.send('open-symbol-in-chart', symbolInfo),
+  openSymbolAnalysis: (symbolInfo) => ipcRenderer.send('open-symbol-analysis', symbolInfo),
+  onLoadSymbol: (callback) => ipcRenderer.on('load-symbol', (event, data) => callback(data)),
+  onAnalyzeSymbol: (callback) =>
+    ipcRenderer.on('analyze-symbol', (event, data) => callback(data)),
+
   // 数据源设置（跨 partition 共享）
   getDataSource: () => ipcRenderer.invoke('get-data-source'),
   setDataSource: (dataSource) => ipcRenderer.send('set-data-source', dataSource),

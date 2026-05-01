@@ -161,7 +161,7 @@ $ npm run build:linux
 3. [element-plus 前端组件库](https://element-plus.org/zh-CN/component/overview.html)
 4. [UDF API](./UDF-api.md)
 5. [Electron + Vue + Vite + Python + FastAPI](https://github.com/hafiidz/electron-vite-vue-fastapi)
-6. [TradingView API Reference](https://www.tradingview.com/charting-library-docs/latest/connecting_data/Datafeed-API#getservertime)
+6. [TradingView API Reference](https://www.tradingview.com/charting-library-docs/latest/api/)
 7. [charting-library-examples](https://github.com/tradingview/charting-library-examples)
 8. [charting-library-demo](https://trading-terminal.tradingview-widget.com/)
 9. [free-charting-libraries](https://cn.tradingview.com/free-charting-libraries/)

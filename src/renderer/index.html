@@ -272,6 +272,47 @@
       margin-left: 0;
     }
 
+    /* 固定标签页样式（标的浏览器） */
+    .tab-pinned {
+      min-width: 80px;
+      max-width: 120px;
+      padding-right: 10px;
+      background: #0c2d3e;
+      border-left: 2px solid #0e639c;
+    }
+
+    .tab-pinned::before {
+      box-shadow: 4px 4px 0 4px #0c2d3e;
+    }
+
+    .tab-pinned::after {
+      box-shadow: -4px 4px 0 4px #0c2d3e;
+    }
+
+    .tab-pinned:hover {
+      background: #10618c;
+    }
+
+    .tab-pinned:hover::before {
+      box-shadow: 4px 4px 0 4px #10618c;
+    }
+
+    .tab-pinned:hover::after {
+      box-shadow: -4px 4px 0 4px #10618c;
+    }
+
+    .tab-pinned.active {
+      background: #074261;
+    }
+
+    .tab-pinned.active::before {
+      box-shadow: 4px 4px 0 4px #074261;
+    }
+
+    .tab-pinned.active::after {
+      box-shadow: -4px 4px 0 4px #074261;
+    }
+
     /* 标签标题样式优化 */
     .tab-title {
       white-space: nowrap;

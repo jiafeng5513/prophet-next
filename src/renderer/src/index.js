@@ -76,18 +76,28 @@ tabsContainer.addEventListener(
 )
 
 // 创建标签页元素（统一函数）
-function createTabElement(viewId, title) {
+function createTabElement(viewId, title, options = {}) {
   const tab = document.createElement('div')
   tab.className = 'tab'
+  if (options.pinned) {
+    tab.classList.add('tab-pinned')
+  }
   tab.setAttribute('data-view-id', viewId)
 
   tabCounter++
   const displayTitle = title || `新标签页 ${tabCounter}`
-  tab.innerHTML = `
-    <span class="tab-title">${displayTitle}</span>
-    <span class="close-btn">×</span>
-    <div class="tab-loading"></div>
-  `
+  if (options.pinned) {
+    tab.innerHTML = `
+      <span class="tab-title">${displayTitle}</span>
+      <div class="tab-loading"></div>
+    `
+  } else {
+    tab.innerHTML = `
+      <span class="tab-title">${displayTitle}</span>
+      <span class="close-btn">×</span>
+      <div class="tab-loading"></div>
+    `
+  }
 
   // 初始化加载状态
   loadingStates.set(viewId, false)
@@ -100,15 +110,17 @@ function createTabElement(viewId, title) {
 
   // 点击关闭按钮
   const closeBtn = tab.querySelector('.close-btn')
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const currentViews = getCurrentModeViews()
-    if (currentViews.size > 1) {
-      window.electronAPI.closeTab(viewId)
-    } else {
-      showToast('至少需要保留1个标签页')
-    }
-  })
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const currentViews = getCurrentModeViews()
+      if (currentViews.size > 1) {
+        window.electronAPI.closeTab(viewId)
+      } else {
+        showToast('至少需要保留1个标签页')
+      }
+    })
+  }
 
   // 右键菜单
   tab.addEventListener('contextmenu', (e) => {
@@ -220,7 +232,7 @@ window.electronAPI.onModeSwitched((data) => {
       if (!modeViews[data.mode]) modeViews[data.mode] = new Set()
       data.tabs.forEach((tabInfo) => {
         modeViews[data.mode].add(tabInfo.viewId)
-        const tab = createTabElement(tabInfo.viewId, tabInfo.title)
+        const tab = createTabElement(tabInfo.viewId, tabInfo.title, { pinned: tabInfo.pinned })
         tabsContainer.insertBefore(tab, newTabBtn)
       })
       if (data.activeViewId) {

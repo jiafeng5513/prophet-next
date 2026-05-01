@@ -696,7 +696,7 @@ function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
 // 模式管理
 let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'portfolio' | 'backtest' | 'settings'
 const modeState = {
-  trading: { viewIds: new Set(), activeViewId: null },
+  trading: { viewIds: new Set(), activeViewId: null, pinnedViewId: null },
   developing: { viewIds: new Set(), activeViewId: null },
   news: { viewId: null },
   market_analyze: { viewId: null },
@@ -817,6 +817,8 @@ function getDefaultTitle(type) {
       return '设置'
     case 'placeholder':
       return '正在开发中'
+    case 'symbol-browser':
+      return '标的浏览器'
     default:
       return ''
   }
@@ -882,7 +884,8 @@ function createView(type, options = {}) {
     'stock-analysis': 'stock-analysis.html',
     portfolio: 'portfolio.html',
     backtest: 'backtest.html',
-    news: 'news.html'
+    news: 'news.html',
+    'symbol-browser': 'symbol-browser.html'
   }
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
@@ -955,14 +958,30 @@ function switchMode(newMode) {
   if (newMode === 'trading') {
     const state = modeState.trading
     if (state.viewIds.size === 0) {
-      // 首次进入交易模式，创建第一个图表标签页
+      // 首次进入交易模式，创建固定的标的浏览器标签页
+      const pinnedId = createView('symbol-browser')
+      state.viewIds.add(pinnedId)
+      state.pinnedViewId = pinnedId
+      // 再创建第一个图表标签页
       const viewId = createView('chart')
       state.viewIds.add(viewId)
       state.activeViewId = viewId
     }
     newActiveViewId = state.activeViewId
-    // 构建标签页信息
+    // 构建标签页信息，固定标签页排最前面
+    const pinnedVid = state.pinnedViewId
+    if (pinnedVid) {
+      const vd = views.get(pinnedVid)
+      if (vd)
+        tabs.push({
+          viewId: pinnedVid,
+          title: vd.title || '标的浏览器',
+          type: vd.type,
+          pinned: true
+        })
+    }
     state.viewIds.forEach((vid) => {
+      if (vid === pinnedVid) return // 已加入
       const vd = views.get(vid)
       if (vd) tabs.push({ viewId: vid, title: vd.title || '新标签页', type: vd.type })
     })
@@ -1124,6 +1143,11 @@ ipcMain.on('close-tab', (event, viewId) => {
   const viewData = views.get(viewId)
   if (!viewData) return
 
+  // 禁止关闭固定标签页（标的浏览器）
+  if (modeState.trading.pinnedViewId === viewId) {
+    return
+  }
+
   // 找到该视图所属的模式
   let viewMode = null
   for (const [mode, state] of Object.entries(modeState)) {
@@ -1133,8 +1157,14 @@ ipcMain.on('close-tab', (event, viewId) => {
     }
   }
 
-  // 至少保留1个标签页
-  if (viewMode && modeState[viewMode].viewIds.size <= 1) {
+  // 至少保留1个标签页（不计固定标签页）
+  if (viewMode === 'trading') {
+    const nonPinnedCount = modeState.trading.viewIds.size - (modeState.trading.pinnedViewId ? 1 : 0)
+    if (nonPinnedCount <= 1) {
+      mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
+      return
+    }
+  } else if (viewMode && modeState[viewMode].viewIds && modeState[viewMode].viewIds.size <= 1) {
     mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
     return
   }
@@ -1163,6 +1193,58 @@ ipcMain.on('close-tab', (event, viewId) => {
 ipcMain.on('close-all-chart-tabs', () => {
   console.log('[IPC] 收到关闭所有图表页面的请求')
   closeAllChartTabs()
+})
+
+// 标的浏览器：在图表中打开标的
+ipcMain.on('open-symbol-in-chart', (event, symbolInfo) => {
+  console.log('[IPC] 在图表中打开标的:', symbolInfo)
+  if (currentMode !== 'trading') {
+    switchMode('trading')
+  }
+  const state = modeState.trading
+  if (state.viewIds.size >= 10) {
+    mainWindow.webContents.send('tab-limit', '最多只能创建10个标签页')
+    return
+  }
+  const viewId = createView('chart')
+  state.viewIds.add(viewId)
+  mainWindow.webContents.send('tab-created', viewId)
+  setActiveTab(viewId)
+  state.activeViewId = viewId
+  // 等页面加载完成后发送标的信息
+  // 延迟 200ms 确保 Vue 已完成挂载并注册了 onLoadSymbol 监听器
+  const viewData = views.get(viewId)
+  if (viewData) {
+    viewData.view.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        viewData.view.webContents.send('load-symbol', symbolInfo)
+      }, 200)
+    })
+  }
+})
+
+// 标的浏览器：打开市场分析
+ipcMain.on('open-symbol-analysis', (event, symbolInfo) => {
+  console.log('[IPC] 打开标的市场分析:', symbolInfo)
+  switchMode('market_analyze')
+  const state = modeState.market_analyze
+  if (state.viewId) {
+    const viewData = views.get(state.viewId)
+    if (viewData) {
+      // 检查页面是否已加载完成
+      if (viewData.view.webContents.isLoading()) {
+        // 页面尚在加载，等加载完成后发送（延迟确保 Vue 挂载）
+        viewData.view.webContents.once('did-finish-load', () => {
+          setTimeout(() => {
+            viewData.view.webContents.send('analyze-symbol', symbolInfo)
+          }, 200)
+        })
+      } else {
+        // 页面已加载，直接发送
+        viewData.view.webContents.send('analyze-symbol', symbolInfo)
+      }
+    }
+  }
 })
 
 // 数据源设置的 IPC 处理（解决跨 partition localStorage 隔离问题）

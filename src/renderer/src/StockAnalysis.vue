@@ -687,6 +687,19 @@ onMounted(async () => {
     dsaPort = config.port || 8100
   }
 
+  // 监听来自标的浏览器的分析请求
+  if (window.electronAPI?.onAnalyzeSymbol) {
+    window.electronAPI.onAnalyzeSymbol((symbolInfo) => {
+      console.log('[StockAnalysis] 收到 analyze-symbol:', symbolInfo)
+      searchQuery.value = symbolInfo.symbol
+      currentStockName.value = symbolInfo.name || ''
+      // 等服务就绪后自动触发分析
+      if (serviceStatus.value === 'connected') {
+        handleAnalyze()
+      }
+    })
+  }
+
   // 监听 DSA 状态变化
   if (window.electronAPI && window.electronAPI.onDsaStatusChanged) {
     window.electronAPI.onDsaStatusChanged(async (data) => {
