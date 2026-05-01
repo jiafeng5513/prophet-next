@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { version } from '@tradingview/trading_platform/charting_library'
+import { version } from '@tradingview/advanced_charts/charting_library'
 const nodeVersion = ref('')
 const chromeVersion = ref('')
 const electronVersion = ref('')

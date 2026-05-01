@@ -1,4 +1,4 @@
-/// <reference types="@tradingview/trading_platform/charting_library/datafeed-api" />
+/// <reference types="@tradingview/advanced_charts/charting_library/datafeed-api" />
 import { parseFullSymbol } from './helpers'
 
 // OKX REST API 和 WebSocket 使用的周期格式

@@ -887,11 +887,26 @@ function createView(type, options = {}) {
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-      view.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${htmlFile}`)
+      const url = `${process.env['ELECTRON_RENDERER_URL']}/${htmlFile}`
+      console.log(`[createView] Loading URL: ${url}`)
+      view.webContents.loadURL(url)
     } else {
       view.webContents.loadFile(join(__dirname, `../renderer/${htmlFile}`))
     }
   }
+
+  // 监听 DevTools 关闭/打开事件，同步按钮状态
+  view.webContents.on('devtools-closed', () => {
+    mainWindow.webContents.send('devtools-state-changed', false)
+  })
+  view.webContents.on('devtools-opened', () => {
+    mainWindow.webContents.send('devtools-state-changed', true)
+  })
+
+  // 开发模式下自动打开 DevTools 用于调试图表（已禁用，可通过 UI 按钮手动开启）
+  // if (is.dev && type === 'chart') {
+  //   view.webContents.openDevTools({ mode: 'detach' })
+  // }
 
   return viewId
 }
@@ -1594,6 +1609,27 @@ app.on('activate', () => {
 })
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
+
+ipcMain.on('toggle-devtools', () => {
+  if (activeViewId) {
+    const viewData = views.get(activeViewId)
+    if (viewData && viewData.view) {
+      const wc = viewData.view.webContents
+      if (wc.isDevToolsOpened()) {
+        wc.closeDevTools()
+      } else {
+        wc.openDevTools({ mode: 'detach' })
+      }
+    }
+  } else {
+    // fallback: toggle main window devtools
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools()
+    } else {
+      mainWindow.webContents.openDevTools({ mode: 'detach' })
+    }
+  }
+})
 
 ipcMain.on('open-dev-tools-in-new-window', (event) => {
   // const mainWindow = BrowserWindow.fromWebContents(event.sender)

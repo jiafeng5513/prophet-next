@@ -34,6 +34,7 @@ const tabsScroll = document.querySelector('.tabs-scroll')
 const scrollLeftBtn = document.getElementById('scroll-left')
 const scrollRightBtn = document.getElementById('scroll-right')
 const toggleAgentBtn = document.getElementById('toggle-agent-btn')
+const toggleDevToolsBtn = document.getElementById('toggle-devtools-btn')
 const agentPanel = document.getElementById('agent-panel')
 const agentInput = document.getElementById('agent-input')
 const tabsContainerEl = document.querySelector('.tabs-container')
@@ -1174,6 +1175,20 @@ function updateSidebarActiveState(mode) {
       break
   }
 }
+
+// =====================
+// DevTools 切换
+// =====================
+let devToolsOpen = false
+toggleDevToolsBtn.addEventListener('click', () => {
+  devToolsOpen = !devToolsOpen
+  toggleDevToolsBtn.classList.toggle('active', devToolsOpen)
+  window.electronAPI.toggleDevTools()
+})
+window.electronAPI.onDevToolsStateChanged((isOpen) => {
+  devToolsOpen = isOpen
+  toggleDevToolsBtn.classList.toggle('active', devToolsOpen)
+})
 
 // =====================
 // Agent 侧栏切换

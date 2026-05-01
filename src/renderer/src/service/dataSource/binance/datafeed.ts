@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/// <reference types="@tradingview/trading_platform/charting_library/datafeed-api" />
+/// <reference types="@tradingview/advanced_charts/charting_library/datafeed-api" />
 import { generateSymbol, makeApiRequest, makeBinanceRequest, parseFullSymbol, priceScale } from './helpers'
 import SocketClient, { BINANCE_RESOLUSION } from './streaming'
 

@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开开发者工具
   openDevTools: () => ipcRenderer.send('open-dev-tools-in-new-window'),
+  toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
+  onDevToolsStateChanged: (callback) =>
+    ipcRenderer.on('devtools-state-changed', (event, isOpen) => callback(isOpen)),
 
   // 关闭所有图表页面
   closeAllChartTabs: () => ipcRenderer.send('close-all-chart-tabs'),

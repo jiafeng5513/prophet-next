@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, onUnmounted } from 'vue'
-import { widget } from '@tradingview/trading_platform/charting_library'
-import { UDFCompatibleDatafeed } from '@tradingview/trading_platform/datafeeds/udf/src/udf-compatible-datafeed'
+import { widget, version } from '@tradingview/advanced_charts/charting_library'
+import { UDFCompatibleDatafeed } from '@tradingview/advanced_charts/datafeeds/udf/src/udf-compatible-datafeed'
 
 function getLanguageFromURL() {
   const regex = new RegExp('[\\?&]lang=([^&#]*)')
@@ -27,7 +27,7 @@ const props = defineProps({
     type: Object
   },
   libraryPath: {
-    default: 'tradingview/trading_platform/charting_library/',
+    default: '/tradingview/advanced_charts/charting_library/',
     type: String
   },
   chartsStorageUrl: {
@@ -79,6 +79,7 @@ onMounted(() => {
     }
 
     const widgetOptions = {
+      debug: true,
       symbol: props.symbol,
       datafeed: datafeedInstance,
       interval: props.interval,
@@ -91,7 +92,7 @@ onMounted(() => {
         'open_account_manager',
         'show_object_tree'
       ],
-      enabled_features: ['study_templates', 'hide_object_tree_and_price_scale_exchange_label'],
+      enabled_features: ['study_templates', 'iframe_loading_compatibility_mode'],
       charts_storage_url: props.chartsStorageUrl,
       charts_storage_api_version: props.chartsStorageApiVersion,
       client_id: props.clientId,
@@ -199,15 +200,16 @@ onMounted(() => {
       button.setAttribute('title', 'Click to show a notification popup')
       button.classList.add('apply-common-tooltip')
 
-      button.addEventListener('click', () =>
+      button.addEventListener('click', () => {
+        const ver = version().match(/(\d+)[.](\d+)[.](\d+)/g)
         chartWidget.showNoticeDialog({
-          title: 'Notification',
-          body: 'TradingView Charting Library API works correctly',
+          title: 'TradingView Charting Library',
+          body: `Version: ${ver ? ver[0] : 'unknown'}`,
           callback: () => {
             console.log('Noticed!')
           }
         })
-      )
+      })
 
       button.innerHTML = 'Check API'
     })
