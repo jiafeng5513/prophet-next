@@ -443,6 +443,15 @@ class Config:
     longbridge_app_secret: Optional[str] = None
     longbridge_access_token: Optional[str] = None
 
+    # === 数据源优先级 ===
+    # 逗号分隔的数据源名称列表，高优先级在前
+    # cn_kline: A股K线优先级链 (tickflow, data_provider)
+    # cn_realtime: A股实时行情优先级链 (tickflow, data_provider)
+    # cn_symbols: A股标的列表优先级链 (tickflow, akshare)
+    data_source_priority_cn_kline: str = "tickflow,data_provider"
+    data_source_priority_cn_realtime: str = "tickflow,data_provider"
+    data_source_priority_cn_symbols: str = "tickflow,akshare"
+
     # === AI 分析配置 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-2.5-flash)
     litellm_model: str = ""  # Primary model; must include provider prefix when set explicitly
@@ -1115,6 +1124,9 @@ class Config:
             longbridge_app_key=os.getenv('LONGBRIDGE_APP_KEY') or None,
             longbridge_app_secret=os.getenv('LONGBRIDGE_APP_SECRET') or None,
             longbridge_access_token=os.getenv('LONGBRIDGE_ACCESS_TOKEN') or None,
+            data_source_priority_cn_kline=os.getenv('DATA_SOURCE_PRIORITY_CN_KLINE', 'tickflow,data_provider'),
+            data_source_priority_cn_realtime=os.getenv('DATA_SOURCE_PRIORITY_CN_REALTIME', 'tickflow,data_provider'),
+            data_source_priority_cn_symbols=os.getenv('DATA_SOURCE_PRIORITY_CN_SYMBOLS', 'tickflow,akshare'),
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),

@@ -20,6 +20,8 @@ import {
   guessMarketType,
   type SymbolInfo as ApiSymbolInfo,
 } from '../../marketDataService'
+import { realtimeWS } from '../../realtimeWSClient'
+import type { RealtimeQuote } from '../../marketDataService'
 
 // ==================== 周期映射 ====================
 
@@ -40,6 +42,8 @@ const RESOLUTION_MAP: Record<string, string> = {
 /** 根据市场类型返回交易时段 */
 function getSession(marketType: string): string {
   if (marketType === 'crypto') return '24x7'
+  if (marketType === 'us_stock') return '0930-1600'
+  if (marketType === 'hk_stock') return '0930-1200,1300-1600'
   // A 股 / ETF: 9:30-11:30, 13:00-15:00 (不含夜盘)
   return '0930-1130,1300-1500'
 }
@@ -47,6 +51,8 @@ function getSession(marketType: string): string {
 /** 根据市场类型返回时区 */
 function getTimezone(marketType: string): string {
   if (marketType === 'crypto') return 'Etc/UTC'
+  if (marketType === 'us_stock') return 'America/New_York'
+  if (marketType === 'hk_stock') return 'Asia/Hong_Kong'
   return 'Asia/Shanghai'
 }
 
@@ -56,13 +62,19 @@ function getExchangeName(exchange: string): string {
     SSE: '上海证券交易所',
     SZSE: '深圳证券交易所',
     BSE: '北京证券交易所',
+    HKEX: '香港交易所',
+    HK: '香港交易所',
+    NYSE: '纽约证券交易所',
+    NASDAQ: '纳斯达克',
+    US: '美国市场',
   }
   return map[exchange] || exchange
 }
 
-/** pricescale: A 股价格精度 0.01 -> pricescale 100 */
+/** pricescale: 价格精度 */
 function getPriceScale(marketType: string): number {
-  if (marketType === 'cn_stock' || marketType === 'cn_etf') return 100
+  if (marketType === 'us_stock') return 100
+  if (marketType === 'hk_stock') return 1000  // 港股支持 0.001
   return 100
 }
 
@@ -76,10 +88,15 @@ const configurationData: TradingView.DatafeedConfiguration = {
     { value: 'SSE', name: '上交所', desc: '上海证券交易所' },
     { value: 'SZSE', name: '深交所', desc: '深圳证券交易所' },
     { value: 'BSE', name: '北交所', desc: '北京证券交易所' },
+    { value: 'HKEX', name: '港交所', desc: '香港交易所' },
+    { value: 'NYSE', name: 'NYSE', desc: 'New York Stock Exchange' },
+    { value: 'NASDAQ', name: 'NASDAQ', desc: 'NASDAQ' },
   ],
   symbols_types: [
     { name: 'A股', value: 'cn_stock' },
     { name: 'ETF', value: 'cn_etf' },
+    { name: '港股', value: 'hk_stock' },
+    { name: '美股', value: 'us_stock' },
   ],
   supports_marks: false,
   supports_timescale_marks: false,
@@ -104,6 +121,7 @@ export default class UnifiedDataFeed
 {
   private lastBarsCache: Map<string, TradingView.Bar> = new Map()
   private symbolInfoMap: Map<string, ApiSymbolInfo> = new Map()
+  private subscribers: Map<string, { code: string; resolution: TradingView.ResolutionString; onRealtimeCallback: TradingView.SubscribeBarsCallback; onResetCacheNeededCallback: () => void }> = new Map()
   private initSymbol: UnifiedDataFeedOptions['symbolInfo']
 
   constructor(options?: UnifiedDataFeedOptions) {
@@ -299,14 +317,91 @@ export default class UnifiedDataFeed
     onResetCacheNeededCallback: () => void
   ): Promise<void> {
     console.log('[UnifiedDataFeed] subscribeBars:', subscriberUID)
-    // A 股 / ETF 暂不支持实时推送 (后续可通过轮询或 TickFlow WS 实现)
-    // 这里留空，图表将只显示历史数据
+
+    const code = symbolInfo.name || symbolInfo.ticker?.split(':')[1] || ''
+    const period = RESOLUTION_MAP[resolution as string] || '1d'
+
+    // 保存订阅信息
+    this.subscribers.set(subscriberUID, {
+      code,
+      resolution,
+      onRealtimeCallback,
+      onResetCacheNeededCallback,
+    })
+
+    // 通过 WebSocket 订阅实时行情
+    realtimeWS.subscribeQuotes(
+      `datafeed-${subscriberUID}`,
+      [code],
+      (quotes: RealtimeQuote[]) => {
+        const q = quotes.find((item) => item.symbol === code)
+        if (!q || !q.price) return
+
+        const lastBar = this.lastBarsCache.get(code)
+        if (!lastBar) return
+
+        const tradeTime = q.timestamp ? q.timestamp * 1000 : Date.now()
+        const barPeriodMs = this._getBarPeriodMs(period)
+
+        // 判断是否属于当前 bar 还是新 bar
+        const currentBarStart = lastBar.time
+        const nextBarStart = currentBarStart + barPeriodMs
+
+        if (tradeTime >= nextBarStart) {
+          // 新 bar
+          const newBar: TradingView.Bar = {
+            time: nextBarStart,
+            open: q.price,
+            high: q.price,
+            low: q.price,
+            close: q.price,
+            volume: q.volume || 0,
+          }
+          this.lastBarsCache.set(code, newBar)
+          onRealtimeCallback(newBar)
+        } else {
+          // 更新当前 bar
+          const updatedBar: TradingView.Bar = {
+            ...lastBar,
+            high: Math.max(lastBar.high, q.price),
+            low: Math.min(lastBar.low, q.price),
+            close: q.price,
+            volume: (lastBar.volume || 0) + (q.volume || 0),
+          }
+          this.lastBarsCache.set(code, updatedBar)
+          onRealtimeCallback(updatedBar)
+        }
+      }
+    )
   }
 
   // ==================== unsubscribeBars ====================
 
   public async unsubscribeBars(subscriberUID: string): Promise<void> {
     console.log('[UnifiedDataFeed] unsubscribeBars:', subscriberUID)
+    const sub = this.subscribers.get(subscriberUID)
+    if (sub) {
+      realtimeWS.unsubscribeQuotes(`datafeed-${subscriberUID}`, [sub.code])
+      this.subscribers.delete(subscriberUID)
+    }
+  }
+
+  // ==================== 辅助: bar 周期毫秒数 ====================
+
+  private _getBarPeriodMs(period: string): number {
+    const map: Record<string, number> = {
+      '1': 60_000,
+      '5': 5 * 60_000,
+      '15': 15 * 60_000,
+      '30': 30 * 60_000,
+      '1h': 60 * 60_000,
+      '2h': 2 * 60 * 60_000,
+      '4h': 4 * 60 * 60_000,
+      '1d': 24 * 60 * 60_000,
+      '1w': 7 * 24 * 60 * 60_000,
+      '1M': 30 * 24 * 60 * 60_000,
+    }
+    return map[period] || 24 * 60 * 60_000
   }
 
   // ==================== getServerTime ====================

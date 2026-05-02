@@ -339,3 +339,303 @@ class TickFlowFetcher(BaseFetcher):
             return None
 
         return stats
+
+    # ================================================================
+    # P1 接口 — 标的列表 / K线 / 实时行情 (Phase 6 数据源链)
+    # ================================================================
+
+    def get_symbol_list(self, market_type: str) -> List[Dict[str, Any]]:
+        """通过 TickFlow Universe 获取标的列表。
+
+        Args:
+            market_type: cn_stock / cn_etf / cn_index / us_stock / hk_stock
+
+        Returns:
+            统一格式标的列表
+        """
+        from src.services.tickflow_symbol import UNIVERSE_MAP, from_tickflow_symbol
+
+        universe_id = UNIVERSE_MAP.get(market_type)
+        if not universe_id:
+            return []
+
+        client = self._get_client()
+        if client is None:
+            # 无 API Key 时尝试 free 客户端
+            client = self._get_free_client()
+        if client is None:
+            return []
+
+        try:
+            universe = client.universes.get(universe_id)
+        except Exception as exc:
+            if self._is_universe_permission_error(exc):
+                logger.info("[TickFlowFetcher] 标的池 %s 权限不足", universe_id)
+                return []
+            raise
+
+        tf_symbols = universe.get("symbols") or []
+        if not tf_symbols:
+            return []
+
+        # 批量获取标的元数据
+        try:
+            instruments = client.instruments.batch(symbols=tf_symbols)
+        except Exception:
+            # instruments 不可用时，退化为仅代码列表
+            instruments = [{"symbol": s} for s in tf_symbols]
+
+        results: List[Dict[str, Any]] = []
+        for inst in instruments:
+            tf_sym = str(inst.get("symbol", "")).strip()
+            if not tf_sym:
+                continue
+            code = from_tickflow_symbol(tf_sym)
+            name = inst.get("name") or inst.get("short_name") or ""
+            exchange = inst.get("exchange") or tf_sym.rsplit(".", 1)[-1] if "." in tf_sym else ""
+
+            results.append({
+                "symbol": code,
+                "name": str(name).strip(),
+                "exchange": exchange.upper() if isinstance(exchange, str) else "",
+                "data_source": "tickflow",
+                "currency": inst.get("currency") or "CNY",
+                "status": "trading",
+            })
+
+        logger.info("[TickFlowFetcher] 标的列表 %s: %d 条", market_type, len(results))
+        return results
+
+    def get_klines(
+        self,
+        symbol: str,
+        period: str = "1d",
+        *,
+        count: int = 300,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        adjust: str = "forward",
+    ) -> List[Dict[str, Any]]:
+        """获取 K 线数据 (统一格式)。
+
+        Args:
+            symbol: 内部代码 (如 600519)
+            period: 内部周期 (如 1d, 5, 60)
+            count: 最多返回条数
+            start_time: 起始时间 (秒级时间戳, 可选)
+            end_time: 结束时间 (秒级时间戳, 可选)
+            adjust: 复权类型 forward / backward / none
+
+        Returns:
+            [{"time": int, "open": float, ...}, ...]
+        """
+        from src.services.tickflow_symbol import to_tickflow_symbol, PERIOD_MAP
+
+        tf_symbol = to_tickflow_symbol(symbol)
+        tf_period = PERIOD_MAP.get(period, period)
+
+        is_minute = tf_period.endswith("m")
+        client = self._get_client() if is_minute else (self._get_client() or self._get_free_client())
+        if client is None:
+            raise DataFetchError("TickFlow 客户端不可用 (无 API Key)")
+
+        kwargs: Dict[str, Any] = {
+            "period": tf_period,
+            "adjust": adjust,
+        }
+        if count:
+            kwargs["count"] = min(count, 10000)
+        if start_time:
+            kwargs["start_time"] = start_time * 1000  # 秒 → 毫秒
+        if end_time:
+            kwargs["end_time"] = end_time * 1000
+
+        try:
+            data = client.klines.get(tf_symbol, **kwargs)
+        except Exception as exc:
+            raise DataFetchError(f"TickFlow K 线获取失败 ({tf_symbol}): {exc}") from exc
+
+        return self._normalize_klines(data)
+
+    def get_realtime_quotes(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        """批量获取实时行情 (统一格式)。
+
+        Args:
+            symbols: 内部代码列表
+
+        Returns:
+            统一格式行情列表
+        """
+        from src.services.tickflow_symbol import to_tickflow_symbol, from_tickflow_symbol
+
+        client = self._get_client()
+        if client is None:
+            raise DataFetchError("TickFlow 实时行情需要 API Key")
+
+        tf_symbols = [to_tickflow_symbol(s) for s in symbols]
+
+        all_quotes: List[Dict[str, Any]] = []
+        for offset in range(0, len(tf_symbols), _MAX_SYMBOLS_PER_QUOTE_REQUEST):
+            batch = tf_symbols[offset: offset + _MAX_SYMBOLS_PER_QUOTE_REQUEST]
+            try:
+                quotes = client.quotes.get(symbols=batch)
+                if quotes:
+                    all_quotes.extend(quotes)
+            except Exception as exc:
+                logger.warning("[TickFlowFetcher] 实时行情批次失败: %s", exc)
+
+        results: List[Dict[str, Any]] = []
+        for q in all_quotes:
+            tf_sym = str(q.get("symbol", ""))
+            code = from_tickflow_symbol(tf_sym)
+            ext = q.get("ext") or {}
+            results.append({
+                "symbol": code,
+                "name": self._extract_name(q),
+                "price": self._safe_float(q.get("last_price")),
+                "change": self._safe_float(ext.get("change_amount")),
+                "change_percent": self._ratio_to_percent(ext.get("change_pct")),
+                "volume": self._safe_float(q.get("volume")),
+                "turnover": self._safe_float(q.get("amount")),
+                "high": self._safe_float(q.get("high")),
+                "low": self._safe_float(q.get("low")),
+                "open": self._safe_float(q.get("open")),
+                "prev_close": self._safe_float(q.get("prev_close")),
+                "update_time": q.get("timestamp"),
+            })
+
+        return results
+
+    # ==================== P1 内部辅助 ====================
+
+    def _get_free_client(self):
+        """获取免费版 TickFlow 客户端 (无需 API Key)"""
+        try:
+            from tickflow import TickFlow
+            return TickFlow.free()
+        except Exception as exc:
+            logger.debug("[TickFlowFetcher] 创建 free 客户端失败: %s", exc)
+            return None
+
+    @staticmethod
+    def _normalize_klines(data) -> List[Dict[str, Any]]:
+        """将 TickFlow 列式 K 线数据转为行式统一格式。
+
+        TickFlow 返回格式:
+          {"data": {"timestamp": [...], "open": [...], ...}}
+        或 pandas DataFrame
+        """
+        if data is None:
+            return []
+
+        # 如果是 DataFrame (SDK as_dataframe=True)
+        if isinstance(data, pd.DataFrame):
+            bars = []
+            for _, row in data.iterrows():
+                ts = row.get("timestamp")
+                if ts is None:
+                    continue
+                bars.append({
+                    "time": int(ts) // 1000 if int(ts) > 1e12 else int(ts),
+                    "open": float(row.get("open", 0)),
+                    "high": float(row.get("high", 0)),
+                    "low": float(row.get("low", 0)),
+                    "close": float(row.get("close", 0)),
+                    "volume": float(row.get("volume", 0)),
+                    "turnover": float(row.get("amount", 0) or row.get("turnover", 0)),
+                })
+            return bars
+
+        # 字典 / 列式格式
+        if isinstance(data, dict):
+            inner = data.get("data", data)
+            timestamps = inner.get("timestamp", [])
+            opens = inner.get("open", [])
+            highs = inner.get("high", [])
+            lows = inner.get("low", [])
+            closes = inner.get("close", [])
+            volumes = inner.get("volume", [])
+            amounts = inner.get("amount", inner.get("turnover", []))
+
+            n = len(timestamps)
+            bars = []
+            for i in range(n):
+                ts = timestamps[i]
+                bars.append({
+                    "time": int(ts) // 1000 if int(ts) > 1e12 else int(ts),
+                    "open": float(opens[i]) if i < len(opens) else 0.0,
+                    "high": float(highs[i]) if i < len(highs) else 0.0,
+                    "low": float(lows[i]) if i < len(lows) else 0.0,
+                    "close": float(closes[i]) if i < len(closes) else 0.0,
+                    "volume": float(volumes[i]) if i < len(volumes) else 0.0,
+                    "turnover": float(amounts[i]) if i < len(amounts) else 0.0,
+                })
+            return bars
+
+        return []
+
+    # ==================== P2: 财务数据 ====================
+
+    def get_financials(
+        self,
+        symbol: str,
+        report_type: str = "metrics",
+        *,
+        limit: int = 8,
+    ) -> Dict[str, Any]:
+        """获取财务数据。
+
+        Args:
+            symbol: 内部代码 (如 600519, AAPL, HK00700)
+            report_type: income | balance | cash_flow | metrics | shares
+            limit: 返回最近几期
+
+        Returns:
+            {"symbol": str, "type": str, "data": [...]}
+        """
+        from src.services.tickflow_symbol import to_tickflow_symbol
+
+        tf_symbol = to_tickflow_symbol(symbol)
+        client = self._get_client()
+        if client is None:
+            raise DataFetchError("TickFlow 财务数据需要 API Key (Expert 套餐)")
+
+        method_map = {
+            "income": "income",
+            "balance": "balance_sheet",
+            "balance_sheet": "balance_sheet",
+            "cash_flow": "cash_flow",
+            "metrics": "metrics",
+            "shares": "shares",
+        }
+        method_name = method_map.get(report_type, "metrics")
+
+        try:
+            financials_api = getattr(client, "financials", None)
+            if financials_api is None:
+                raise DataFetchError("TickFlow SDK 版本不支持 financials API")
+            method = getattr(financials_api, method_name, None)
+            if method is None:
+                raise DataFetchError(f"TickFlow financials 不支持 {report_type}")
+            result = method(tf_symbol, limit=limit)
+        except DataFetchError:
+            raise
+        except Exception as exc:
+            raise DataFetchError(
+                f"TickFlow 财务数据获取失败 ({tf_symbol}/{report_type}): {exc}"
+            ) from exc
+
+        # 标准化输出
+        records = []
+        if isinstance(result, list):
+            records = result
+        elif isinstance(result, pd.DataFrame):
+            records = result.to_dict("records")
+        elif isinstance(result, dict):
+            records = result.get("data", [result])
+
+        return {
+            "symbol": symbol,
+            "type": report_type,
+            "data": records,
+        }

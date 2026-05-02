@@ -27,11 +27,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from fastapi import WebSocket as FastAPIWebSocket
+
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import HealthResponse
 from src.services.system_config_service import SystemConfigService
+from src.services.realtime_ws import RealtimeWSRelay
 
 
 @asynccontextmanager
@@ -113,6 +116,26 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     
     app.include_router(api_v1_router)
     add_error_handlers(app)
+
+    # ============================================================
+    # WebSocket 实时行情中继
+    # ============================================================
+
+    _ws_relay = RealtimeWSRelay()
+
+    @app.websocket("/ws/market")
+    async def ws_market_endpoint(ws: FastAPIWebSocket):
+        """WebSocket 实时行情推送 (前端连接入口)"""
+        await _ws_relay.handle_client(ws)
+
+    @app.get(
+        "/api/ws/status",
+        tags=["WebSocket"],
+        summary="WebSocket 中继状态",
+    )
+    async def ws_status():
+        """获取 WebSocket 中继服务状态"""
+        return _ws_relay.get_status()
     
     # ============================================================
     # 根路由和健康检查

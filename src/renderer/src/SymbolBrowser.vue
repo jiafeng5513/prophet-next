@@ -54,6 +54,7 @@ import MarketTypeSelector from './components/symbol-browser/MarketTypeSelector.v
 import SymbolSearchBar from './components/symbol-browser/SymbolSearchBar.vue'
 import SymbolList from './components/symbol-browser/SymbolList.vue'
 import SymbolContextMenu from './components/symbol-browser/SymbolContextMenu.vue'
+import { realtimeWS } from './service/realtimeWSClient'
 
 const API_BASE = 'http://127.0.0.1:8100/api/v1/market'
 
@@ -69,9 +70,10 @@ const lastUpdateTime = ref('')
 const watchlistSymbols = ref(new Set()) // 自选标的代码集合
 const watchlistItems = ref([]) // 自选列表完整数据
 
-// 实时行情轮询
+// 实时行情 WebSocket
+const WS_SUBSCRIPTION_ID = 'symbol-browser'
 let realtimeTimer = null
-const REALTIME_INTERVAL = 8000 // 8秒
+const REALTIME_INTERVAL = 8000 // 8秒 (fallback 轮询间隔)
 
 const contextMenu = reactive({
   visible: false,
@@ -305,8 +307,14 @@ async function fetchRealtimeQuotes() {
 
 function startRealtimePolling() {
   stopRealtimePolling()
-  // 首次立即获取
+  // 优先使用 WebSocket 推送
+  const currentSymbols = displaySymbols.value.map((s) => s.symbol).slice(0, 50)
+  if (currentSymbols.length > 0) {
+    realtimeWS.updateQuotesSubscription(WS_SUBSCRIPTION_ID, currentSymbols, handleWSQuotes)
+  }
+  // 仍保留首次 REST 获取 (快速填充初始数据)
   fetchRealtimeQuotes()
+  // Fallback 轮询 (如果 WS 未连通, 后端会进行 REST 轮询推送)
   realtimeTimer = setInterval(fetchRealtimeQuotes, REALTIME_INTERVAL)
 }
 
@@ -315,6 +323,39 @@ function stopRealtimePolling() {
     clearInterval(realtimeTimer)
     realtimeTimer = null
   }
+  realtimeWS.unsubscribeQuotes(WS_SUBSCRIPTION_ID)
+}
+
+function handleWSQuotes(quotes) {
+  if (!quotes || quotes.length === 0) return
+  // 构建 symbol -> quote 映射
+  const quoteMap = {}
+  for (const q of quotes) {
+    quoteMap[q.symbol] = q
+  }
+  // 更新列表中的价格
+  const updateList = (arr) => {
+    return arr.map((item) => {
+      const q = quoteMap[item.symbol]
+      if (q) {
+        return {
+          ...item,
+          current_price: q.price,
+          change_percent: q.change_percent
+        }
+      }
+      return item
+    })
+  }
+  if (activeMarketType.value === 'watchlist') {
+    watchlistItems.value = updateList(watchlistItems.value)
+  } else if (!searchQuery.value) {
+    symbols.value = updateList(symbols.value)
+  }
+  if (searchQuery.value) {
+    searchResults.value = updateList(searchResults.value)
+  }
+  lastUpdateTime.value = new Date().toLocaleTimeString()
 }
 
 // 切换市场类型
@@ -400,6 +441,14 @@ function handleVisibility() {
 // 监听搜索输入
 watch(searchQuery, (val) => {
   handleSearch(val)
+})
+
+// 监听显示列表变化，更新 WS 订阅
+watch(displaySymbols, (list) => {
+  const currentSymbols = list.map((s) => s.symbol).slice(0, 50)
+  if (currentSymbols.length > 0) {
+    realtimeWS.updateQuotesSubscription(WS_SUBSCRIPTION_ID, currentSymbols, handleWSQuotes)
+  }
 })
 
 onMounted(async () => {

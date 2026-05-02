@@ -194,11 +194,15 @@ export function isBackendMarket(marketType: string): boolean {
 export function guessMarketType(symbol: string): string {
   const s = symbol.trim()
   if (s.includes('/')) return 'crypto'
+  // 港股: HKxxxxx
+  if (s.toUpperCase().startsWith('HK') && /^\d+$/.test(s.slice(2))) return 'hk_stock'
   if (/^\d{6}$/.test(s)) {
     if (s.startsWith('5')) return 'cn_etf'
     if (s.startsWith('15') || s.startsWith('16') || s.startsWith('18')) return 'cn_etf'
     return 'cn_stock'
   }
+  // 纯字母 → 美股
+  if (/^[A-Za-z]+$/.test(s)) return 'us_stock'
   return 'cn_stock'
 }
 
@@ -208,4 +212,24 @@ export function guessMarketType(symbol: string): string {
 export function clearCache(): void {
   cache.marketTypes = null
   cache.symbols.clear()
+}
+
+// ==================== 财务数据 ====================
+
+export interface FinancialsResponse {
+  symbol: string
+  type: string
+  data: Record<string, any>[]
+}
+
+/**
+ * 获取标的财务数据
+ */
+export async function getFinancials(
+  symbol: string,
+  type: 'income' | 'balance' | 'cash_flow' | 'metrics' | 'shares' = 'metrics',
+  limit = 8
+): Promise<FinancialsResponse> {
+  const params = new URLSearchParams({ symbol, type, limit: String(limit) })
+  return fetchJson<FinancialsResponse>(`${API_BASE}/financials?${params.toString()}`)
 }

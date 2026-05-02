@@ -9,11 +9,13 @@
 2. 提供统一的 K 线数据接口
 3. 管理缓存策略
 4. 为 TradingView DataFeed 和标的浏览器提供后端支撑
+5. 多数据源优先级链自动降级
 
-数据源：
-- Binance: 虚拟货币 (REST API 直连)
-- AKShare: A 股 / ETF / 期货 (Python 库)
-- TickFlow: A 股实时行情 (REST API, 待接入)
+数据源优先级（A 股/ETF）：
+  TickFlow → Tushare → AKShare → BaoStock → Efinance
+
+数据源优先级（虚拟货币）：
+  Binance → OKX
 """
 
 import logging
@@ -27,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from src.services.market_cache import MarketCache
+from src.services.data_source_chain import DataSourceChain, DataSource, AllSourcesFailedError
 
 logger = logging.getLogger(__name__)
 
@@ -102,18 +105,18 @@ MARKET_TYPES = [
     {
         "type": "hk_stock",
         "name": "港股",
-        "description": "香港证券市场",
-        "data_source": "akshare",
+        "description": "香港证券市场 (HKEX)",
+        "data_source": "tickflow",
         "icon": "stock",
-        "enabled": False,
+        "enabled": True,
     },
     {
         "type": "us_stock",
         "name": "美股",
-        "description": "美国证券市场",
-        "data_source": "akshare",
+        "description": "美国证券市场 (NYSE/NASDAQ)",
+        "data_source": "tickflow",
         "icon": "stock",
-        "enabled": False,
+        "enabled": True,
     },
 ]
 
@@ -142,8 +145,73 @@ class MarketGateway:
         self._cache = cache or MarketCache()
         self._fetch_locks: Dict[str, threading.Lock] = {}
         self._fetch_locks_lock = threading.Lock()
+        self._chain = DataSourceChain()
+        self._tickflow_fetcher = None
+        self._register_chains()
         self._initialized = True
-        logger.info("[MarketGateway] 初始化完成")
+        logger.info("[MarketGateway] 初始化完成 (含数据源链)")
+
+    def _get_tickflow_fetcher(self):
+        """延迟初始化 TickFlowFetcher (避免启动时导入失败)"""
+        if self._tickflow_fetcher is None:
+            try:
+                api_key = os.environ.get("TICKFLOW_API_KEY", "")
+                from data_provider.tickflow_fetcher import TickFlowFetcher
+                self._tickflow_fetcher = TickFlowFetcher(api_key=api_key)
+            except Exception as exc:
+                logger.warning("[MarketGateway] TickFlowFetcher 初始化失败: %s", exc)
+        return self._tickflow_fetcher
+
+    def _register_chains(self) -> None:
+        """注册所有数据类别的优先级链"""
+        # ---------- 标的列表 ----------
+        self._chain.register("symbols:cn_stock", [
+            DataSource("tickflow", lambda **kw: self._fetch_tickflow_symbols("cn_stock")),
+            DataSource("akshare", lambda **kw: self._fetch_cn_stock_symbols()),
+        ])
+        self._chain.register("symbols:cn_etf", [
+            DataSource("tickflow", lambda **kw: self._fetch_tickflow_symbols("cn_etf")),
+            DataSource("akshare", lambda **kw: self._fetch_cn_etf_symbols()),
+        ])
+        self._chain.register("symbols:crypto", [
+            DataSource("binance", lambda **kw: self._fetch_crypto_symbols()),
+        ])
+        self._chain.register("symbols:hk_stock", [
+            DataSource("tickflow", lambda **kw: self._fetch_tickflow_symbols("hk_stock")),
+        ])
+        self._chain.register("symbols:us_stock", [
+            DataSource("tickflow", lambda **kw: self._fetch_tickflow_symbols("us_stock")),
+        ])
+
+        # ---------- K 线 ----------
+        self._chain.register("kline:cn", [
+            DataSource("tickflow", self._fetch_tickflow_kline),
+            DataSource("data_provider", self._fetch_cn_kline_via_manager),
+        ])
+        self._chain.register("kline:crypto", [
+            DataSource("binance", self._fetch_crypto_kline),
+        ])
+        self._chain.register("kline:hk", [
+            DataSource("tickflow", self._fetch_tickflow_kline),
+        ])
+        self._chain.register("kline:us", [
+            DataSource("tickflow", self._fetch_tickflow_kline),
+        ])
+
+        # ---------- 实时行情 ----------
+        self._chain.register("realtime:cn", [
+            DataSource("tickflow", self._fetch_tickflow_realtime),
+            DataSource("data_provider", self._fetch_cn_realtime_via_manager),
+        ])
+        self._chain.register("realtime:crypto", [
+            DataSource("binance", self._fetch_crypto_realtime),
+        ])
+        self._chain.register("realtime:hk", [
+            DataSource("tickflow", self._fetch_tickflow_realtime),
+        ])
+        self._chain.register("realtime:us", [
+            DataSource("tickflow", self._fetch_tickflow_realtime),
+        ])
 
     def _get_fetch_lock(self, key: str) -> threading.Lock:
         """获取指定 key 的拉取锁"""
@@ -269,17 +337,25 @@ class MarketGateway:
     # ==================== 内部: 数据源拉取 ====================
 
     def _fetch_symbols_from_source(self, market_type: str) -> List[Dict[str, Any]]:
-        """根据市场类型从对应数据源拉取标的列表"""
-        if market_type == "crypto":
-            return self._fetch_crypto_symbols()
-        elif market_type == "cn_stock":
-            return self._fetch_cn_stock_symbols()
-        elif market_type == "cn_etf":
-            return self._fetch_cn_etf_symbols()
-        elif market_type == "cn_futures":
-            return self._fetch_cn_futures_symbols()
-        else:
+        """根据市场类型从数据源链拉取标的列表"""
+        chain_category = {
+            "crypto": "symbols:crypto",
+            "cn_stock": "symbols:cn_stock",
+            "cn_etf": "symbols:cn_etf",
+            "hk_stock": "symbols:hk_stock",
+            "us_stock": "symbols:us_stock",
+        }.get(market_type)
+
+        if not chain_category:
+            if market_type == "cn_futures":
+                return self._fetch_cn_futures_symbols()
             logger.warning(f"[MarketGateway] 不支持的市场类型: {market_type}")
+            return []
+
+        try:
+            return self._chain.fetch(chain_category)
+        except AllSourcesFailedError as e:
+            logger.error("[MarketGateway] 标的列表所有数据源均失败: %s", e)
             return []
 
     def _fetch_crypto_symbols(self) -> List[Dict[str, Any]]:
@@ -445,22 +521,40 @@ class MarketGateway:
         end_time: int,
         limit: int,
     ) -> List[Dict[str, Any]]:
-        """从数据源拉取 K 线数据"""
+        """通过数据源链拉取 K 线数据"""
         if market_type == "crypto":
-            return self._fetch_crypto_kline(symbol, period, start_time, end_time, limit)
+            chain_cat = "kline:crypto"
         elif market_type in ("cn_stock", "cn_etf"):
-            return self._fetch_cn_kline(symbol, period, start_time, end_time, limit)
+            chain_cat = "kline:cn"
+        elif market_type == "hk_stock":
+            chain_cat = "kline:hk"
+        elif market_type == "us_stock":
+            chain_cat = "kline:us"
         else:
             logger.warning(f"[MarketGateway] 不支持的 K 线市场类型: {market_type}")
             return []
 
+        try:
+            return self._chain.fetch(
+                chain_cat,
+                symbol=symbol,
+                period=period,
+                start_time=start_time,
+                end_time=end_time,
+                limit=limit,
+            )
+        except AllSourcesFailedError as e:
+            logger.error("[MarketGateway] K 线所有数据源均失败: %s", e)
+            return []
+
     def _fetch_crypto_kline(
         self,
-        symbol: str,
-        period: str,
-        start_time: int,
-        end_time: int,
-        limit: int,
+        symbol: str = "",
+        period: str = "1d",
+        start_time: int = 0,
+        end_time: int = 0,
+        limit: int = 300,
+        **_kwargs,
     ) -> List[Dict[str, Any]]:
         """从 Binance 获取虚拟货币 K 线"""
         import requests
@@ -517,18 +611,19 @@ class MarketGateway:
             logger.error(f"[MarketGateway] Binance K 线获取失败 ({symbol}): {e}")
             return []
 
-    def _fetch_cn_kline(
+    def _fetch_cn_kline_via_manager(
         self,
-        symbol: str,
-        period: str,
-        start_time: int,
-        end_time: int,
-        limit: int,
+        symbol: str = "",
+        period: str = "1d",
+        start_time: int = 0,
+        end_time: int = 0,
+        limit: int = 300,
+        **_kwargs,
     ) -> List[Dict[str, Any]]:
         """
         通过 DataFetcherManager 获取 A 股 / ETF K 线
 
-        复用已有的 data_provider 层
+        复用已有的 data_provider 层 (AKShare/Tushare/BaoStock 等)
         """
         try:
             from data_provider.base import DataFetcherManager
@@ -602,17 +697,29 @@ class MarketGateway:
     def _fetch_realtime_from_source(
         self, symbols: List[str], market_type: str
     ) -> List[Dict[str, Any]]:
-        """获取实时行情"""
+        """通过数据源链获取实时行情"""
         if market_type == "crypto":
-            return self._fetch_crypto_realtime(symbols)
+            chain_cat = "realtime:crypto"
         elif market_type in ("cn_stock", "cn_etf"):
-            return self._fetch_cn_realtime(symbols)
-        return []
+            chain_cat = "realtime:cn"
+        elif market_type == "hk_stock":
+            chain_cat = "realtime:hk"
+        elif market_type == "us_stock":
+            chain_cat = "realtime:us"
+        else:
+            return []
 
-    def _fetch_crypto_realtime(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        try:
+            return self._chain.fetch(chain_cat, symbols=symbols)
+        except AllSourcesFailedError as e:
+            logger.error("[MarketGateway] 实时行情所有数据源均失败: %s", e)
+            return []
+
+    def _fetch_crypto_realtime(self, symbols: List[str] = None, **_kwargs) -> List[Dict[str, Any]]:
         """从 Binance 获取虚拟货币实时行情"""
         import requests
 
+        symbols = symbols or []
         results = []
         try:
             # Binance 24hr ticker (批量)
@@ -653,8 +760,9 @@ class MarketGateway:
 
         return results
 
-    def _fetch_cn_realtime(self, symbols: List[str]) -> List[Dict[str, Any]]:
+    def _fetch_cn_realtime_via_manager(self, symbols: List[str] = None, **_kwargs) -> List[Dict[str, Any]]:
         """通过 DataFetcherManager 获取 A 股实时行情"""
+        symbols = symbols or []
         try:
             from data_provider.base import DataFetcherManager
 
@@ -692,6 +800,60 @@ class MarketGateway:
             logger.error(f"[MarketGateway] CN 实时行情获取失败: {e}", exc_info=True)
             return []
 
+    # ==================== TickFlow 适配方法 ====================
+
+    def _fetch_tickflow_symbols(self, market_type: str = "", **_kwargs) -> List[Dict[str, Any]]:
+        """通过 TickFlowFetcher 获取标的列表"""
+        fetcher = self._get_tickflow_fetcher()
+        if fetcher is None:
+            raise Exception("TickFlowFetcher 不可用")
+        result = fetcher.get_symbol_list(market_type)
+        if not result:
+            raise Exception(f"TickFlow 标的列表为空 ({market_type})")
+        return result
+
+    def _fetch_tickflow_kline(
+        self,
+        symbol: str = "",
+        period: str = "1d",
+        start_time: int = 0,
+        end_time: int = 0,
+        limit: int = 300,
+        **_kwargs,
+    ) -> List[Dict[str, Any]]:
+        """通过 TickFlowFetcher 获取 K 线"""
+        fetcher = self._get_tickflow_fetcher()
+        if fetcher is None:
+            raise Exception("TickFlowFetcher 不可用")
+        return fetcher.get_klines(
+            symbol, period,
+            count=limit,
+            start_time=start_time if start_time > 0 else None,
+            end_time=end_time if end_time > 0 else None,
+        )
+
+    def _fetch_tickflow_realtime(self, symbols: List[str] = None, **_kwargs) -> List[Dict[str, Any]]:
+        """通过 TickFlowFetcher 获取实时行情"""
+        fetcher = self._get_tickflow_fetcher()
+        if fetcher is None:
+            raise Exception("TickFlowFetcher 不可用")
+        symbols = symbols or []
+        if not symbols:
+            return []
+        return fetcher.get_realtime_quotes(symbols)
+
+    def get_chain_health(self) -> Dict[str, Any]:
+        """获取数据源链健康报告 (调试/监控)"""
+        return self._chain.get_health_report()
+
+    def reset_chain(self, category: Optional[str] = None) -> None:
+        """重置数据源链状态 (配置变更后调用)"""
+        self._chain.reset(category)
+        if self._tickflow_fetcher is not None:
+            self._tickflow_fetcher.close()
+            self._tickflow_fetcher = None
+        logger.info("[MarketGateway] 数据源链已重置")
+
     # ==================== 辅助方法 ====================
 
     @staticmethod
@@ -701,6 +863,9 @@ class MarketGateway:
         # 含 "/" 且全英文大写，大概率是虚拟货币
         if "/" in s:
             return "crypto"
+        # 港股: HKxxxxx 格式
+        if s.upper().startswith("HK") and s[2:].isdigit():
+            return "hk_stock"
         # 6 位数字
         if s.isdigit() and len(s) == 6:
             if s.startswith(("5",)):
@@ -708,4 +873,7 @@ class MarketGateway:
             if s.startswith(("1",)) and s[:2] in ("15", "16", "18"):
                 return "cn_etf"
             return "cn_stock"
+        # 纯字母 → 美股
+        if s.isalpha():
+            return "us_stock"
         return "cn_stock"

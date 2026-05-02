@@ -23,6 +23,7 @@ defineProps({
 defineEmits(['change'])
 
 const iconMap = {
+  watchlist: '⭐',
   crypto: '₿',
   cn_stock: '沪',
   cn_etf: 'E',

@@ -50,7 +50,7 @@
 
 ## 三、分阶段开发计划
 
-### Phase 1：后端统一市场数据网关 (Market Data Gateway)
+### Phase 1：后端统一市场数据网关 (Market Data Gateway) ✅ 已完成
 
 **目标**：建立统一的标的列表与行情数据 API
 
@@ -86,9 +86,9 @@ class KLineData:
 
 | 适配器 | 数据源 | 覆盖市场 | 状态 |
 |--------|--------|----------|------|
-| BinanceAdapter | Binance REST/WS | 虚拟货币 | 已有(前端)，需后端化 |
-| AKShareAdapter | akshare | A股/期货/ETF | 已有(`akshare_fetcher.py`)，需扩展标的列表接口 |
-| TickFlowAdapter | TickFlow API | A股/期货(实时) | 待开发 |
+| BinanceAdapter | Binance REST/WS | 虚拟货币 | ✅ 已完成(后端集成至 MarketGateway) |
+| AKShareAdapter | akshare | A股/期货/ETF | ✅ 已完成(标的列表+K线已接入 MarketGateway) |
+| TickFlowAdapter | TickFlow API | A股/期货(实时) | ⚠️ P0已完成(市场概览)，P1待Phase 6接入 |
 
 #### 1.3 本地缓存层
 
@@ -116,7 +116,7 @@ GET /api/v1/market/realtime?symbols=600519,000001  # 实时行情（批量）
 
 ---
 
-### Phase 2：前端标的浏览器 UI
+### Phase 2：前端标的浏览器 UI ✅ 已完成
 
 **目标**：实现标的浏览器固定标签页
 
@@ -166,7 +166,7 @@ GET /api/v1/market/realtime?symbols=600519,000001  # 实时行情（批量）
 
 ---
 
-### Phase 3：前端统一数据服务层
+### Phase 3：前端统一数据服务层 ✅ 已完成
 
 **目标**：为 TradingView Charting Library 和其他 UI 组件提供统一数据接口
 
@@ -205,7 +205,7 @@ interface IMarketDataService {
 
 ---
 
-### Phase 4：右键菜单与功能集成
+### Phase 4：右键菜单与功能集成 ✅ 已完成
 
 **目标**：实现标的操作菜单并打通各功能模块
 
@@ -227,7 +227,7 @@ interface IMarketDataService {
 
 ---
 
-### Phase 5：自选列表与搜索增强
+### Phase 5：自选列表与搜索增强 ✅ 已完成
 
 **目标**：完善用户体验
 
@@ -252,12 +252,16 @@ interface IMarketDataService {
 
 ### 4.1 数据源对比
 
-| 数据源 | 市场 | 获取方式 | 频率限制 | 当前状态 |
-|--------|------|----------|----------|----------|
-| Binance | 虚拟货币 | REST + WebSocket | 宽松 | ✅ 前端已接入 |
-| AKShare | A股/期货/ETF | Python 库（爬虫） | 需节流(2-5s/req) | ✅ 后端已有 fetcher |
-| TickFlow | A股/期货 | REST API | 需付费 Key | 🔲 待接入 |
-| OKX | 虚拟货币 | REST + WebSocket | 宽松 | ✅ 前端已接入 |
+| 数据源 | 市场 | 获取方式 | 频率限制 | 当前状态 | 优先级 |
+|--------|------|----------|----------|----------|--------|
+| TickFlow | A股/ETF/港股/美股 | REST + WebSocket + SDK | 付费按套餐限额 | ✅ 已有P0接口 | ⭐ CN首选 |
+| Binance | 虚拟货币 | REST + WebSocket | 宽松 | ✅ 前端已接入 | ⭐ Crypto首选 |
+| Tushare | A股/期货/ETF | REST API | 需积分 | ✅ 后端已有 fetcher | 第2优先级 |
+| AKShare | A股/期货/ETF | Python 库（爬虫） | 需节流(2-5s/req) | ✅ 后端已有 fetcher | 第3优先级(兜底) |
+| BaoStock | A股 | Python 库 | 较宽松 | ✅ 后端已有 fetcher | 第4优先级 |
+| Efinance | A股 | Python 库 | 较宽松 | ✅ 后端已有 fetcher | 第5优先级 |
+| OKX | 虚拟货币 | REST + WebSocket | 宽松 | ✅ 前端已接入 | Crypto第2优先级 |
+| Longbridge | 美股/港股 | REST API | 需付费 | ✅ 后端已有 fetcher | 港股/美股兜底 |
 
 ### 4.2 缓存策略设计
 
@@ -290,14 +294,392 @@ K线数据缓存：
 
 ## 五、开发优先级与里程碑
 
-| 里程碑 | 内容 | 依赖 |
-|--------|------|------|
-| **M1** | 后端 Market Data Gateway API（标的列表 + K线） | 无 |
-| **M2** | 前端标的浏览器 UI（固定标签页 + 列表 + 搜索） | M1 |
-| **M3** | 前端统一数据服务 + TradingView 多数据源 DataFeed | M1 |
-| **M4** | 右键菜单 + 图表打开 + 市场分析联动 | M2, M3 |
-| **M5** | 自选列表 + 实时行情 + 搜索增强 | M4 |
-| **M6** | TickFlow 数据源接入 + 缓存优化 | M1 |
+| 里程碑 | 内容 | 依赖 | 状态 |
+|--------|------|------|------|
+| **M1** | 后端 Market Data Gateway API（标的列表 + K线） | 无 | ✅ 完成 |
+| **M2** | 前端标的浏览器 UI（固定标签页 + 列表 + 搜索） | M1 | ✅ 完成 |
+| **M3** | 前端统一数据服务 + TradingView 多数据源 DataFeed | M1 | ✅ 完成 |
+| **M4** | 右键菜单 + 图表打开 + 市场分析联动 | M2, M3 | ✅ 完成 |
+| **M5** | 自选列表 + 实时行情 + 搜索增强 | M4 | ✅ 完成 |
+| **M6** | 多数据源优先级链 + TickFlow 深度接入 | M1 | ✅ 完成 |
+| **M7** | WebSocket 实时推送 + 五档行情 | M6 | ✅ 已完成 |
+| **M8** | 港股/美股市场接入 + 财务数据 | M6 | ✅ 已完成 |
+
+---
+
+## Phase 6：多数据源优先级链 + TickFlow 深度接入
+
+### 6.0 设计理念
+
+建立**多数据源优先级链 (Data Source Chain)** 机制，对每个数据类别（标的列表、K线、实时行情）定义有序的数据源队列。请求时从最高优先级源开始尝试，若失败则自动降级到下一级，以最大程度确保**数据可用性与质量**。
+
+#### 优先级链设计
+
+| 数据类别 | A股/ETF 优先级链 | 虚拟货币优先级链 |
+|----------|------------------|-----------------|
+| 标的列表 | TickFlow Universe → AKShare → BaoStock | Binance exchangeInfo → OKX |
+| 历史K线(日线) | TickFlow `/v1/klines` → Tushare → AKShare → BaoStock → Efinance | Binance → OKX |
+| 分钟K线 | TickFlow `/v1/klines` → Tushare → AKShare | Binance → OKX |
+| 日内分时 | TickFlow `/v1/klines/intraday` → AKShare | Binance → OKX |
+| 实时行情(REST) | TickFlow `/v1/quotes` → AKShare → Efinance | Binance 24hr → OKX |
+| 实时行情(推送) | TickFlow WebSocket → 轮询 fallback | Binance WebSocket → OKX WebSocket |
+| 五档行情 | TickFlow `/v1/depth` (付费) → 不可用 | Binance depth → OKX |
+| 财务数据 | TickFlow financials (付费) → Tushare → AKShare | N/A |
+
+> **核心原则**: TickFlow 为付费源，响应速度快、数据质量高，作为 A股/ETF 的首选；免费源作为兜底保障。
+
+### 6.1 TickFlow API 接入摘要
+
+基于 [TickFlow 文档](https://docs.tickflow.org/zh-Hans) 整理：
+
+#### 服务端点
+| 环境 | Base URL | 说明 |
+|------|----------|------|
+| 完整服务 | `https://api.tickflow.org` | 需 API Key，实时行情+分钟K线 |
+| 免费服务 | `https://free-api.tickflow.org` | 无需 Key，仅日K+标的信息 |
+
+#### 认证方式
+- Header: `x-api-key: YOUR_API_KEY`
+- WebSocket: `wss://api.tickflow.org/v1/ws/stream?api_key=YOUR_API_KEY`
+- Python SDK: `pip install "tickflow[all]"` → `TickFlow(api_key="...")` / `TickFlow.free()`
+
+#### 标的代码格式
+TickFlow 使用 `代码.交易所后缀` 格式（如 `600519.SH`, `000001.SZ`, `AAPL.US`, `00700.HK`），需要在 Gateway 层做代码转换：
+- 内部6位码 `600519` ↔ TickFlow `600519.SH`
+- 内部 `HK00700` ↔ TickFlow `00700.HK`
+- 美股直接映射: `AAPL` ↔ `AAPL.US`
+
+#### 核心 REST API
+
+| API | 方法 | 说明 | 付费 |
+|-----|------|------|------|
+| `/v1/quotes` | GET/POST | 实时行情（按 symbols 或 universes） | 需 Key |
+| `/v1/depth` | GET | 五档盘口 | Pro/Expert |
+| `/v1/klines` | GET | 历史K线（1m~1Y，max 10000条） | 分钟线需 Key |
+| `/v1/klines/batch` | GET | 批量K线 | 同上 |
+| `/v1/klines/intraday` | GET | 当日分钟K线 | 需 Key |
+| `/v1/instruments` | GET/POST | 标的元数据 | 免费 |
+| `/v1/universes` | GET | 标的池列表 | 免费 |
+| `/v1/universes/{id}` | GET | 标的池详情（含全部代码） | 免费 |
+| `/v1/exchanges` | GET | 交易所列表 | 免费 |
+| `/v1/financials/*` | GET | 财务数据（利润表/资产负债表等） | Expert |
+
+#### K线响应格式 (列式紧凑)
+```json
+{
+  "data": {
+    "timestamp": [1775145600000, ...],
+    "open": [10.25, ...],
+    "high": [10.25, ...],
+    "low": [10.08, ...],
+    "close": [10.12, ...],
+    "volume": [411518, ...],
+    "amount": [417211984.0, ...]
+  }
+}
+```
+> 注意：时间戳为**毫秒**级。K线周期: `1m, 5m, 10m, 15m, 30m, 60m, 1d, 1w, 1M, 1Q, 1Y`。
+> 复权类型: `forward`(默认), `backward`, `forward_additive`(同东方财富), `backward_additive`, `none`。
+
+#### 实时行情响应
+```json
+{
+  "data": [{
+    "symbol": "600000.SH",
+    "region": "CN",
+    "last_price": 9.72,
+    "prev_close": 9.78,
+    "open": 9.78,
+    "high": 9.78,
+    "low": 9.68,
+    "volume": 426585,
+    "amount": 422430500,
+    "timestamp": 1776754802000,
+    "ext": {
+      "type": "cn_equity",
+      "name": "浦发银行",
+      "change_pct": -0.006135,
+      "change_amount": -0.06,
+      "amplitude": 0.010225,
+      "turnover_rate": 0.001281
+    }
+  }]
+}
+```
+> `change_pct` 为比例值（如 -0.006135 即 -0.61%），前端需 *100 转为百分比。
+
+#### WebSocket 实时推送 (付费)
+```
+连接: wss://api.tickflow.org/v1/ws/stream?api_key=YOUR_API_KEY
+订阅: {"op": "subscribe", "channel": "quotes", "symbols": ["600519.SH"]}
+推送: {"op": "quotes", "data": [{ ... 同 REST 格式 ... }]}
+退订: {"op": "unsubscribe", "channel": "quotes", "symbols": ["600519.SH"]}
+```
+- 频道: `quotes`(行情) / `depth`(五档盘口)
+- 连接保活: 服务端30秒Ping，客户端需回Pong
+- 断线需重新 subscribe
+
+#### 标的池 (Universe)
+| ID | 说明 |
+|----|------|
+| `CN_Equity_A` | 沪深 A 股（~5500只） |
+| `CN_ETF` | 沪深 ETF（~1400只） |
+| `CN_Index` | 沪深指数 |
+| `US_Equity` | 美股 |
+| `HK_Equity` | 港股 |
+
+#### Python SDK 用法摘要
+```python
+from tickflow import TickFlow, AsyncTickFlow
+
+# 同步
+tf = TickFlow(api_key="xxx")
+df = tf.klines.get("600519.SH", period="1d", count=1000, as_dataframe=True)
+quotes = tf.quotes.get(symbols=["600519.SH", "000001.SZ"])
+universe = tf.universes.get("CN_Equity_A")  # 获取全部A股代码
+
+# 异步
+async with AsyncTickFlow(api_key="xxx") as tf:
+    df = await tf.klines.get("600519.SH", as_dataframe=True)
+
+# WebSocket
+stream = tf.stream
+@stream.on_quotes
+def on_quotes(quotes): ...
+stream.subscribe("quotes", ["600519.SH"])
+stream.connect(block=False)  # 非阻塞后台线程
+
+# 异常层级: TickFlowError > APIError > AuthenticationError/RateLimitError/...
+# 自动重试: 内置指数退避，可配置 max_retries / timeout
+```
+
+### 6.2 后端：数据源链管理器
+
+新建文件：`backend/src/services/data_source_chain.py`
+
+```python
+class DataSourceChain:
+    """数据源优先级链管理器"""
+
+    def __init__(self, config: dict):
+        self._chains = {}  # {category: [source1, source2, ...]}
+        self._health = {}  # {source_name: {healthy: bool, last_fail_at, fail_count}}
+
+    def register_chain(self, category: str, sources: list[DataSourceAdapter]):
+        """注册某数据类别的优先级链"""
+
+    async def fetch(self, category: str, **kwargs) -> Any:
+        """按优先级链依次尝试，成功即返回，全部失败则抛异常"""
+        for source in self._chains[category]:
+            if not self._is_healthy(source):
+                continue  # 跳过近期失败的源
+            try:
+                result = await source.fetch(**kwargs)
+                self._mark_success(source)
+                return result
+            except Exception as e:
+                self._mark_failure(source, e)
+                logger.warning(f"[DataSourceChain] {source.name} 失败: {e}, 尝试下一个")
+        raise AllSourcesFailedError(category)
+
+    def _is_healthy(self, source) -> bool:
+        """指数退避: 失败N次后冷却 min(2^N, 300) 秒"""
+
+    def _mark_failure(self, source, error):
+        """记录失败并判断是否为权限/配额错误（永久跳过 vs 临时退避）"""
+```
+
+### 6.3 后端：扩展 TickFlowFetcher
+
+在现有 `backend/data_provider/tickflow_fetcher.py` 基础上扩展，补全 P1 接口：
+
+```python
+class TickFlowFetcher(BaseFetcher):
+    """TickFlow 数据获取器 — 完整版"""
+
+    # --- 新增标的列表接口 ---
+    def get_symbol_list(self, market_type: str) -> list[dict]:
+        """通过 Universe 获取标的列表"""
+        universe_map = {
+            'cn_stock': 'CN_Equity_A',
+            'cn_etf': 'CN_ETF',
+            'cn_index': 'CN_Index',
+            'us_stock': 'US_Equity',
+            'hk_stock': 'HK_Equity',
+        }
+        universe = tf.universes.get(universe_map[market_type])
+        instruments = tf.instruments.batch(symbols=universe['symbols'])
+        return [self._normalize_instrument(inst) for inst in instruments]
+
+    # --- 新增K线接口 ---
+    def get_klines(self, symbol, period, count, start_time, end_time, adjust) -> dict:
+        """获取K线数据，返回统一格式"""
+        tf_symbol = self._to_tickflow_symbol(symbol)
+        data = tf.klines.get(tf_symbol, period=period, count=count,
+                             start_time=start_time, end_time=end_time,
+                             adjust=adjust or 'forward')
+        return self._normalize_klines(data)
+
+    # --- 新增实时行情接口 ---
+    def get_realtime_quotes(self, symbols: list[str]) -> list[dict]:
+        """批量获取实时行情"""
+        tf_symbols = [self._to_tickflow_symbol(s) for s in symbols]
+        quotes = tf.quotes.get(symbols=tf_symbols)
+        return [self._normalize_quote(q) for q in quotes]
+
+    # --- 代码转换 ---
+    @staticmethod
+    def _to_tickflow_symbol(code: str) -> str:
+        """内部代码 → TickFlow 格式"""
+        # 600xxx/601xxx/603xxx/688xxx → xxx.SH
+        # 000xxx/002xxx/003xxx/300xxx → xxx.SZ
+        # 92xxxx/43xxxx/8xxxxx → xxx.BJ
+        # HK00700 → 00700.HK
+        # AAPL → AAPL.US
+
+    @staticmethod
+    def _from_tickflow_symbol(tf_symbol: str) -> str:
+        """TickFlow 格式 → 内部代码"""
+```
+
+### 6.4 后端：改造 MarketGateway 使用数据源链
+
+修改 `backend/src/services/market_gateway.py`：
+
+```python
+class MarketGateway:
+    def __init__(self):
+        self._cache = MarketCache()
+        self._chain = DataSourceChain()
+
+        # 注册标的列表链
+        self._chain.register('symbols:cn_stock',
+            [TickFlowSymbolSource(), AKShareSymbolSource()])
+        self._chain.register('symbols:cn_etf',
+            [TickFlowSymbolSource(), AKShareSymbolSource()])
+        self._chain.register('symbols:crypto',
+            [BinanceSymbolSource(), OKXSymbolSource()])
+
+        # 注册K线链
+        self._chain.register('kline:cn',
+            [TickFlowKlineSource(), TushareKlineSource(),
+             AKShareKlineSource(), BaostockKlineSource(), EfinanceKlineSource()])
+        self._chain.register('kline:crypto',
+            [BinanceKlineSource(), OKXKlineSource()])
+
+        # 注册实时行情链
+        self._chain.register('realtime:cn',
+            [TickFlowRealtimeSource(), AKShareRealtimeSource(), EfinanceRealtimeSource()])
+        self._chain.register('realtime:crypto',
+            [BinanceRealtimeSource(), OKXRealtimeSource()])
+```
+
+### 6.5 后端：配置管理
+
+在 `backend/src/config.py` 中添加数据源配置：
+
+```python
+# TickFlow 配置
+TICKFLOW_API_KEY = os.environ.get('TICKFLOW_API_KEY', '')
+TICKFLOW_BASE_URL = os.environ.get('TICKFLOW_BASE_URL', 'https://api.tickflow.org')
+TICKFLOW_FREE_URL = 'https://free-api.tickflow.org'
+TICKFLOW_TIMEOUT = 30.0
+TICKFLOW_WEBSOCKET_ENABLED = True  # 是否启用 WebSocket 推送
+
+# 数据源优先级（可通过配置覆盖默认值）
+DATA_SOURCE_PRIORITY = {
+    'cn_kline': ['tickflow', 'tushare', 'akshare', 'baostock', 'efinance'],
+    'cn_realtime': ['tickflow', 'akshare', 'efinance'],
+    'cn_symbols': ['tickflow', 'akshare'],
+    'crypto_kline': ['binance', 'okx'],
+    'crypto_realtime': ['binance', 'okx'],
+}
+```
+
+### 6.6 前端：设置页面 TickFlow API Key 配置
+
+修改 `src/renderer/src/Settings.vue`（设置页面）：
+
+- 新增「数据源配置」区域
+- TickFlow API Key 输入框（密码型，带测试连接按钮）
+- Tushare Token 输入框（已有，可合并展示）
+- 数据源优先级排序（高级设置，可拖拽调整顺序）
+- 配置保存后通过 IPC 通知后端重载
+
+### 6.7 实现步骤
+
+| 步骤 | 内容 | 文件 |
+|------|------|------|
+| 6.7.1 | TickFlow 代码转换工具 | `market_gateway.py` 新增 `_to_tickflow_symbol()` / `_from_tickflow_symbol()` | ✅ 已完成 |
+| 6.7.2 | 扩展 TickFlowFetcher (标的列表、K线、实时行情) | `data_provider/tickflow_fetcher.py` | ✅ 已完成 |
+| 6.7.3 | DataSourceChain 数据源链管理器 | `src/services/data_source_chain.py` (新建) | ✅ 已完成 |
+| 6.7.4 | MarketGateway 改造为数据源链模式 | `src/services/market_gateway.py` | ✅ 已完成 |
+| 6.7.5 | 配置管理 (API Key + 优先级) | `src/config.py` + Settings UI | ✅ 已完成 |
+| 6.7.6 | 集成测试：TickFlow ↔ AKShare 自动降级 | 验证 API Key 无效/超限时自动切换 | ✅ 已完成 (20 tests) |
+| 6.7.7 | 删除旧缓存、重建含 TickFlow 数据 | `market_cache.db` 重建 | ✅ 自动处理 |
+
+---
+
+## Phase 7：WebSocket 实时推送 + 五档行情
+
+### 7.1 后端 WebSocket 服务
+
+新建文件：`backend/src/services/realtime_ws.py`
+
+- 后端作为 TickFlow WebSocket 的**中继代理**：
+  - 后端连接 `wss://api.tickflow.org/v1/ws/stream`
+  - 前端通过本地 WebSocket `ws://127.0.0.1:8100/ws/stream` 订阅
+  - 好处：API Key 不暴露给前端，多个前端页面共享一个上游连接
+- 支持频道：`quotes` (行情) + `depth` (五档)
+- 自动重连 + 订阅恢复
+
+### 7.2 前端 WebSocket 消费
+
+修改 `SymbolBrowser.vue` + `SymbolList.vue`：
+- 连接本地 WS 订阅当前可见标的
+- 替代 REST 轮询，降低延迟到亚秒级
+- 五档行情在标的详情弹窗中展示
+
+### 7.3 TradingView DataFeed 实时推送
+
+修改 `src/renderer/src/service/dataSource/unified/datafeed.ts`：
+- `subscribeBars()`: 通过本地 WS 订阅，推送新 bar
+- A股盘中实时更新当前 bar (分钟级)
+
+---
+
+## Phase 8：港股 / 美股市场接入 + 财务数据
+
+### 8.1 港股/美股标的列表与K线
+
+- TickFlow 已支持 `US_Equity` / `HK_Equity` 标的池
+- K线: 日线/周线/月线（美股/港股暂无分钟K线）
+- 实时行情: REST + WebSocket 均支持
+- 启用 `MARKET_TYPES` 中 `hk_stock` 和 `us_stock`
+
+### 8.2 财务数据接口
+
+TickFlow 提供（Expert 套餐）：
+- `tf.financials.income()` — 利润表
+- `tf.financials.balance_sheet()` — 资产负债表
+- `tf.financials.cash_flow()` — 现金流量表
+- `tf.financials.metrics()` — 核心财务指标（EPS、ROE、营收增长等）
+- `tf.financials.shares()` — 股本表
+
+新建 API 端点：
+```
+GET /api/v1/market/financials?symbol=600519&type=income
+GET /api/v1/market/financials?symbol=600519&type=balance
+GET /api/v1/market/financials?symbol=600519&type=metrics
+```
+
+### 8.3 前端：标的详情面板
+
+在 SymbolBrowser 中新增侧边栏/弹窗式标的详情：
+- 基本信息（代码、名称、上市日期、所属行业）
+- 实时行情（最新价、涨跌、成交量）
+- 五档行情（买卖盘口）
+- 核心财务指标（PE、PB、ROE、营收增长率）
 
 ---
 
@@ -306,35 +688,37 @@ K线数据缓存：
 ### 新增文件
 ```
 backend/
-├─ api/v1/endpoints/market.py          # 市场数据 API
-├─ api/v1/schemas/market.py            # 数据模型定义
-├─ src/services/market_cache.py        # 缓存服务
-├─ src/services/market_gateway.py      # 数据网关服务
-└─ data/market_cache.db                # SQLite 缓存数据库
+├─ api/v1/endpoints/market.py          # 市场数据 API ✅ 已完成
+├─ api/v1/schemas/market.py            # 数据模型定义 ✅ 已完成
+├─ src/services/market_cache.py        # 缓存服务 ✅ 已完成
+├─ src/services/market_gateway.py      # 数据网关服务 ✅ 已完成
+├─ src/services/data_source_chain.py   # 数据源优先级链管理器 (Phase 6 新增)
+├─ src/services/realtime_ws.py         # WebSocket 实时推送中继 (Phase 7 新增)
+└─ data/market_cache.db                # SQLite 缓存数据库 ✅ 已完成
 
 src/renderer/
-├─ symbol-browser.html                 # 标的浏览器入口
-├─ src/symbol-browser.js               # Vue 挂载
-├─ src/SymbolBrowser.vue               # 主组件
-├─ src/components/MarketTypeSelector.vue
-├─ src/components/SymbolSearchBar.vue
-├─ src/components/SymbolList.vue
-├─ src/components/SymbolContextMenu.vue
+├─ symbol-browser.html                 # 标的浏览器入口 ✅ 已完成
+├─ src/symbol-browser.js               # Vue 挂载 ✅ 已完成
+├─ src/SymbolBrowser.vue               # 主组件 ✅ 已完成
+├─ src/components/MarketTypeSelector.vue  # ✅ 已完成
+├─ src/components/SymbolSearchBar.vue     # ✅ 已完成 (含拼音搜索/历史记录)
+├─ src/components/SymbolList.vue          # ✅ 已完成 (含拖拽排序/行情显示)
+├─ src/components/SymbolContextMenu.vue   # ✅ 已完成
 └─ src/service/
-   ├─ marketDataService.ts             # 统一数据服务
+   ├─ marketDataService.ts             # 统一数据服务 ✅ 已完成
    └─ dataSource/unified/
-      └─ datafeed.ts                   # 统一 TradingView DataFeed
+      └─ datafeed.ts                   # 统一 TradingView DataFeed ✅ 已完成
 ```
 
 ### 修改文件
 ```
-src/main/index.js                      # 添加固定标签页逻辑
-src/renderer/src/index.js              # 交易模式标签管理
-src/renderer/src/Chart.vue             # 支持 symbol 参数
-src/renderer/src/Chart.vue              # 多数据源 DataFeed 切换
-src/preload/index.js                   # 新增 IPC 通道
-backend/api/v1/__init__.py             # 注册新路由
-electron.vite.config.mjs               # 新增页面入口
+src/main/index.js                      # 添加固定标签页逻辑 ✅
+src/renderer/src/index.js              # 交易模式标签管理 ✅
+src/renderer/src/Chart.vue             # 支持 symbol 参数 ✅
+src/renderer/src/Chart.vue              # 多数据源 DataFeed 切换 ✅
+src/preload/index.js                   # 新增 IPC 通道 ✅
+backend/api/v1/__init__.py             # 注册新路由 ✅
+electron.vite.config.mjs               # 新增页面入口 ✅
 ```
 
 ---
@@ -346,3 +730,8 @@ electron.vite.config.mjs               # 新增页面入口
 3. **性能**：A股 5000+ 标的，需虚拟列表 + 搜索索引，避免卡顿
 4. **后端启动**：标的浏览器依赖后端服务，需处理后端未启动时的 graceful fallback
 5. **数据源切换**：从原来前端直连 Binance 切换到统一层时，确保虚拟货币体验不降级
+6. **TickFlow API Key 安全**：Key 仅存于后端，WebSocket 通过后端中继转发，前端永远不持有 Key
+7. **付费配额管理**：TickFlow 按套餐有不同请求限额，需监控用量并在 `RateLimitError` 时自动降级到免费源
+8. **代码格式兼容**：TickFlow 使用 `.SH/.SZ/.BJ/.US/.HK` 后缀，现有系统使用纯数字码，转换层需全面覆盖北交所、科创板等新市场
+9. **WebSocket 稳定性**：TickFlow WS 30秒 Ping/Pong，断线需重连+重新订阅，后端中继需完善心跳与重连机制
+10. **多源数据差异**：不同源的价格精度、复权算法、成交量单位可能不同，归一化层需严格对齐

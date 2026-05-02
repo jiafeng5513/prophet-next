@@ -364,3 +364,61 @@ def reorder_watchlist(req: WatchlistReorderRequest):
     svc = _get_watchlist()
     svc.reorder(req.symbols)
     return {"success": True}
+
+
+# ==================== 数据源链健康检查 ====================
+
+@router.get(
+    "/datasource/health",
+    summary="数据源链健康状态",
+    description="返回各数据源的健康状态、失败次数等信息",
+)
+def get_datasource_health():
+    """获取数据源链健康报告"""
+    gateway = _get_gateway()
+    return gateway.get_chain_health()
+
+
+@router.post(
+    "/datasource/reset",
+    summary="重置数据源链状态",
+    description="重置数据源链的健康状态，清除失败计数和冷却",
+)
+def reset_datasource_chain(category: Optional[str] = Query(None, description="指定类别 (如 kline:cn), 空则全部重置")):
+    """重置数据源链健康状态"""
+    gateway = _get_gateway()
+    gateway.reset_chain(category)
+    return {"success": True, "category": category or "all"}
+
+
+# ==================== 财务数据 ====================
+
+
+@router.get(
+    "/financials",
+    summary="获取财务数据",
+    description="获取标的财务数据 (利润表/资产负债表/现金流/核心指标)",
+)
+def get_financials(
+    symbol: str = Query(..., description="标的代码 (如 600519, AAPL, HK00700)"),
+    type: str = Query("metrics", description="报表类型: income | balance | cash_flow | metrics | shares"),
+    limit: int = Query(8, description="返回最近几期", ge=1, le=20),
+):
+    """获取财务数据"""
+    import os
+    from data_provider.tickflow_fetcher import TickFlowFetcher
+    from data_provider.base import DataFetchError
+
+    api_key = os.environ.get("TICKFLOW_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="财务数据需要配置 TICKFLOW_API_KEY (Expert 套餐)")
+
+    fetcher = TickFlowFetcher(api_key=api_key)
+    try:
+        result = fetcher.get_financials(symbol, report_type=type, limit=limit)
+        return result
+    except DataFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.error("[Market] 财务数据获取失败 (%s/%s): %s", symbol, type, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"财务数据获取失败: {e}")
