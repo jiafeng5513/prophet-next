@@ -344,8 +344,199 @@
             </div>
           </div>
 
-          <!-- 通用 schema 字段列表（ai_model 已由专用编辑器处理） -->
-          <div v-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length && activeCategory !== 'ai_model'" class="section-card">
+          <!-- 数据源渠道编辑器 -->
+          <div v-else-if="activeCategory === 'data_source' && dsaServerRunning && !isLoadingDsa && !dsaLoadError" class="ds-editor">
+
+            <!-- ① 行情数据源渠道 -->
+            <div class="llm-group">
+              <div class="llm-group-title">行情数据源渠道</div>
+              <div class="channel-add-bar">
+                <select v-model="dsAddPresetKey" class="field-input channel-add-select">
+                  <option value="">选择数据源...</option>
+                  <option v-for="(p, pk) in availableDsPresets" :key="pk" :value="pk">{{ p.label }}</option>
+                </select>
+                <button class="btn btn-primary" @click="addDsChannel" :disabled="!dsAddPresetKey">+ 添加渠道</button>
+                <span class="channel-count-badge" v-if="dsChannels.length">{{ enabledDsCount }}/{{ dsChannels.length }} 已启用</span>
+              </div>
+
+              <!-- 渠道列表 -->
+              <div class="channels-wrapper" ref="dsListRef" v-if="dsChannels.length">
+                <div v-for="(ch, idx) in dsChannels" :key="ch.id" class="channel-card" :class="{ expanded: dsExpanded[idx] }" :data-id="ch.id">
+                  <div class="channel-row">
+                    <span class="drag-handle" title="拖拽排序">⠿</span>
+                    <label class="channel-enable-check" @click.stop>
+                      <input type="checkbox" v-model="ch.enabled" @change="dsChannelsDirty = true" />
+                    </label>
+                    <span class="channel-row-name">{{ getDsLabel(ch.preset) }}</span>
+                    <span class="channel-row-badge" :class="dsAuthBadgeClass(ch)">{{ dsAuthBadgeText(ch) }}</span>
+                    <span class="channel-expand-arrow" :class="{ open: dsExpanded[idx] }" @click="dsExpanded[idx] = !dsExpanded[idx]">▶</span>
+                    <button class="btn btn-icon btn-danger-icon channel-row-delete" @click.stop="removeDsChannel(idx)" title="删除渠道">✕</button>
+                  </div>
+                  <div v-show="dsExpanded[idx]" class="channel-body">
+                    <div class="channel-field" v-if="ch.authType === 'apiKey'">
+                      <label>API Key</label>
+                      <div class="field-row">
+                        <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.credentials.apiKey" class="field-input flex-1" placeholder="输入 API Key" @input="dsChannelsDirty = true" />
+                        <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                      </div>
+                    </div>
+                    <div class="channel-field" v-if="ch.authType === 'token'">
+                      <label>Token</label>
+                      <div class="field-row">
+                        <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.credentials.token" class="field-input flex-1" placeholder="输入 Token" @input="dsChannelsDirty = true" />
+                        <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                      </div>
+                    </div>
+                    <template v-if="ch.authType === 'server'">
+                      <div class="channel-field">
+                        <label>服务器地址</label>
+                        <input type="text" v-model="ch.credentials.host" class="field-input" placeholder="如 127.0.0.1" @input="dsChannelsDirty = true" />
+                      </div>
+                      <div class="channel-field">
+                        <label>端口</label>
+                        <input type="number" v-model="ch.credentials.port" class="field-input" placeholder="7709" @input="dsChannelsDirty = true" />
+                      </div>
+                      <div class="channel-field">
+                        <label>服务器列表</label>
+                        <input type="text" v-model="ch.credentials.servers" class="field-input" placeholder="逗号分隔多个服务器" @input="dsChannelsDirty = true" />
+                      </div>
+                    </template>
+                    <template v-if="ch.authType === 'multi'">
+                      <div class="channel-field">
+                        <label>App Key</label>
+                        <div class="field-row">
+                          <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.credentials.appKey" class="field-input flex-1" placeholder="App Key" @input="dsChannelsDirty = true" />
+                          <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                        </div>
+                      </div>
+                      <div class="channel-field">
+                        <label>App Secret</label>
+                        <input type="password" v-model="ch.credentials.appSecret" class="field-input" placeholder="App Secret" @input="dsChannelsDirty = true" />
+                      </div>
+                      <div class="channel-field">
+                        <label>Access Token</label>
+                        <input type="password" v-model="ch.credentials.accessToken" class="field-input" placeholder="Access Token" @input="dsChannelsDirty = true" />
+                      </div>
+                    </template>
+                    <div v-if="ch.authType === 'none'" class="field-desc" style="padding: 4px 0;">此数据源无需配置凭证，开箱即用。</div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="channel-empty-hint">暂无数据源渠道，请在上方选择数据源添加。</div>
+
+              <!-- 开关 -->
+              <div class="ds-switches">
+                <label class="checkbox-row">
+                  <input type="checkbox" :checked="getDraftValue('ENABLE_REALTIME_TECHNICAL_INDICATORS') === 'true'" @change="setDraft('ENABLE_REALTIME_TECHNICAL_INDICATORS', $event.target.checked ? 'true' : 'false')" />
+                  <span>盘中实时技术面</span>
+                </label>
+                <label class="checkbox-row">
+                  <input type="checkbox" :checked="getDraftValue('ENABLE_REALTIME_QUOTE') === 'true'" @change="setDraft('ENABLE_REALTIME_QUOTE', $event.target.checked ? 'true' : 'false')" />
+                  <span>实时行情</span>
+                </label>
+                <label class="checkbox-row">
+                  <input type="checkbox" :checked="getDraftValue('ENABLE_CHIP_DISTRIBUTION') === 'true'" @change="setDraft('ENABLE_CHIP_DISTRIBUTION', $event.target.checked ? 'true' : 'false')" />
+                  <span>筹码分布</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- ② 新闻搜索源渠道 -->
+            <div class="llm-group">
+              <div class="llm-group-title">新闻搜索源渠道</div>
+              <div class="channel-add-bar">
+                <select v-model="nsAddPresetKey" class="field-input channel-add-select">
+                  <option value="">选择搜索源...</option>
+                  <option v-for="(p, pk) in availableNsPresets" :key="pk" :value="pk">{{ p.label }}</option>
+                </select>
+                <button class="btn btn-primary" @click="addNsChannel" :disabled="!nsAddPresetKey">+ 添加渠道</button>
+                <span class="channel-count-badge" v-if="nsChannels.length">{{ enabledNsCount }}/{{ nsChannels.length }} 已启用</span>
+              </div>
+
+              <!-- 渠道列表 -->
+              <div class="channels-wrapper" ref="nsListRef" v-if="nsChannels.length">
+                <div v-for="(ch, idx) in nsChannels" :key="ch.id" class="channel-card" :class="{ expanded: nsExpanded[idx] }" :data-id="ch.id">
+                  <div class="channel-row">
+                    <span class="drag-handle" title="拖拽排序">⠿</span>
+                    <label class="channel-enable-check" @click.stop>
+                      <input type="checkbox" v-model="ch.enabled" @change="nsChannelsDirty = true" />
+                    </label>
+                    <span class="channel-row-name">{{ getNsLabel(ch.preset) }}</span>
+                    <span class="channel-row-badge" :class="nsAuthBadgeClass(ch)">{{ nsAuthBadgeText(ch) }}</span>
+                    <span class="channel-expand-arrow" :class="{ open: nsExpanded[idx] }" @click="nsExpanded[idx] = !nsExpanded[idx]">▶</span>
+                    <button class="btn btn-icon btn-danger-icon channel-row-delete" @click.stop="removeNsChannel(idx)" title="删除渠道">✕</button>
+                  </div>
+                  <div v-show="nsExpanded[idx]" class="channel-body">
+                    <div class="channel-field" v-if="ch.authType === 'apiKey'">
+                      <label>API Keys</label>
+                      <div class="field-row">
+                        <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.credentials.apiKeys" class="field-input flex-1" placeholder="逗号分隔多个 Key" @input="nsChannelsDirty = true" />
+                        <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                      </div>
+                      <div class="field-desc">支持逗号分隔多个 Key，自动轮换。</div>
+                    </div>
+                    <div class="channel-field" v-if="ch.authType === 'url'">
+                      <label>Base URLs</label>
+                      <input type="text" v-model="ch.credentials.baseUrls" class="field-input" placeholder="逗号分隔 SearXNG 实例地址" @input="nsChannelsDirty = true" />
+                      <div class="field-desc">多个实例地址用逗号分隔。</div>
+                    </div>
+                    <div v-if="ch.authType === 'none'" class="field-desc" style="padding: 4px 0;">此搜索源无需配置，自动从 searx.space 发现公共实例。</div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="channel-empty-hint">暂无搜索源渠道，请在上方选择搜索源添加。</div>
+
+              <!-- 参数 -->
+              <div class="ds-params">
+                <div class="channel-field">
+                  <label>最大时效（天）</label>
+                  <input type="number" :value="getDraftValue('NEWS_MAX_AGE_DAYS')" @input="setDraft('NEWS_MAX_AGE_DAYS', $event.target.value)" class="field-input" style="width:120px" min="1" />
+                </div>
+                <div class="channel-field">
+                  <label>策略窗口档位</label>
+                  <select :value="getDraftValue('NEWS_STRATEGY_PROFILE')" @change="setDraft('NEWS_STRATEGY_PROFILE', $event.target.value)" class="field-input" style="width:160px">
+                    <option value="ultra_short">超短线 (1天)</option>
+                    <option value="short">短线 (3天)</option>
+                    <option value="medium">中线 (7天)</option>
+                    <option value="long">长线 (30天)</option>
+                  </select>
+                </div>
+                <div class="channel-field">
+                  <label>偏离阈值 (%)</label>
+                  <input type="number" :value="getDraftValue('BIAS_THRESHOLD')" @input="setDraft('BIAS_THRESHOLD', $event.target.value)" class="field-input" style="width:120px" min="0" step="0.5" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ③ 高级参数（基本面管线等，保留分组渲染） -->
+            <div class="llm-group" v-if="dsAdvancedItems.length">
+              <div class="llm-group-title">高级参数</div>
+              <div class="settings-group-body">
+                <div v-for="item in dsAdvancedItems" :key="item.key" class="field-item">
+                  <div class="field-label-row">
+                    <label>{{ getFieldTitle(item.key, item.schema?.title) }}</label>
+                  </div>
+                  <label v-if="item.schema?.uiControl === 'switch'" class="checkbox-row">
+                    <input type="checkbox" :checked="getDraftValue(item.key) === 'true'" @change="setDraft(item.key, $event.target.checked ? 'true' : 'false')" />
+                    <span>{{ getDraftValue(item.key) === 'true' ? '已启用' : '已禁用' }}</span>
+                  </label>
+                  <input v-else-if="item.schema?.uiControl === 'number'" type="number" :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)" class="field-input" :min="item.schema?.validation?.min" :max="item.schema?.validation?.max" />
+                  <input v-else type="text" :value="getDraftValue(item.key)" @input="setDraft(item.key, $event.target.value)" class="field-input" :placeholder="item.schema?.defaultValue || ''" />
+                  <div class="field-desc">{{ getFieldDesc(item.key, item.schema?.description) }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 保存按钮 -->
+            <div class="channel-save-row" v-if="dsChannelsDirty || nsChannelsDirty">
+              <button class="btn btn-primary" @click="saveDsNsChannels" :disabled="isSavingDsChannels || isSavingNsChannels">
+                {{ (isSavingDsChannels || isSavingNsChannels) ? '保存中...' : '保存数据源配置' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 通用 schema 字段列表（ai_model / data_source 已由专用编辑器处理） -->
+          <div v-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length && activeCategory !== 'ai_model' && activeCategory !== 'data_source'" class="section-card">
             <div class="section-title">{{ currentCategoryTitle }}</div>
             <div class="section-desc">{{ currentCategoryDesc }}</div>
 
@@ -448,7 +639,7 @@
             </template>
           </div>
 
-          <div v-else-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length === 0 && activeCategory !== 'ai_model'" class="empty-state">
+          <div v-else-if="dsaServerRunning && !isLoadingDsa && !dsaLoadError && filteredActiveItems.length === 0 && activeCategory !== 'ai_model' && activeCategory !== 'data_source'" class="empty-state">
             <div class="empty-title">当前分类下暂无配置项</div>
             <div class="empty-desc">可切换左侧分类继续查看其它系统配置。</div>
           </div>
@@ -471,7 +662,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import Sortable from 'sortablejs'
 
 // =============================
 // i18n 翻译
@@ -899,6 +1091,29 @@ const protocolOptions = [
 ]
 
 // =============================
+// 数据源 & 新闻源渠道预设
+// =============================
+const dataSourcePresets = {
+  akshare:    { label: 'AKShare（新浪/东财/腾讯）', authType: 'none', defaultEnabled: true, subSources: ['tencent', 'akshare_sina', 'akshare_em'], desc: '聚合免费数据源，含新浪/东财/腾讯实时行情' },
+  efinance:   { label: 'Efinance（东方财富）', authType: 'none', defaultEnabled: true, desc: '东方财富爬虫封装，免费' },
+  pytdx:      { label: '通达信 (Pytdx)', authType: 'server', fields: ['host', 'port', 'servers'], keys: ['PYTDX_HOST', 'PYTDX_PORT', 'PYTDX_SERVERS'], defaultEnabled: false, desc: '需自行部署通达信数据服务器' },
+  tushare:    { label: 'Tushare Pro', authType: 'token', fields: ['token'], keys: ['TUSHARE_TOKEN'], defaultEnabled: false, desc: '付费金融数据 API' },
+  tickflow:   { label: 'TickFlow', authType: 'apiKey', fields: ['apiKey'], keys: ['TICKFLOW_API_KEY'], defaultEnabled: false, desc: '支持 A/港/美股，REST+WebSocket' },
+  longbridge: { label: 'Longbridge（长桥）', authType: 'multi', fields: ['appKey', 'appSecret', 'accessToken'], keys: ['LONGBRIDGE_APP_KEY', 'LONGBRIDGE_APP_SECRET', 'LONGBRIDGE_ACCESS_TOKEN'], defaultEnabled: false, desc: '长桥证券数据接口' },
+}
+
+const newsSourcePresets = {
+  bocha:       { label: 'Bocha', authType: 'apiKey', keys: ['BOCHA_API_KEYS'], desc: '博查搜索' },
+  anspire:     { label: 'Anspire', authType: 'apiKey', keys: ['ANSPIRE_API_KEYS'], desc: '新闻检索' },
+  tavily:      { label: 'Tavily', authType: 'apiKey', keys: ['TAVILY_API_KEYS'], desc: 'AI 搜索引擎' },
+  serpapi:     { label: 'SerpAPI', authType: 'apiKey', keys: ['SERPAPI_API_KEYS'], desc: 'Google 搜索代理' },
+  brave:       { label: 'Brave Search', authType: 'apiKey', keys: ['BRAVE_API_KEYS'], desc: 'Brave 搜索' },
+  minimax:     { label: 'MiniMax', authType: 'apiKey', keys: ['MINIMAX_API_KEYS'], desc: 'MiniMax 搜索' },
+  searxng:     { label: 'SearXNG（自建）', authType: 'url', keys: ['SEARXNG_BASE_URLS'], desc: '自建实例，无配额' },
+  searxng_pub: { label: 'SearXNG（公共实例）', authType: 'none', keys: ['SEARXNG_PUBLIC_INSTANCES_ENABLED'], desc: '自动从 searx.space 发现公共实例' },
+}
+
+// =============================
 // 状态
 // =============================
 const activeCategory = ref('local')
@@ -938,6 +1153,20 @@ const channelsDirty = ref(false)
 const isSavingChannels = ref(false)
 const expandedChannels = reactive({})
 const addPresetKey = ref('')
+
+// 数据源渠道
+const dsChannels = ref([])
+const dsChannelsDirty = ref(false)
+const isSavingDsChannels = ref(false)
+const dsExpanded = reactive({})
+const dsAddPresetKey = ref('')
+
+// 新闻源渠道
+const nsChannels = ref([])
+const nsChannelsDirty = ref(false)
+const isSavingNsChannels = ref(false)
+const nsExpanded = reactive({})
+const nsAddPresetKey = ref('')
 
 // toast
 const toast = ref(null)
@@ -1007,6 +1236,9 @@ const filteredActiveItems = computed(() => {
       if (hasChannels && !hasLitellmConfig && AI_MODEL_HIDDEN_KEYS.has(item.key)) return false
       return true
     })
+  }
+  if (activeCategory.value === 'data_source') {
+    return raw.filter(item => !DATA_SOURCE_MANAGED_KEYS.has(item.key))
   }
   return raw
 })
@@ -1336,6 +1568,10 @@ async function loadDsaConfig() {
     }
     // 解析 LLM 渠道
     parseChannels()
+    // 解析数据源 & 新闻源渠道
+    parseDsChannels()
+    parseNsChannels()
+    nextTick(() => { initDsSortable(); initNsSortable() })
   } catch (e) {
     dsaLoadError.value = e.message || '未知错误'
   } finally {
@@ -1753,6 +1989,360 @@ async function discoverModels(idx) {
   } finally {
     ch.discovering = false
   }
+}
+
+// =============================
+// 数据源 & 新闻源渠道管理
+// =============================
+let dsNextId = 1
+let nsNextId = 1
+const dsListRef = ref(null)
+const nsListRef = ref(null)
+let dsSortable = null
+let nsSortable = null
+
+// 已在渠道编辑器管理的 key 集合
+const DATA_SOURCE_MANAGED_KEYS = new Set([
+  'REALTIME_SOURCE_PRIORITY',
+  'ENABLE_REALTIME_TECHNICAL_INDICATORS', 'ENABLE_REALTIME_QUOTE', 'ENABLE_CHIP_DISTRIBUTION',
+  'TUSHARE_TOKEN', 'TICKFLOW_API_KEY',
+  'PYTDX_HOST', 'PYTDX_PORT', 'PYTDX_SERVERS',
+  'LONGBRIDGE_APP_KEY', 'LONGBRIDGE_APP_SECRET', 'LONGBRIDGE_ACCESS_TOKEN',
+  'BOCHA_API_KEYS', 'ANSPIRE_API_KEYS', 'TAVILY_API_KEYS', 'SERPAPI_API_KEYS',
+  'BRAVE_API_KEYS', 'MINIMAX_API_KEYS', 'SEARXNG_BASE_URLS', 'SEARXNG_PUBLIC_INSTANCES_ENABLED',
+  'NEWS_MAX_AGE_DAYS', 'NEWS_STRATEGY_PROFILE', 'BIAS_THRESHOLD',
+])
+
+// 计算属性：可添加的预设（排除已添加的）
+const availableDsPresets = computed(() => {
+  const existing = new Set(dsChannels.value.map(c => c.preset))
+  const result = {}
+  for (const [k, v] of Object.entries(dataSourcePresets)) {
+    if (!existing.has(k)) result[k] = v
+  }
+  return result
+})
+
+const availableNsPresets = computed(() => {
+  const existing = new Set(nsChannels.value.map(c => c.preset))
+  const result = {}
+  for (const [k, v] of Object.entries(newsSourcePresets)) {
+    if (!existing.has(k)) result[k] = v
+  }
+  return result
+})
+
+const enabledDsCount = computed(() => dsChannels.value.filter(c => c.enabled).length)
+const enabledNsCount = computed(() => nsChannels.value.filter(c => c.enabled).length)
+
+// 高级参数（data_source 中不被管理的项）
+const dsAdvancedItems = computed(() => {
+  const items = itemsByCategory.value['data_source'] || []
+  return items.filter(i => !DATA_SOURCE_MANAGED_KEYS.has(i.key))
+})
+
+function getDsLabel(preset) {
+  return dataSourcePresets[preset]?.label || preset
+}
+function getNsLabel(preset) {
+  return newsSourcePresets[preset]?.label || preset
+}
+
+function dsAuthBadgeClass(ch) {
+  if (ch.authType === 'none') return 'badge-free'
+  if (ch.authType === 'apiKey' && ch.credentials.apiKey) return 'badge-ok'
+  if (ch.authType === 'token' && ch.credentials.token) return 'badge-ok'
+  if (ch.authType === 'server' && ch.credentials.host) return 'badge-ok'
+  if (ch.authType === 'multi' && ch.credentials.appKey) return 'badge-ok'
+  return 'badge-warn'
+}
+function dsAuthBadgeText(ch) {
+  if (ch.authType === 'none') return '免费'
+  if (ch.authType === 'apiKey') return ch.credentials.apiKey ? '✓Key' : '⚠Key'
+  if (ch.authType === 'token') return ch.credentials.token ? '✓Token' : '⚠Token'
+  if (ch.authType === 'server') return ch.credentials.host ? '✓服务器' : '⚠服务器'
+  if (ch.authType === 'multi') return ch.credentials.appKey ? '✓已配置' : '⚠未配置'
+  return ''
+}
+function nsAuthBadgeClass(ch) {
+  if (ch.authType === 'none') return 'badge-free'
+  if (ch.authType === 'apiKey' && ch.credentials.apiKeys) return 'badge-ok'
+  if (ch.authType === 'url' && ch.credentials.baseUrls) return 'badge-ok'
+  return 'badge-warn'
+}
+function nsAuthBadgeText(ch) {
+  if (ch.authType === 'none') return '自动'
+  if (ch.authType === 'apiKey') return ch.credentials.apiKeys ? '✓Key' : '⚠Key'
+  if (ch.authType === 'url') return ch.credentials.baseUrls ? '✓URL' : '⚠URL'
+  return ''
+}
+
+function addDsChannel() {
+  const pk = dsAddPresetKey.value
+  if (!pk) return
+  const preset = dataSourcePresets[pk]
+  if (!preset) return
+  dsChannels.value.push(reactive({
+    id: dsNextId++,
+    preset: pk,
+    authType: preset.authType,
+    enabled: true,
+    showKey: false,
+    credentials: reactive({}),
+  }))
+  dsChannelsDirty.value = true
+  dsAddPresetKey.value = ''
+  nextTick(initDsSortable)
+}
+
+function addNsChannel() {
+  const pk = nsAddPresetKey.value
+  if (!pk) return
+  const preset = newsSourcePresets[pk]
+  if (!preset) return
+  nsChannels.value.push(reactive({
+    id: nsNextId++,
+    preset: pk,
+    authType: preset.authType,
+    enabled: true,
+    showKey: false,
+    credentials: reactive({}),
+  }))
+  nsChannelsDirty.value = true
+  nsAddPresetKey.value = ''
+  nextTick(initNsSortable)
+}
+
+function removeDsChannel(idx) {
+  dsChannels.value.splice(idx, 1)
+  dsChannelsDirty.value = true
+}
+function removeNsChannel(idx) {
+  nsChannels.value.splice(idx, 1)
+  nsChannelsDirty.value = true
+}
+
+// 从后端配置反推渠道列表
+function parseDsChannels() {
+  const allItems = new Map(dsaItems.value.map(i => [i.key, String(i.value ?? '')]))
+  const priorityStr = allItems.get('REALTIME_SOURCE_PRIORITY') || 'tencent,akshare_sina,efinance,akshare_em'
+  const priorityList = priorityStr.split(',').map(s => s.trim()).filter(Boolean)
+
+  // 把优先级列表中的子源映射回渠道
+  const channelOrder = []
+  const seen = new Set()
+  for (const src of priorityList) {
+    let channelId = null
+    if (['tencent', 'akshare_sina', 'akshare_em'].includes(src)) channelId = 'akshare'
+    else if (src === 'efinance') channelId = 'efinance'
+    else if (src === 'tushare') channelId = 'tushare'
+    else if (src === 'tickflow') channelId = 'tickflow'
+    else if (src === 'pytdx') channelId = 'pytdx'
+    else if (src === 'longbridge') channelId = 'longbridge'
+    if (channelId && !seen.has(channelId)) {
+      seen.add(channelId)
+      channelOrder.push(channelId)
+    }
+  }
+  // 补充默认渠道
+  for (const [k, v] of Object.entries(dataSourcePresets)) {
+    if (v.defaultEnabled && !seen.has(k)) {
+      seen.add(k)
+      channelOrder.push(k)
+    }
+  }
+
+  dsChannels.value = channelOrder.map(pk => {
+    const preset = dataSourcePresets[pk]
+    if (!preset) return null
+    const creds = reactive({})
+    // 读取凭证
+    if (preset.authType === 'apiKey' && preset.keys) {
+      creds.apiKey = allItems.get(preset.keys[0]) || ''
+    } else if (preset.authType === 'token' && preset.keys) {
+      creds.token = allItems.get(preset.keys[0]) || ''
+    } else if (preset.authType === 'server' && preset.keys) {
+      creds.host = allItems.get(preset.keys[0]) || ''
+      creds.port = allItems.get(preset.keys[1]) || ''
+      creds.servers = allItems.get(preset.keys[2]) || ''
+    } else if (preset.authType === 'multi' && preset.keys) {
+      creds.appKey = allItems.get(preset.keys[0]) || ''
+      creds.appSecret = allItems.get(preset.keys[1]) || ''
+      creds.accessToken = allItems.get(preset.keys[2]) || ''
+    }
+    // 判断是否启用：在 priority 列表中存在
+    const enabled = preset.defaultEnabled || (preset.subSources
+      ? preset.subSources.some(s => priorityList.includes(s))
+      : priorityList.includes(pk))
+    return reactive({
+      id: dsNextId++,
+      preset: pk,
+      authType: preset.authType,
+      enabled,
+      showKey: false,
+      credentials: creds,
+    })
+  }).filter(Boolean)
+  dsChannelsDirty.value = false
+}
+
+function parseNsChannels() {
+  const allItems = new Map(dsaItems.value.map(i => [i.key, String(i.value ?? '')]))
+  const list = []
+  for (const [pk, preset] of Object.entries(newsSourcePresets)) {
+    if (!preset.keys) continue
+    const keyVal = allItems.get(preset.keys[0]) || ''
+    // 有值或是 boolean(enabled) 时加入列表
+    if (preset.authType === 'none') {
+      // SearXNG 公共实例
+      if (keyVal === 'true') {
+        list.push({ pk, val: keyVal })
+      }
+    } else if (keyVal) {
+      list.push({ pk, val: keyVal })
+    }
+  }
+  nsChannels.value = list.map(({ pk, val }) => {
+    const preset = newsSourcePresets[pk]
+    const creds = reactive({})
+    if (preset.authType === 'apiKey') creds.apiKeys = val
+    else if (preset.authType === 'url') creds.baseUrls = val
+    return reactive({
+      id: nsNextId++,
+      preset: pk,
+      authType: preset.authType,
+      enabled: true,
+      showKey: false,
+      credentials: creds,
+    })
+  })
+  nsChannelsDirty.value = false
+}
+
+// 保存数据源 & 新闻源渠道
+async function saveDsNsChannels() {
+  isSavingDsChannels.value = true
+  isSavingNsChannels.value = true
+  try {
+    const items = []
+
+    // ─── 数据源 ───
+    // 构建 REALTIME_SOURCE_PRIORITY
+    const prioritySources = []
+    for (const ch of dsChannels.value) {
+      if (!ch.enabled) continue
+      const preset = dataSourcePresets[ch.preset]
+      if (preset?.subSources) {
+        prioritySources.push(...preset.subSources)
+      } else {
+        prioritySources.push(ch.preset)
+      }
+    }
+    items.push({ key: 'REALTIME_SOURCE_PRIORITY', value: prioritySources.join(',') })
+
+    // 凭证
+    for (const ch of dsChannels.value) {
+      const preset = dataSourcePresets[ch.preset]
+      if (!preset?.keys) continue
+      if (ch.authType === 'apiKey') {
+        items.push({ key: preset.keys[0], value: ch.credentials.apiKey || '' })
+      } else if (ch.authType === 'token') {
+        items.push({ key: preset.keys[0], value: ch.credentials.token || '' })
+      } else if (ch.authType === 'server') {
+        items.push({ key: preset.keys[0], value: ch.credentials.host || '' })
+        items.push({ key: preset.keys[1], value: ch.credentials.port || '' })
+        items.push({ key: preset.keys[2], value: ch.credentials.servers || '' })
+      } else if (ch.authType === 'multi') {
+        items.push({ key: preset.keys[0], value: ch.credentials.appKey || '' })
+        items.push({ key: preset.keys[1], value: ch.credentials.appSecret || '' })
+        items.push({ key: preset.keys[2], value: ch.credentials.accessToken || '' })
+      }
+    }
+
+    // 开关
+    items.push({ key: 'ENABLE_REALTIME_TECHNICAL_INDICATORS', value: getDraftValue('ENABLE_REALTIME_TECHNICAL_INDICATORS') })
+    items.push({ key: 'ENABLE_REALTIME_QUOTE', value: getDraftValue('ENABLE_REALTIME_QUOTE') })
+    items.push({ key: 'ENABLE_CHIP_DISTRIBUTION', value: getDraftValue('ENABLE_CHIP_DISTRIBUTION') })
+
+    // ─── 新闻源 ───
+    for (const ch of nsChannels.value) {
+      const preset = newsSourcePresets[ch.preset]
+      if (!preset?.keys) continue
+      if (ch.authType === 'apiKey') {
+        items.push({ key: preset.keys[0], value: ch.enabled ? (ch.credentials.apiKeys || '') : '' })
+      } else if (ch.authType === 'url') {
+        items.push({ key: preset.keys[0], value: ch.enabled ? (ch.credentials.baseUrls || '') : '' })
+      } else if (ch.authType === 'none') {
+        // SearXNG 公共实例
+        items.push({ key: preset.keys[0], value: ch.enabled ? 'true' : 'false' })
+      }
+    }
+
+    // 新闻参数
+    items.push({ key: 'NEWS_MAX_AGE_DAYS', value: getDraftValue('NEWS_MAX_AGE_DAYS') })
+    items.push({ key: 'NEWS_STRATEGY_PROFILE', value: getDraftValue('NEWS_STRATEGY_PROFILE') })
+    items.push({ key: 'BIAS_THRESHOLD', value: getDraftValue('BIAS_THRESHOLD') })
+
+    const body = toSnake({
+      configVersion: dsaConfigVersion.value,
+      maskToken: dsaMaskToken.value,
+      reloadNow: true,
+      items,
+    })
+    const resp = await fetch(`${baseUrl.value}/api/v1/system/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err.detail || `HTTP ${resp.status}`)
+    }
+    showToast('success', '数据源配置已保存')
+    dsChannelsDirty.value = false
+    nsChannelsDirty.value = false
+    await loadDsaConfig()
+  } catch (e) {
+    showToast('error', `保存失败: ${e.message}`)
+  } finally {
+    isSavingDsChannels.value = false
+    isSavingNsChannels.value = false
+  }
+}
+
+// 拖拽排序
+function initDsSortable() {
+  if (dsSortable) dsSortable.destroy()
+  const el = dsListRef.value
+  if (!el) return
+  dsSortable = Sortable.create(el, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd(evt) {
+      const arr = dsChannels.value
+      const [moved] = arr.splice(evt.oldIndex, 1)
+      arr.splice(evt.newIndex, 0, moved)
+      dsChannelsDirty.value = true
+    },
+  })
+}
+
+function initNsSortable() {
+  if (nsSortable) nsSortable.destroy()
+  const el = nsListRef.value
+  if (!el) return
+  nsSortable = Sortable.create(el, {
+    handle: '.drag-handle',
+    animation: 150,
+    ghostClass: 'sortable-ghost',
+    onEnd(evt) {
+      const arr = nsChannels.value
+      const [moved] = arr.splice(evt.oldIndex, 1)
+      arr.splice(evt.newIndex, 0, moved)
+      nsChannelsDirty.value = true
+    },
+  })
 }
 
 // =============================
@@ -2501,5 +3091,70 @@ watch(activeCategory, (cat) => {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* 数据源编辑器 */
+.ds-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ds-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #383838;
+}
+.ds-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #383838;
+}
+.ds-params .channel-field {
+  min-width: 140px;
+}
+.drag-handle {
+  cursor: grab;
+  color: #666;
+  font-size: 14px;
+  padding: 0 2px;
+  user-select: none;
+  flex-shrink: 0;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.sortable-ghost {
+  opacity: 0.4;
+  background: #333;
+}
+.badge-free {
+  font-size: 11px;
+  color: #2ea043;
+  background: rgba(46, 160, 67, 0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.badge-ok {
+  font-size: 11px;
+  color: #2ea043;
+  background: rgba(46, 160, 67, 0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.badge-warn {
+  font-size: 11px;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 </style>

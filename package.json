@@ -28,6 +28,7 @@
     "markdown-it": "^14.1.1",
     "monaco-editor": "^0.52.2",
     "or": "^0.2.0",
+    "sortablejs": "^1.15.7",
     "vite-plugin-monaco-editor": "^1.1.0"
   },
   "devDependencies": {
