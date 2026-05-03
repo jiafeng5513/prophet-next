@@ -2,6 +2,7 @@
 import { onMounted, ref, onUnmounted } from 'vue'
 import { widget, version } from '@tradingview/advanced_charts/charting_library'
 import { UDFCompatibleDatafeed } from '@tradingview/advanced_charts/datafeeds/udf/src/udf-compatible-datafeed'
+import { vegasChannelIndicator } from './indicators/vegas-channel.js'
 
 function getLanguageFromURL() {
   const regex = new RegExp('[\\?&]lang=([^&#]*)')
@@ -90,9 +91,15 @@ onMounted(() => {
       disabled_features: [
         'use_localstorage_for_settings',
         'open_account_manager',
-        'show_object_tree'
+        'show_right_widgets_panel_by_default',
+        'trading_account_manager'
       ],
-      enabled_features: ['study_templates', 'iframe_loading_compatibility_mode'],
+      enabled_features: [
+        'study_templates',
+        'iframe_loading_compatibility_mode',
+        'show_object_tree',
+        'show_symbol_logos'
+      ],
       charts_storage_url: props.chartsStorageUrl,
       charts_storage_api_version: props.chartsStorageApiVersion,
       client_id: props.clientId,
@@ -101,7 +108,10 @@ onMounted(() => {
       autosize: props.autosize,
       studies_overrides: props.studiesOverrides,
       theme: 'Dark',
-      timezone: 'Asia/Shanghai'
+      timezone: 'Asia/Shanghai',
+      custom_indicators_getter: function (PineJS) {
+        return Promise.resolve([vegasChannelIndicator(PineJS)])
+      }
     }
     console.log('[TVChartContainer] 创建图表组件，选项:', widgetOptions)
     chartWidget = new widget(widgetOptions)
