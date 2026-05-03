@@ -4,7 +4,7 @@
 </br>
 </br>
 </br>
-<div align=center><img src="doc/screenshot_chart.png"/></div>
+<div align=center><img src="doc/screenshot.png"/></div>
 
 
 ## Develop Environment Setup
