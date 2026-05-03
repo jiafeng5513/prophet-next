@@ -23,6 +23,7 @@ import {
 import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/prophet_logo.png?asset'
+import terminalManager from './terminal-manager'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
 function decodeOutput(buffer) {
@@ -53,6 +54,8 @@ let views = new Map() // 所有的view 对象，格式: { view: WebContentsView,
 let activeViewId = null // 活动的view对象
 let symbolBrowserView = null // 标的浏览器左面板视图（独立于 tabs）
 let currentDataSource = 'binance' // 当前数据源设置（跨 partition 共享）
+let terminalPanelVisible = false // 终端面板是否可见
+let currentTerminalPanelHeight = 250 // 终端面板当前高度
 
 // =====================
 // 配置文件管理
@@ -291,6 +294,8 @@ async function startFastApiServer() {
       fastApiProcess.stdout.on('data', (data) => {
         const output = decodeOutput(data)
         console.log('[FastAPI stdout]', output.trim())
+        // 推送到终端面板日志
+        terminalManager.appendLog(output)
         // 广播日志到状态栏
         broadcastBackendProgress(output.trim(), 'running')
         if (!started && output.includes('Uvicorn running')) {
@@ -306,6 +311,8 @@ async function startFastApiServer() {
         const output = decodeOutput(data)
         stderrLog += output
         console.log('[FastAPI stderr]', output.trim())
+        // 推送到终端面板日志
+        terminalManager.appendLog(output)
 
         // 解析 stderr 中的进度信息并广播到状态栏
         if (output.includes('Creating virtual environment')) {
@@ -736,6 +743,7 @@ function createWindow() {
   }
 
   mainWindow = new BrowserWindow(windowOptions)
+  terminalManager.setMainWindow(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -1045,11 +1053,12 @@ function updateWebViewBounds(window, webView) {
   const rightPanelWidth = agentPanelVisible ? currentAgentPanelWidth : 0
   const leftPanelWidth = explorerPanelVisible ? currentExplorerPanelWidth : 0
   const topOffset = getTopOffset()
+  const bottomOffset = STATUS_BAR_HEIGHT + (terminalPanelVisible ? currentTerminalPanelHeight : 0)
   webView.setBounds({
-    x: ACTIVITY_BAR_WIDTH + leftPanelWidth,
+    x: ACTIVITY_BAR_WIDTH + leftPanelWidth + 1,
     y: topOffset,
-    width: mainwin_content_width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth,
-    height: mainwin_content_height - topOffset - STATUS_BAR_HEIGHT
+    width: mainwin_content_width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth - 1,
+    height: mainwin_content_height - topOffset - bottomOffset
   })
   // 同步更新标的浏览器左面板视图的边界
   updateSymbolBrowserBounds()
@@ -1087,11 +1096,12 @@ function updateSymbolBrowserBounds() {
   const [, mainwin_content_height] = mainWindow.getContentSize()
   // 标的浏览器左面板从标题栏下方开始（与 activity bar / explorer 面板对齐，不受 tab bar 影响）
   const panelTop = TITLE_BAR_HEIGHT
+  const bottomOffset = STATUS_BAR_HEIGHT + (terminalPanelVisible ? currentTerminalPanelHeight : 0)
   symbolBrowserView.setBounds({
-    x: ACTIVITY_BAR_WIDTH,
+    x: ACTIVITY_BAR_WIDTH + 1,
     y: panelTop,
-    width: currentExplorerPanelWidth - 6,
-    height: mainwin_content_height - panelTop - STATUS_BAR_HEIGHT
+    width: currentExplorerPanelWidth - 7,
+    height: mainwin_content_height - panelTop - bottomOffset
   })
 }
 
@@ -1578,6 +1588,73 @@ ipcMain.handle('import-config', async () => {
   }
 })
 
+// =====================
+// 终端面板 IPC
+// =====================
+ipcMain.handle('terminal-create', (_event, options = {}) => {
+  const backendDir = getBackendPath()
+  const venvDir = join(backendDir, '.venv')
+  const isWin = process.platform === 'win32'
+  const binDir = isWin ? join(venvDir, 'Scripts') : join(venvDir, 'bin')
+
+  const termEnv = {
+    ...process.env,
+    VIRTUAL_ENV: venvDir,
+    PATH: `${binDir}${isWin ? ';' : ':'}${process.env.PATH}`,
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1'
+  }
+
+  const termOptions = {
+    cwd: options.cwd || backendDir,
+    env: termEnv,
+    cols: options.cols || 80,
+    rows: options.rows || 24,
+    shell: options.shell || undefined
+  }
+
+  return terminalManager.createTerminal(termOptions)
+})
+
+ipcMain.on('terminal-input', (_event, { id, data }) => {
+  terminalManager.writeToTerminal(id, data)
+})
+
+ipcMain.on('terminal-resize', (_event, { id, cols, rows }) => {
+  terminalManager.resizeTerminal(id, cols, rows)
+})
+
+ipcMain.on('terminal-destroy', (_event, { id }) => {
+  terminalManager.destroyTerminal(id)
+})
+
+ipcMain.handle('terminal-get-log-history', () => {
+  return terminalManager.getLogHistory()
+})
+
+ipcMain.on('toggle-terminal-panel', (_event, visible, height) => {
+  terminalPanelVisible = visible
+  if (height !== undefined) {
+    currentTerminalPanelHeight = height
+  }
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
+})
+
+ipcMain.on('resize-terminal-panel', (_event, height) => {
+  currentTerminalPanelHeight = height
+  if (activeViewId) {
+    const activeView = views.get(activeViewId)
+    if (activeView) {
+      updateWebViewBounds(mainWindow, activeView.view)
+    }
+  }
+})
+
 ipcMain.handle('start-dsa-server', async () => {
   return await startFastApiServer()
 })
@@ -1707,6 +1784,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopFastApiServer()
+  terminalManager.destroyAll()
   // 兜底：按端口号清理可能的残留进程
   killProcessOnPort(fastApiPort)
 })

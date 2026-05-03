@@ -8,6 +8,10 @@ import sql from 'highlight.js/lib/languages/sql'
 import xml from 'highlight.js/lib/languages/xml'
 import css from 'highlight.js/lib/languages/css'
 import 'highlight.js/styles/github-dark.css'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import '@xterm/xterm/css/xterm.css'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -1274,8 +1278,7 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
   const agentSessionsClose = document.getElementById('agent-sessions-close')
   const agentSessionsList = document.getElementById('agent-sessions-list')
   const agentNewChatBtn = document.getElementById('agent-new-chat-btn')
-  const agentServiceStatus = document.getElementById('agent-service-status')
-  const agentStatusLabel = document.getElementById('agent-status-label')
+  const agentStatusDot = document.getElementById('agent-status-dot')
   const agentQuickQuestions = document.getElementById('agent-quick-questions')
 
   let dsaPort = 8100
@@ -1320,16 +1323,16 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
       })
       if (resp.ok) {
         agentConnected = true
-        agentServiceStatus.className = 'agent-service-status connected'
-        agentStatusLabel.textContent = 'DSA 已连接'
+        agentStatusDot.className = 'agent-status-dot connected'
+        agentStatusDot.title = 'DSA 已连接'
         return true
       }
     } catch {
       // ignore
     }
     agentConnected = false
-    agentServiceStatus.className = 'agent-service-status disconnected'
-    agentStatusLabel.textContent = 'DSA 未连接'
+    agentStatusDot.className = 'agent-status-dot disconnected'
+    agentStatusDot.title = 'DSA 未连接'
     return false
   }
 
@@ -1941,8 +1944,8 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
           })
         } else {
           agentConnected = false
-          agentServiceStatus.className = 'agent-service-status disconnected'
-          agentStatusLabel.textContent = 'DSA 未连接'
+          agentStatusDot.className = 'agent-status-dot disconnected'
+          agentStatusDot.title = 'DSA 未连接'
         }
       })
     }
@@ -1964,40 +1967,30 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
 ;(function initStatusBar() {
   const statusBarDot = document.getElementById('status-bar-dot')
   const statusBarBackendLabel = document.getElementById('status-bar-backend-label')
-  const statusBarProgress = document.getElementById('status-bar-progress')
-  const statusBarProgressFill = document.getElementById('status-bar-progress-fill')
-  const statusBarProgressText = document.getElementById('status-bar-progress-text')
   const statusBarPortLabel = document.getElementById('status-bar-port-label')
 
-  if (!statusBarDot) return // 安全检查
-
-  let progressHideTimer = null
+  if (!statusBarDot) return
 
   function updateBackendStatus(status, port) {
-    // 更新状态点样式
     statusBarDot.className = 'status-bar-dot ' + status
 
     switch (status) {
       case 'running':
         statusBarBackendLabel.textContent = '后端: 运行中'
-        hideProgress(3000) // 服务就绪后 3 秒隐藏进度
         break
       case 'starting':
         statusBarBackendLabel.textContent = '后端: 启动中...'
         break
       case 'stopped':
         statusBarBackendLabel.textContent = '后端: 已停止'
-        hideProgress(0)
         break
       case 'error':
         statusBarBackendLabel.textContent = '后端: 错误'
-        hideProgress(0)
         break
       default:
         statusBarBackendLabel.textContent = '后端: ' + status
     }
 
-    // 更新端口显示
     if (port && status === 'running') {
       statusBarPortLabel.textContent = `端口: ${port}`
     } else {
@@ -2005,49 +1998,10 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
     }
   }
 
-  function showProgress(message) {
-    if (progressHideTimer) {
-      clearTimeout(progressHideTimer)
-      progressHideTimer = null
-    }
-    statusBarProgress.classList.add('visible')
-    statusBarProgressText.textContent = message
-    // 使用不确定进度条
-    statusBarProgressFill.className = 'status-bar-progress-fill indeterminate'
-  }
-
-  function hideProgress(delay) {
-    if (delay > 0) {
-      if (progressHideTimer) clearTimeout(progressHideTimer)
-      progressHideTimer = setTimeout(() => {
-        statusBarProgress.classList.remove('visible')
-        statusBarProgressText.textContent = ''
-        progressHideTimer = null
-      }, delay)
-    } else {
-      statusBarProgress.classList.remove('visible')
-      statusBarProgressText.textContent = ''
-    }
-  }
-
   // 监听 DSA 状态变化
   if (window.electronAPI && window.electronAPI.onDsaStatusChanged) {
     window.electronAPI.onDsaStatusChanged((data) => {
       updateBackendStatus(data.status, data.port)
-    })
-  }
-
-  // 监听后端进度
-  if (window.electronAPI && window.electronAPI.onBackendProgress) {
-    window.electronAPI.onBackendProgress((data) => {
-      if (data.phase === 'ready' || data.phase === 'stopped') {
-        hideProgress(2000)
-      } else if (data.phase === 'error') {
-        showProgress(data.message)
-        hideProgress(5000)
-      } else {
-        showProgress(data.message)
-      }
     })
   }
 
@@ -2059,4 +2013,360 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
       }
     })
   }
+})()
+
+// =====================
+// 终端面板
+// =====================
+;(function initTerminalPanel() {
+  const terminalPanel = document.getElementById('terminal-panel')
+  const terminalResizeHandle = document.getElementById('terminal-resize-handle')
+  const terminalToggleBtn = document.getElementById('terminal-toggle-btn')
+  const terminalNewBtn = document.getElementById('terminal-new-btn')
+  const statusBarTerminalBtn = document.getElementById('status-bar-terminal-btn')
+  const terminalTabsEl = document.getElementById('terminal-tabs')
+  const terminalContentEl = document.getElementById('terminal-content')
+
+  if (!terminalPanel) return
+
+  const TERMINAL_MIN_HEIGHT = 100
+  const TERMINAL_DEFAULT_HEIGHT = 250
+
+  // xterm 主题（VS Code Dark）
+  const xtermTheme = {
+    background: '#1e1e1e',
+    foreground: '#cccccc',
+    cursor: '#aeafad',
+    cursorAccent: '#1e1e1e',
+    selectionBackground: '#264f78',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#0dbc79',
+    yellow: '#e5e510',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#e5e5e5',
+    brightBlack: '#666666',
+    brightRed: '#f14c4c',
+    brightGreen: '#23d18b',
+    brightYellow: '#f5f543',
+    brightBlue: '#3b8eea',
+    brightMagenta: '#d670d6',
+    brightCyan: '#29b8db',
+    brightWhite: '#e5e5e5'
+  }
+
+  // 终端实例管理
+  const terminals = new Map() // id -> { terminal, fitAddon, tabEl, instanceEl, type }
+  let activeTerminalId = null
+  let terminalCounter = 0
+
+  // 从 localStorage 读取持久化状态
+  let terminalPanelHeight = parseInt(localStorage.getItem('terminalPanelHeight')) || TERMINAL_DEFAULT_HEIGHT
+  let terminalPanelVisible = localStorage.getItem('terminalPanelVisible') === 'true'
+
+  // 初始化面板状态
+  terminalPanel.style.height = terminalPanelHeight + 'px'
+  if (terminalPanelVisible) {
+    terminalPanel.classList.add('visible')
+  }
+
+  function toggleTerminalPanel() {
+    terminalPanelVisible = !terminalPanelVisible
+    if (terminalPanelVisible) {
+      terminalPanel.classList.add('visible')
+      // 首次展开时初始化后端日志终端
+      if (terminals.size === 0) {
+        createBackendLogTerminal()
+      }
+      // fit 当前活跃终端
+      setTimeout(() => fitActiveTerminal(), 50)
+    } else {
+      terminalPanel.classList.remove('visible')
+    }
+    localStorage.setItem('terminalPanelVisible', terminalPanelVisible)
+    if (window.electronAPI && window.electronAPI.toggleTerminalPanel) {
+      window.electronAPI.toggleTerminalPanel(terminalPanelVisible, terminalPanelHeight)
+    }
+  }
+
+  function setTerminalPanelHeight(height) {
+    terminalPanelHeight = Math.max(TERMINAL_MIN_HEIGHT, height)
+    terminalPanel.style.height = terminalPanelHeight + 'px'
+    localStorage.setItem('terminalPanelHeight', terminalPanelHeight)
+    if (window.electronAPI && window.electronAPI.resizeTerminalPanel) {
+      window.electronAPI.resizeTerminalPanel(terminalPanelHeight)
+    }
+    fitActiveTerminal()
+  }
+
+  function fitActiveTerminal() {
+    if (!activeTerminalId) return
+    const entry = terminals.get(activeTerminalId)
+    if (entry && entry.fitAddon) {
+      try {
+        entry.fitAddon.fit()
+        // 通知主进程新的 cols/rows（仅交互终端）
+        if (entry.type === 'interactive' && window.electronAPI && window.electronAPI.terminalResize) {
+          const { cols, rows } = entry.terminal
+          window.electronAPI.terminalResize(entry.remoteId, cols, rows)
+        }
+      } catch (e) {
+        // fit 可能在终端未挂载时失败
+      }
+    }
+  }
+
+  // --- 创建后端日志终端 ---
+  function createBackendLogTerminal() {
+    const id = 'backend-log'
+    const terminal = new Terminal({
+      theme: xtermTheme,
+      fontSize: 13,
+      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      disableStdin: true, // 只读
+      cursorBlink: false,
+      scrollback: 10000,
+      convertEol: true
+    })
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    terminal.loadAddon(fitAddon)
+    terminal.loadAddon(webLinksAddon)
+
+    // 使用已有的 DOM 元素
+    const instanceEl = document.getElementById('terminal-instance-backend-log')
+    terminal.open(instanceEl)
+
+    // 获取已有的 tab 元素
+    const tabEl = terminalTabsEl.querySelector('[data-tab="backend-log"]')
+
+    terminals.set(id, { terminal, fitAddon, tabEl, instanceEl, type: 'log', remoteId: null })
+    activeTerminalId = id
+
+    // fit
+    setTimeout(() => fitAddon.fit(), 50)
+
+    // 加载历史日志
+    if (window.electronAPI && window.electronAPI.terminalGetLogHistory) {
+      window.electronAPI.terminalGetLogHistory().then((history) => {
+        if (history) {
+          terminal.write(history)
+        }
+      })
+    }
+
+    // 绑定 tab 点击
+    tabEl.addEventListener('click', () => switchToTerminal(id))
+  }
+
+  // --- 创建交互式终端 ---
+  function createInteractiveTerminal() {
+    if (!window.electronAPI || !window.electronAPI.terminalCreate) return
+
+    terminalCounter++
+    const id = `term-${terminalCounter}`
+
+    const terminal = new Terminal({
+      theme: xtermTheme,
+      fontSize: 13,
+      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      cursorBlink: true,
+      scrollback: 5000,
+      convertEol: true
+    })
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    terminal.loadAddon(fitAddon)
+    terminal.loadAddon(webLinksAddon)
+
+    // 创建 DOM
+    const instanceEl = document.createElement('div')
+    instanceEl.className = 'terminal-instance'
+    instanceEl.id = `terminal-instance-${id}`
+    terminalContentEl.appendChild(instanceEl)
+
+    // 创建 tab
+    const tabEl = document.createElement('div')
+    tabEl.className = 'terminal-tab'
+    tabEl.dataset.tab = id
+    tabEl.innerHTML = `<span>终端 ${terminalCounter}</span><span class="terminal-tab-close" data-id="${id}" style="margin-left:6px;cursor:pointer;opacity:0.6;">✕</span>`
+    terminalTabsEl.appendChild(tabEl)
+
+    terminals.set(id, { terminal, fitAddon, tabEl, instanceEl, type: 'interactive', remoteId: null })
+
+    // 挂载 xterm
+    terminal.open(instanceEl)
+
+    // 切换到新终端
+    switchToTerminal(id)
+    setTimeout(() => fitAddon.fit(), 50)
+
+    // 请求主进程创建 PTY
+    window.electronAPI.terminalCreate({ cols: terminal.cols, rows: terminal.rows }).then((result) => {
+      if (result && result.id) {
+        const entry = terminals.get(id)
+        if (entry) {
+          entry.remoteId = result.id
+        }
+      }
+    })
+
+    // 键盘输入 -> 主进程
+    terminal.onData((data) => {
+      const entry = terminals.get(id)
+      if (entry && entry.remoteId && window.electronAPI.terminalInput) {
+        window.electronAPI.terminalInput(entry.remoteId, data)
+      }
+    })
+
+    // tab 点击
+    tabEl.addEventListener('click', (e) => {
+      if (e.target.classList.contains('terminal-tab-close')) {
+        destroyTerminal(id)
+      } else {
+        switchToTerminal(id)
+      }
+    })
+  }
+
+  // --- 切换终端 ---
+  function switchToTerminal(id) {
+    if (!terminals.has(id)) return
+    activeTerminalId = id
+    terminals.forEach((entry, key) => {
+      const isActive = key === id
+      entry.tabEl.classList.toggle('active', isActive)
+      entry.instanceEl.classList.toggle('active', isActive)
+    })
+    setTimeout(() => fitActiveTerminal(), 30)
+  }
+
+  // --- 销毁终端 ---
+  function destroyTerminal(id) {
+    const entry = terminals.get(id)
+    if (!entry) return
+    if (entry.type === 'log') return // 不允许关闭后端日志
+
+    // 通知主进程销毁 PTY
+    if (entry.remoteId && window.electronAPI && window.electronAPI.terminalDestroy) {
+      window.electronAPI.terminalDestroy(entry.remoteId)
+    }
+
+    entry.terminal.dispose()
+    entry.tabEl.remove()
+    entry.instanceEl.remove()
+    terminals.delete(id)
+
+    // 切换到其他终端
+    if (activeTerminalId === id) {
+      const remaining = Array.from(terminals.keys())
+      if (remaining.length > 0) {
+        switchToTerminal(remaining[remaining.length - 1])
+      } else {
+        activeTerminalId = null
+      }
+    }
+  }
+
+  // --- IPC 数据接收 ---
+  if (window.electronAPI && window.electronAPI.onTerminalData) {
+    window.electronAPI.onTerminalData((payload) => {
+      const { id, data } = payload
+      if (id === 'backend-log') {
+        // 后端日志
+        const logEntry = terminals.get('backend-log')
+        if (logEntry) {
+          logEntry.terminal.write(data)
+        }
+      } else {
+        // 交互终端 - 通过 remoteId 匹配
+        for (const [, entry] of terminals) {
+          if (entry.remoteId === id) {
+            entry.terminal.write(data)
+            break
+          }
+        }
+      }
+    })
+  }
+
+  if (window.electronAPI && window.electronAPI.onTerminalExit) {
+    window.electronAPI.onTerminalExit((payload) => {
+      const { id: remoteId } = payload
+      for (const [localId, entry] of terminals) {
+        if (entry.remoteId === remoteId) {
+          entry.terminal.write('\r\n\x1b[90m[进程已退出]\x1b[0m\r\n')
+          entry.remoteId = null
+          break
+        }
+      }
+    })
+  }
+
+  // --- 事件绑定 ---
+  if (statusBarTerminalBtn) {
+    statusBarTerminalBtn.addEventListener('click', toggleTerminalPanel)
+  }
+
+  if (terminalToggleBtn) {
+    terminalToggleBtn.addEventListener('click', toggleTerminalPanel)
+  }
+
+  if (terminalNewBtn) {
+    terminalNewBtn.addEventListener('click', createInteractiveTerminal)
+  }
+
+  // 拖拽调整高度
+  if (terminalResizeHandle) {
+    let isDragging = false
+    let startY = 0
+    let startHeight = 0
+
+    terminalResizeHandle.addEventListener('mousedown', (e) => {
+      isDragging = true
+      startY = e.clientY
+      startHeight = terminalPanelHeight
+      terminalResizeHandle.classList.add('dragging')
+      document.body.style.cursor = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return
+      const delta = startY - e.clientY
+      const newHeight = startHeight + delta
+      const maxHeight = window.innerHeight * 0.7
+      setTerminalPanelHeight(Math.min(newHeight, maxHeight))
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (!isDragging) return
+      isDragging = false
+      terminalResizeHandle.classList.remove('dragging')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    })
+  }
+
+  // 窗口 resize 时 fit 终端
+  window.addEventListener('resize', () => {
+    if (terminalPanelVisible) {
+      fitActiveTerminal()
+    }
+  })
+
+  // 初始化：如果面板已可见，立即创建后端日志终端
+  if (terminalPanelVisible) {
+    setTimeout(() => createBackendLogTerminal(), 300)
+  }
+
+  // 通知主进程初始终端面板状态
+  setTimeout(() => {
+    if (window.electronAPI && window.electronAPI.toggleTerminalPanel) {
+      window.electronAPI.toggleTerminalPanel(terminalPanelVisible, terminalPanelHeight)
+    }
+  }, 200)
 })()

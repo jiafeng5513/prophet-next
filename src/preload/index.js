@@ -101,6 +101,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBackendProgress: (callback) =>
     ipcRenderer.on('backend-progress', (event, data) => callback(data)),
 
+  // 终端面板 API
+  terminalCreate: (options) => ipcRenderer.invoke('terminal-create', options),
+  terminalInput: (id, data) => ipcRenderer.send('terminal-input', { id, data }),
+  terminalResize: (id, cols, rows) => ipcRenderer.send('terminal-resize', { id, cols, rows }),
+  terminalDestroy: (id) => ipcRenderer.send('terminal-destroy', { id }),
+  terminalGetLogHistory: () => ipcRenderer.invoke('terminal-get-log-history'),
+  onTerminalData: (callback) =>
+    ipcRenderer.on('terminal-data', (event, payload) => callback(payload)),
+  onTerminalExit: (callback) =>
+    ipcRenderer.on('terminal-exit', (event, payload) => callback(payload)),
+  toggleTerminalPanel: (visible, height) => ipcRenderer.send('toggle-terminal-panel', visible, height),
+  resizeTerminalPanel: (height) => ipcRenderer.send('resize-terminal-panel', height),
+
   // 配置导入/导出
   exportConfig: (content, defaultFileName) =>
     ipcRenderer.invoke('export-config', content, defaultFileName),

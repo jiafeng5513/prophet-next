@@ -33,12 +33,6 @@
           <div v-if="taskList.length === 0" class="history-empty">暂无分析记录</div>
         </div>
       </div>
-      <div class="side-panel-footer">
-        <div class="service-status" :class="serviceStatus" :title="serviceStatusTip">
-          <span class="status-dot"></span>
-          <span class="status-label">{{ serviceStatusLabel }}</span>
-        </div>
-      </div>
     </aside>
 
     <!-- 主内容区 -->
@@ -69,7 +63,7 @@
             </div>
           </div>
         </div>
-        <button class="analyze-btn" @click="handleAnalyze" :disabled="analyzing">
+        <button class="analyze-btn" @click="handleAnalyze" :disabled="analyzing || serviceStatus !== 'connected'" :title="serviceStatus !== 'connected' ? 'DSA 服务未连接' : ''">
           {{ analyzing ? '分析中...' : '分析' }}
         </button>
       </div>
@@ -246,20 +240,6 @@ async function checkService() {
   }
   serviceStatus.value = 'disconnected'
   return false
-}
-
-const serviceStatusLabel = ref('')
-const serviceStatusTip = ref('')
-
-function updateServiceLabels() {
-  const map = {
-    connected: { label: 'DSA 已连接', tip: `服务运行在 ${getBaseUrl()}` },
-    disconnected: { label: 'DSA 未连接', tip: '请在设置中启动 DSA 服务' },
-    unknown: { label: '检查中...', tip: '正在检查 DSA 服务状态' }
-  }
-  const info = map[serviceStatus.value] || map.unknown
-  serviceStatusLabel.value = info.label
-  serviceStatusTip.value = info.tip
 }
 
 // 搜索防抖
@@ -716,13 +696,11 @@ onMounted(async () => {
       } else {
         serviceStatus.value = 'disconnected'
       }
-      updateServiceLabels()
     })
   }
 
   // 初始检查
   await checkService()
-  updateServiceLabels()
 
   if (serviceStatus.value === 'connected') {
     connectSSE()
@@ -733,7 +711,6 @@ onMounted(async () => {
   serviceCheckTimer = setInterval(async () => {
     const wasConnected = serviceStatus.value === 'connected'
     await checkService()
-    updateServiceLabels()
     if (!wasConnected && serviceStatus.value === 'connected') {
       connectSSE()
       fetchTaskList()
@@ -947,35 +924,6 @@ onUnmounted(() => {
   background: #333;
   color: #666;
   cursor: not-allowed;
-}
-
-/* 服务状态 */
-.service-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  padding: 4px 0;
-  white-space: nowrap;
-}
-
-.service-status .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #666;
-}
-
-.service-status.connected .status-dot {
-  background: #2ea043;
-}
-
-.service-status.disconnected .status-dot {
-  background: #da3633;
-}
-
-.service-status .status-label {
-  color: #888;
 }
 
 /* 内容区 */

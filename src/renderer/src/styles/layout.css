@@ -37,6 +37,7 @@
   height: 100vh;
   overflow: hidden;
   background: var(--main-view-bg);
+  border-left: 1px solid #474747;
 }
 
 /* ===== 左侧面板 ===== */

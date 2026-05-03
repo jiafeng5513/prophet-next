@@ -41,7 +41,7 @@
       flex-direction: column;
       align-items: center;
       z-index: 10;
-      border-right: 1px solid #1a1a1a;
+      border-right: 1px solid #474747;
     }
 
     .activity-bar-top {
@@ -103,6 +103,7 @@
       display: flex;
       flex-direction: column;
       min-width: 0;
+      border-left: 1px solid #474747;
     }
 
     /* 工作区域行（标题栏下方） */
@@ -1174,30 +1175,22 @@
       border-color: #555;
     }
 
-    /* 服务状态 */
-    .agent-service-status {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 12px;
-      font-size: 10px;
-      color: #666;
-      border-top: 1px solid #2d2d2d;
-      flex-shrink: 0;
-    }
-
+    /* 服务状态点（header 内） */
     .agent-status-dot {
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: #666;
+      flex-shrink: 0;
+      margin-right: 6px;
+      transition: background 0.2s;
     }
 
-    .agent-service-status.connected .agent-status-dot {
+    .agent-status-dot.connected {
       background: #89d185;
     }
 
-    .agent-service-status.disconnected .agent-status-dot {
+    .agent-status-dot.disconnected {
       background: #f48771;
     }
 
@@ -1509,69 +1502,182 @@
       50% { opacity: 0.4; }
     }
 
-    /* 进度条 */
-    .status-bar-progress {
+
+
+    /* ===================== */
+    /* 终端面板 */
+    /* ===================== */
+    .terminal-panel {
+      background: #1e1e1e;
+      border-top: 1px solid #333;
       display: none;
-      align-items: center;
-      gap: 4px;
-      padding: 0 6px;
-      height: 22px;
-      min-width: 0;
-      overflow: hidden;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: relative;
+      height: 250px;
+      min-height: 100px;
+      max-height: 70vh;
     }
 
-    .status-bar-progress.visible {
+    .terminal-panel.visible {
       display: flex;
     }
 
-    .status-bar-progress-bar {
-      width: 80px;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 2px;
-      overflow: hidden;
-      flex-shrink: 0;
+    .terminal-resize-handle {
+      position: absolute;
+      top: -3px;
+      left: 0;
+      right: 0;
+      height: 6px;
+      cursor: ns-resize;
+      z-index: 20;
     }
 
-    .status-bar-progress-fill {
+    .terminal-resize-handle::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 2px;
+      height: 2px;
+      background: transparent;
+      transition: background 0.15s;
+    }
+
+    .terminal-resize-handle:hover::after,
+    .terminal-resize-handle.dragging::after {
+      background: #0e639c;
+    }
+
+    .terminal-panel-header {
+      height: 36px;
+      background: #252526;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .terminal-tabs {
+      display: flex;
+      align-items: center;
+      gap: 0;
       height: 100%;
-      background: #ffffff;
-      border-radius: 2px;
-      transition: width 0.3s ease;
     }
 
-    .status-bar-progress-fill.indeterminate {
-      width: 30%;
-      animation: status-progress-indeterminate 1.5s ease-in-out infinite;
+    .terminal-tab {
+      padding: 0 12px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      color: #888;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.1s;
     }
 
-    @keyframes status-progress-indeterminate {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(350%); }
+    .terminal-tab:hover {
+      color: #ccc;
     }
 
-    .status-bar-progress-text {
-      font-size: 11px;
-      white-space: nowrap;
+    .terminal-tab.active {
+      color: #fff;
+      border-bottom-color: #0078d4;
+    }
+
+    .terminal-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .terminal-action-btn {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #888;
+      font-size: 14px;
+    }
+
+    .terminal-action-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ccc;
+    }
+
+    .terminal-content {
+      flex: 1;
       overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 300px;
+      position: relative;
+      background: #1e1e1e;
     }
 
-    /* 旋转动画图标 */
-    .status-bar-spinner {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border: 1.5px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #ffffff;
-      border-radius: 50%;
-      animation: status-spin 0.8s linear infinite;
-      flex-shrink: 0;
+    .terminal-instance {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: none;
+      padding: 4px 8px;
     }
 
-    @keyframes status-spin {
-      to { transform: rotate(360deg); }
+    .terminal-instance.active {
+      display: block;
+    }
+
+    .terminal-instance .xterm {
+      height: 100%;
+    }
+
+    .terminal-tab-close {
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+
+    .terminal-tab:hover .terminal-tab-close {
+      opacity: 0.6;
+    }
+
+    .terminal-tab-close:hover {
+      opacity: 1 !important;
+      color: #f48771;
+    }
+
+    /* 状态栏终端按钮 */
+    .status-bar-terminal-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      height: 22px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+      border: none;
+      background: transparent;
+      color: #ffffff;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .status-bar-terminal-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .status-bar-terminal-btn svg {
+      width: 14px;
+      height: 14px;
     }
   </style>
 </head>
@@ -1649,6 +1755,7 @@
       <div class="agent-panel" id="agent-panel">
         <div class="agent-resize-handle" id="agent-resize-handle"></div>
         <div class="agent-panel-header">
+          <span class="agent-status-dot" id="agent-status-dot" title="DSA 未连接"></span>
           <span>聊天</span>
           <div class="agent-header-actions">
             <button class="agent-header-btn" id="agent-sessions-btn" title="历史会话">☰</button>
@@ -1696,11 +1803,22 @@
             </div>
           </div>
         </div>
-        <!-- 服务状态栏 -->
-        <div class="agent-service-status" id="agent-service-status">
-          <span class="agent-status-dot"></span>
-          <span id="agent-status-label">检查中...</span>
+      </div>
+    </div>
+    <!-- 终端面板 -->
+    <div class="terminal-panel" id="terminal-panel">
+      <div class="terminal-resize-handle" id="terminal-resize-handle"></div>
+      <div class="terminal-panel-header">
+        <div class="terminal-tabs" id="terminal-tabs">
+          <div class="terminal-tab active" data-tab="backend-log">后端日志</div>
         </div>
+        <div class="terminal-panel-actions">
+          <button class="terminal-action-btn" id="terminal-new-btn" title="新建终端">+</button>
+          <button class="terminal-action-btn" id="terminal-toggle-btn" title="关闭面板">✕</button>
+        </div>
+      </div>
+      <div class="terminal-content" id="terminal-content">
+        <div class="terminal-instance active" id="terminal-instance-backend-log"></div>
       </div>
     </div>
     <!-- VSCode 风格底部状态栏 -->
@@ -1710,15 +1828,12 @@
           <span class="status-bar-dot stopped" id="status-bar-dot"></span>
           <span id="status-bar-backend-label">后端: 未启动</span>
         </div>
-        <div class="status-bar-progress" id="status-bar-progress">
-          <span class="status-bar-spinner"></span>
-          <div class="status-bar-progress-bar">
-            <div class="status-bar-progress-fill indeterminate" id="status-bar-progress-fill"></div>
-          </div>
-          <span class="status-bar-progress-text" id="status-bar-progress-text"></span>
-        </div>
       </div>
       <div class="status-bar-right">
+        <button class="status-bar-terminal-btn" id="status-bar-terminal-btn" title="切换终端面板">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2zm6.5 7.5H13v1H8.5v-1zM3.5 6l2 2-2 2-.7-.7L4.1 8l-1.3-1.3.7-.7z"/></svg>
+          <span>终端</span>
+        </button>
         <div class="status-bar-item" id="status-bar-port" title="服务端口">
           <span id="status-bar-port-label"></span>
         </div>

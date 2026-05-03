@@ -446,4 +446,337 @@ Phase 0: 公共样式组件     ← 无依赖，最先实施
 - 左面板折叠/展开状态应持久化到 localStorage
 - 窗口 resize 时布局自适应
 
+---
 
+## 七、底部终端面板（Terminal Panel）
+
+> **目标**: 模仿 VS Code 底部终端面板，支持查看后端服务日志和运行系统命令（包括进入 uv 管理的 Python 环境）。
+
+### 7.1 功能概述
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Activity Bar │ Left Panel │ Main Content       │Agent Panel │
+│               │            │                    │            │
+│               │            │                    │            │
+│               │            │                    │            │
+│               ├────────────┴────────────────────┤            │
+│               │ [终端面板 - 可上下拖拽调整高度]    │            │
+│               │ ┌─────────────────────────────┐ │            │
+│               │ │ [后端日志] [终端]  [+]  [×]  │ │            │
+│               │ ├─────────────────────────────┤ │            │
+│               │ │                             │ │            │
+│               │ │   xterm.js 终端内容          │ │            │
+│               │ │                             │ │            │
+│               │ └─────────────────────────────┘ │            │
+├───────────────┴─────────────────────────────────┴────────────┤
+│  Status Bar                                                   │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**功能列表**:
+
+| 功能 | 说明 |
+|------|------|
+| **后端日志** | 实时显示 DSA 后端服务 (uvicorn) 的 stdout/stderr 日志，只读 |
+| **系统终端** | 可交互的 shell 终端 (Windows: PowerShell, macOS/Linux: bash/zsh) |
+| **UV 环境** | 终端自动进入 `backend/` 目录并激活 uv 管理的 Python 虚拟环境 |
+| **多标签** | 支持多个终端实例，标签页切换 |
+| **面板折叠** | 可通过状态栏按钮或快捷键折叠/展开终端面板 |
+| **高度调整** | 面板顶部有拖拽手柄，可上下拖拽调整高度 |
+
+### 7.2 技术方案
+
+#### 核心依赖
+
+| 库 | 用途 | 版本 |
+|----|------|------|
+| `@xterm/xterm` | 终端 UI 渲染 (xterm.js v5) | ^5.x |
+| `@xterm/addon-fit` | 自适应容器尺寸 | ^0.10.x |
+| `@xterm/addon-web-links` | 可点击链接 | ^0.11.x |
+| `node-pty` | 主进程伪终端 (PTY) | ^1.x |
+
+#### 架构设计
+
+```
+┌─ 渲染进程 ─────────────────────────┐    ┌─ 主进程 ────────────────────┐
+│                                     │    │                             │
+│  TerminalPanel.vue                  │    │  terminal-manager.js        │
+│  ├─ 标签栏 (后端日志 / 终端 / ...)   │    │  ├─ ptyProcesses: Map       │
+│  ├─ xterm.js Terminal 实例          │◄──IPC──┤  ├─ logStream (只读)      │
+│  └─ resize / 输入 → IPC 发送        │    │  └─ 管理 pty 生命周期        │
+│                                     │    │                             │
+└─────────────────────────────────────┘    └─────────────────────────────┘
+```
+
+**数据流 — 后端日志**:
+1. 主进程 `spawn` 启动 DSA 服务时，将 stdout/stderr 数据 **缓存到 ring buffer**
+2. 渲染进程打开"后端日志"标签时，通过 IPC 请求历史日志 + 订阅新日志
+3. 主进程通过 `mainWindow.webContents.send('terminal-data', { id, data })` 推送
+4. 渲染进程 xterm 实例 `write(data)` 渲染
+
+**数据流 — 交互终端**:
+1. 渲染进程请求创建新终端: `ipcRenderer.invoke('terminal-create', { cwd, env })`
+2. 主进程通过 `node-pty` 创建 PTY 进程，返回终端 ID
+3. 用户输入: 渲染进程 `ipcRenderer.send('terminal-input', { id, data })`
+4. PTY 输出: 主进程 `mainWindow.webContents.send('terminal-data', { id, data })`
+5. 窗口 resize: 渲染进程 `ipcRenderer.send('terminal-resize', { id, cols, rows })`
+
+### 7.3 布局定位
+
+终端面板位于 **主内容区域底部**，与 Activity Bar 和 Status Bar 平行，不覆盖 Left Panel：
+
+```
+x: ACTIVITY_BAR_WIDTH + leftPanelWidth
+y: windowHeight - STATUS_BAR_HEIGHT - terminalPanelHeight
+width: mainContentWidth (含 Agent Panel 宽度内)
+height: terminalPanelHeight (默认 250px, 可拖拽调整)
+```
+
+**关键布局参数**:
+```javascript
+const TERMINAL_PANEL_MIN_HEIGHT = 100    // 最小高度
+const TERMINAL_PANEL_MAX_RATIO = 0.7     // 最大占主内容区 70%
+const TERMINAL_PANEL_DEFAULT_HEIGHT = 250 // 默认高度
+const TERMINAL_PANEL_HEADER_HEIGHT = 36   // 终端标签栏高度
+```
+
+### 7.4 实施阶段
+
+#### Phase 7A: 基础设施 — 安装依赖 & 主进程 PTY 管理
+
+**工作内容**:
+1. 安装 `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-web-links`, `node-pty`
+2. 配置 `electron-builder.yml` 将 `node-pty` 作为 native 模块正确打包
+3. 新建 `src/main/terminal-manager.js`:
+   - `createTerminal(options)`: 创建 PTY 进程，返回 terminal ID
+   - `writeToTerminal(id, data)`: 向 PTY 写入
+   - `resizeTerminal(id, cols, rows)`: 调整 PTY 尺寸
+   - `destroyTerminal(id)`: 销毁 PTY
+   - `getLogStream()`: 获取后端日志流（ring buffer）
+4. 修改 `src/main/index.js`:
+   - 后端 stdout/stderr 同时写入 log ring buffer (保留最近 10000 行)
+   - 注册终端相关 IPC handlers
+
+**文件变更**:
+- 新建 `src/main/terminal-manager.js`
+- 修改 `src/main/index.js` (添加 IPC + log buffer)
+- 修改 `package.json` (添加依赖)
+- 修改 `electron-builder.yml` (native 模块配置)
+
+**预计改动量**: 中
+
+---
+
+#### Phase 7B: 渲染进程 — 终端面板 UI
+
+**工作内容**:
+1. 新建 `src/renderer/src/components/terminal/TerminalPanel.vue`:
+   - 面板容器: 固定在主内容区底部
+   - 顶部拖拽手柄 (4px, cursor: ns-resize)
+   - 标签栏: "后端日志" (固定) + 动态终端标签 + "+" 按钮 + 折叠按钮
+   - 内容区: xterm.js Terminal 挂载点
+2. 新建 `src/renderer/src/components/terminal/TerminalTab.vue`:
+   - 管理单个 xterm.js 实例
+   - 处理 IPC 数据接收和键盘输入发送
+3. 修改 `src/renderer/index.html`:
+   - 添加终端面板容器 DOM
+   - 添加终端面板相关 CSS
+   - 状态栏添加"终端"切换按钮
+
+**面板 HTML 结构**:
+```html
+<div class="terminal-panel" id="terminal-panel">
+  <div class="terminal-resize-handle" id="terminal-resize-handle"></div>
+  <div class="terminal-panel-header">
+    <div class="terminal-tabs" id="terminal-tabs">
+      <div class="terminal-tab active">后端日志</div>
+    </div>
+    <div class="terminal-panel-actions">
+      <button class="terminal-action-btn" id="terminal-new-btn" title="新建终端">+</button>
+      <button class="terminal-action-btn" id="terminal-close-btn" title="关闭">×</button>
+      <button class="terminal-action-btn" id="terminal-toggle-btn" title="折叠">▼</button>
+    </div>
+  </div>
+  <div class="terminal-content" id="terminal-content"></div>
+</div>
+```
+
+**样式规范**:
+```css
+.terminal-panel {
+  background: #1e1e1e;
+  border-top: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-panel-header {
+  height: 36px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.terminal-tab {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.terminal-tab.active {
+  color: #fff;
+  border-bottom-color: #0078d4;
+}
+```
+
+**预计改动量**: 大
+
+---
+
+#### Phase 7C: 后端日志标签
+
+**工作内容**:
+1. "后端日志" 标签为只读 xterm 终端实例
+2. 主进程启动 DSA 服务时自动推送日志到渲染进程
+3. 打开日志标签时，先接收 ring buffer 历史，再接收实时流
+4. 日志高亮: stderr 用红色/黄色，stdout 用默认色
+5. ANSI 颜色代码原样传递给 xterm (uvicorn 自带彩色输出)
+
+**IPC 接口**:
+```javascript
+// 预加载脚本
+subscribeLogs: () => ipcRenderer.invoke('terminal-subscribe-logs'),
+onTerminalData: (callback) => ipcRenderer.on('terminal-data', (e, payload) => callback(payload)),
+```
+
+**预计改动量**: 小
+
+---
+
+#### Phase 7D: 交互式系统终端
+
+**工作内容**:
+1. 点击"+"创建新终端标签
+2. 默认 shell:
+   - Windows: `powershell.exe`
+   - macOS: 环境变量 `$SHELL` 或 `/bin/zsh`
+   - Linux: 环境变量 `$SHELL` 或 `/bin/bash`
+3. 终端 cwd 默认为 `backend/` 目录
+4. 终端 env 注入:
+   - `VIRTUAL_ENV` 指向 `backend/.venv`
+   - `PATH` 前置 `backend/.venv/bin` (Unix) 或 `backend/.venv/Scripts` (Windows)
+   - 等效于自动激活 uv 创建的虚拟环境
+5. 终端启动后自动显示提示: `(prophet-backend) $ ` 表示已在虚拟环境中
+6. 支持 Ctrl+C 中断、Ctrl+D 关闭
+
+**UV 环境激活策略**:
+```javascript
+function getTerminalEnv(backendDir) {
+  const venvDir = path.join(backendDir, '.venv')
+  const isWin = process.platform === 'win32'
+  const binDir = isWin ? path.join(venvDir, 'Scripts') : path.join(venvDir, 'bin')
+  
+  return {
+    ...process.env,
+    VIRTUAL_ENV: venvDir,
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1'
+  }
+}
+```
+
+**预计改动量**: 中
+
+---
+
+#### Phase 7E: 面板交互 — 折叠/展开/拖拽
+
+**工作内容**:
+1. 拖拽调整高度:
+   - 顶部 resize handle (4px) 可上下拖拽
+   - 拖拽时更新 WebContentsView bounds (主视图高度缩减)
+   - 通过 IPC 通知主进程更新视图边界
+2. 折叠/展开:
+   - 状态栏添加终端图标按钮 (▪ 终端)
+   - 点击切换 `terminalPanelVisible`
+   - 展开时恢复上次高度
+3. 状态持久化:
+   - `terminalPanelHeight` 保存到 localStorage
+   - `terminalPanelVisible` 保存到 localStorage
+4. 主进程 `updateWebViewBounds()` 修改:
+   - 当终端面板可见时，主视图高度减去终端面板高度
+
+**updateWebViewBounds 修改逻辑**:
+```javascript
+function updateWebViewBounds(window, webView) {
+  const [width, height] = mainWindow.getContentSize()
+  const rightPanelWidth = agentPanelVisible ? currentAgentPanelWidth : 0
+  const leftPanelWidth = explorerPanelVisible ? currentExplorerPanelWidth : 0
+  const topOffset = getTopOffset()
+  const bottomOffset = STATUS_BAR_HEIGHT + (terminalPanelVisible ? currentTerminalPanelHeight : 0)
+  
+  webView.setBounds({
+    x: ACTIVITY_BAR_WIDTH + leftPanelWidth,
+    y: topOffset,
+    width: width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth,
+    height: height - topOffset - bottomOffset
+  })
+}
+```
+
+**预计改动量**: 中
+
+---
+
+### 7.5 IPC 接口汇总
+
+| 接口 | 方向 | 说明 |
+|------|------|------|
+| `terminal-create` | renderer → main (invoke) | 创建新 PTY 终端，返回 `{ id, pid }` |
+| `terminal-input` | renderer → main (send) | 向指定终端写入数据 |
+| `terminal-resize` | renderer → main (send) | 调整终端 cols/rows |
+| `terminal-destroy` | renderer → main (send) | 销毁终端 |
+| `terminal-subscribe-logs` | renderer → main (invoke) | 订阅后端日志，返回历史缓冲 |
+| `terminal-data` | main → renderer (send) | 终端/日志数据输出 |
+| `terminal-exit` | main → renderer (send) | 终端进程退出通知 |
+| `toggle-terminal-panel` | renderer → main (send) | 切换终端面板可见性 |
+| `resize-terminal-panel` | renderer → main (send) | 调整终端面板高度 |
+
+### 7.6 实施顺序
+
+```
+Phase 7A: 基础设施 (依赖 + PTY 管理 + IPC)
+    │
+    ├─→ Phase 7B: 终端面板 UI (HTML + CSS + 标签管理)
+    │       │
+    │       ├─→ Phase 7C: 后端日志标签 (只读日志流)
+    │       │
+    │       └─→ Phase 7D: 交互式终端 (PTY + uv 环境)
+    │
+    └─→ Phase 7E: 面板交互 (折叠/展开/拖拽/bounds 更新)
+```
+
+**推荐实施顺序**: 7A → 7E → 7B → 7C → 7D
+
+**理由**:
+1. 7A 安装依赖并搭建主进程 PTY 管理基础
+2. 7E 先解决布局和 bounds 计算（面板占位），确保终端面板不会遮挡主视图
+3. 7B 构建 UI 骨架
+4. 7C 后端日志功能最简单（只读），先实现验证数据流
+5. 7D 交互终端涉及 PTY 双向通信，最后实现
+
+### 7.7 注意事项
+
+- **node-pty 编译**: 需要 `node-gyp` 环境，Windows 需安装 Visual Studio Build Tools
+- **electron-rebuild**: `node-pty` 需要针对 Electron 版本重编译 (`npx electron-rebuild`)
+- **安全性**: PTY 终端不应暴露给远程访问，仅本地使用
+- **内存管理**: ring buffer 限制为 10000 行，防止内存泄漏
+- **编码**: Windows 下 PowerShell 可能输出 GBK/CP936，需正确处理编码转换
+- **xterm.js 主题**: 使用 VS Code Dark 配色方案以保持视觉一致
