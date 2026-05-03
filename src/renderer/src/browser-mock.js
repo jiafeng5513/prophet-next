@@ -399,7 +399,7 @@ window.electronAPI = {
   },
 
   // 工作区相关
-  getWorkspacePath: () => Promise.resolve('/mock/ProphetWorkSpace'),
+  getWorkspacePath: () => Promise.resolve('/mock/HiveLogicWorkSpace'),
   setWorkspacePath: () => {
     console.log('[browser-mock] setWorkspacePath called')
     return Promise.resolve(null)

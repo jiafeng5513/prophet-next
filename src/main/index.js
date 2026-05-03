@@ -22,7 +22,7 @@ import {
 } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
-import icon from '../../resources/prophet_logo.png?asset'
+import icon from '../../resources/hivelogic_logo.png?asset'
 import terminalManager from './terminal-manager'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
@@ -83,9 +83,9 @@ function writeConfig(config) {
 
 function getDefaultWorkspacePath() {
   if (is.dev) {
-    return join(app.getAppPath(), 'ProphetWorkSpace')
+    return join(app.getAppPath(), 'HiveLogicWorkSpace')
   }
-  return join(dirname(app.getPath('exe')), 'ProphetWorkSpace')
+  return join(dirname(app.getPath('exe')), 'HiveLogicWorkSpace')
 }
 
 function getWorkspacePath() {
@@ -515,7 +515,7 @@ function ensureWorkspaceDir() {
       join(smaDir, 'sma.py'),
       [
         '# SMA 简单移动平均线指标',
-        '# Prophet-Next 示例指标',
+        '# HiveLogic 示例指标',
         '',
         '',
         'def calculate(close_prices: list[float], period: int = 20) -> list[float]:',
@@ -556,7 +556,7 @@ function ensureWorkspaceDir() {
       join(maCrossDir, 'strategy.py'),
       [
         '# 均线交叉策略',
-        '# Prophet-Next 示例策略',
+        '# HiveLogic 示例策略',
         '',
         'from indicator.sma_indicator import calculate as sma',
         '',
@@ -719,7 +719,7 @@ function createWindow() {
     width: 1600,
     height: 1000,
     show: false,
-    title: 'Prophet-Next',
+    title: 'HiveLogic',
     autoHideMenuBar: true,
     icon,
     webPreferences: {

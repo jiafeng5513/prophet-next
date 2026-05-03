@@ -2,7 +2,7 @@
 
 ## 1. 背景
 
-[daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis) 是一个基于 FastAPI + React 的股票分析 Web 应用。本文档规划将其中两个核心功能集成到 prophet-next（Electron + Vue 3 桌面应用）中：
+[daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis) 是一个基于 FastAPI + React 的股票分析 Web 应用。本文档规划将其中两个核心功能集成到 HiveLogic（Electron + Vue 3 桌面应用）中：
 
 | 功能 | 来源页面 | 核心能力 |
 |------|---------|---------|
@@ -11,7 +11,7 @@
 
 ## 2. 两个项目的技术差异
 
-| 维度 | prophet-next | daily_stock_analysis |
+| 维度 | HiveLogic | daily_stock_analysis |
 |------|-------------|---------------------|
 | 前端框架 | Vue 3 + Element Plus | React 19 + Tailwind CSS |
 | 后端 | 无独立后端（Electron 主进程 + Python 脚本） | FastAPI + SQLite + SQLAlchemy |
@@ -26,7 +26,7 @@
 
 1. **后端复用价值极高**：分析流水线（pipeline）、Agent 系统、数据源适配、LLM 调用等核心逻辑全在 Python 后端，代码量大且逻辑复杂，不应重写
 2. **前端必须重写**：React → Vue 无法直接复用，但页面逻辑相对简单（一个搜索+报告页、一个聊天页）
-3. **prophet-next 已有 Python 进程管理能力**：当前项目已有运行 Python 脚本的机制
+3. **HiveLogic 已有 Python 进程管理能力**：当前项目已有运行 Python 脚本的机制
 
 ### 3.2 架构总览
 
@@ -57,9 +57,9 @@
 
 ### 3.3 与现有模式框架的对接
 
-prophet-next 已规划了四种模式，其中两种目前显示"正在开发中"，正好可以承载新功能：
+HiveLogic 已规划了四种模式，其中两种目前显示"正在开发中"，正好可以承载新功能：
 
-| prophet-next 模式 | 当前状态 | 集成功能 |
+| HiveLogic 模式 | 当前状态 | 集成功能 |
 |-------------------|---------|---------|
 | `trading_mode` | 已实现（K线图表） | 不变 |
 | `developing_mode` | 已实现（Monaco 编辑器） | 不变 |
@@ -256,7 +256,7 @@ src/renderer/
 3. 在 Electron 中用 `WebContentsView` 直接加载该地址
 
 **优点**：零前端开发，功能完整  
-**缺点**：UI 风格不统一、无法与 prophet-next 深度联动、两套 UI 体系
+**缺点**：UI 风格不统一、无法与 HiveLogic 深度联动、两套 UI 体系
 
 此方案仅建议用于早期验证后端可用性，不作为最终方案。
 

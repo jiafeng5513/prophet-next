@@ -42,9 +42,9 @@ TradingView 提供三个层级的图表产品：
 | Electron 桌面应用 | 🔴 高 | 桌面应用通常被视为"非公开环境"，极可能不满足免费使用条件 |
 | IP 追溯风险 | 🟡 中 | TradingView 是大型公司(40,000+企业客户)，有法律资源追究侵权 |
 
-### 1.4 对 Prophet-Next 项目的影响
+### 1.4 对 HiveLogic 项目的影响
 
-Prophet-Next 是一个 **Electron 桌面应用**，这意味着：
+HiveLogic 是一个 **Electron 桌面应用**，这意味着：
 - 不属于"公开网页"，**很可能不满足免费使用条件**
 - 如果发布为商业产品或需去除品牌标识，**必须获取商业许可**
 - 如果代码仓库是 public 的，包含 charting_library 文件会 **直接违反条款**
@@ -212,7 +212,7 @@ Prophet-Next 是一个 **Electron 桌面应用**，这意味着：
 
 ## 四、推荐方案
 
-### 对于 Prophet-Next (Electron 桌面应用)
+### 对于 HiveLogic (Electron 桌面应用)
 
 **首选推荐: KLineChart** ⭐
 

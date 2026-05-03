@@ -3,8 +3,8 @@ import Versions from '@renderer/components/Versions.vue'
 </script>
 
 <template>
-  <img alt="logo" class="logo" src="./assets/prophet_logo.png" />
-  <div class="creator">Prophet-Next</div>
+  <img alt="logo" class="logo" src="./assets/hivelogic_logo.png" />
+  <div class="creator">HiveLogic</div>
   <div class="text">
     Build With Electron-Vite and
     <span class="vue">Vue</span>

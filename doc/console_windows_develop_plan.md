@@ -672,7 +672,7 @@ onTerminalData: (callback) => ipcRenderer.on('terminal-data', (e, payload) => ca
    - `VIRTUAL_ENV` 指向 `backend/.venv`
    - `PATH` 前置 `backend/.venv/bin` (Unix) 或 `backend/.venv/Scripts` (Windows)
    - 等效于自动激活 uv 创建的虚拟环境
-5. 终端启动后自动显示提示: `(prophet-backend) $ ` 表示已在虚拟环境中
+5. 终端启动后自动显示提示: `(hivelogic-backend) $ ` 表示已在虚拟环境中
 6. 支持 Ctrl+C 中断、Ctrl+D 关闭
 
 **UV 环境激活策略**:

@@ -1,7 +1,7 @@
 {
-  "name": "prophet-next",
+  "name": "hivelogic",
   "version": "1.0.0",
-  "description": "An Electron application with Vue",
+  "description": "HiveLogic - Intelligent Trading Platform",
   "main": "./out/main/index.js",
   "author": "jiafeng5513",
   "homepage": "https://electron-vite.org",
