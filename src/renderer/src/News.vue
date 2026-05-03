@@ -1,15 +1,23 @@
 <template>
-  <div class="news-page">
-    <!-- 顶部筛选栏 -->
-    <NewsFilter
-      v-model="filter"
-      :loading="refreshing"
-      @refresh="handleRefresh"
-    />
-
-    <div class="news-body">
-      <!-- 左侧时间线 -->
-      <div class="news-timeline-panel">
+  <div class="news-page view-container">
+    <!-- 左侧面板 -->
+    <div class="side-panel news-side-panel" ref="sidePanelRef">
+      <div class="side-panel-resize-handle"></div>
+      <div class="side-panel-header">
+        <span>新闻时间线</span>
+        <div class="side-panel-header-actions">
+          <button class="refresh-btn" :disabled="refreshing" @click="handleRefresh" title="刷新">
+            <span class="refresh-icon" :class="{ spinning: refreshing }">⟳</span>
+          </button>
+        </div>
+      </div>
+      <!-- 筛选器 -->
+      <NewsFilter
+        v-model="filter"
+        :loading="refreshing"
+      />
+      <!-- 时间线 -->
+      <div class="side-panel-content">
         <NewsTimeline
           :groups="timelineGroups"
           :selected-id="selectedNewsId"
@@ -18,11 +26,11 @@
           @load-more="handleLoadMore"
         />
       </div>
+    </div>
 
-      <!-- 右侧详情 -->
-      <div class="news-detail-panel">
-        <NewsDetail :news="selectedNews" :loading="detailLoading" />
-      </div>
+    <!-- 主视图 -->
+    <div class="main-view news-detail-panel">
+      <NewsDetail :news="selectedNews" :loading="detailLoading" />
     </div>
   </div>
 </template>
@@ -32,6 +40,11 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import NewsFilter from './components/news/NewsFilter.vue'
 import NewsTimeline from './components/news/NewsTimeline.vue'
 import NewsDetail from './components/news/NewsDetail.vue'
+import '@renderer/styles/layout.css'
+import { useSidePanelWidth } from './composables/useSidePanelWidth'
+
+const sidePanelRef = ref(null)
+useSidePanelWidth(sidePanelRef)
 
 // DSA 端口
 let dsaPort = 8100
@@ -195,52 +208,44 @@ onMounted(async () => {
 
 <style scoped>
 .news-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #1e1e1e;
   color: #e0e0e0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.news-body {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.news-timeline-panel {
-  width: 340px;
-  min-width: 280px;
-  border-right: 1px solid #333;
-  overflow-y: auto;
-  flex-shrink: 0;
+.news-side-panel {
+  width: 300px;
+  min-width: 240px;
 }
 
 .news-detail-panel {
-  flex: 1;
   overflow-y: auto;
 }
 
-/* 滚动条样式 */
-.news-timeline-panel::-webkit-scrollbar,
-.news-detail-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.news-timeline-panel::-webkit-scrollbar-track,
-.news-detail-panel::-webkit-scrollbar-track {
+/* 刷新按钮 */
+.refresh-btn {
   background: transparent;
-}
-
-.news-timeline-panel::-webkit-scrollbar-thumb,
-.news-detail-panel::-webkit-scrollbar-thumb {
-  background: #555;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 4px;
   border-radius: 3px;
+  line-height: 1;
 }
-
-.news-timeline-panel::-webkit-scrollbar-thumb:hover,
-.news-detail-panel::-webkit-scrollbar-thumb:hover {
-  background: #777;
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+.refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.refresh-icon {
+  display: inline-block;
+}
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -287,7 +287,7 @@ def get_realtime(
             low=q.get("low"),
             open=q.get("open"),
             prev_close=q.get("prev_close"),
-            update_time=q.get("update_time"),
+            update_time=str(q["update_time"]) if q.get("update_time") is not None else None,
         )
         for q in raw_quotes
     ]

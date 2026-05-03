@@ -59,6 +59,10 @@ class TickFlowFetcher(BaseFetcher):
         self._client_lock = RLock()
         self._universe_query_supported: Optional[bool] = None
         self._universe_query_checked_at: Optional[float] = None
+        # 限流退避状态
+        self._rate_limit_until: float = 0.0  # monotonic timestamp until which we should not request
+        self._rate_limit_logged: bool = False  # 是否已经输出过本轮限流 WARNING
+        self._realtime_cache: Dict[str, List[Dict[str, Any]]] = {}  # 缓存最近成功的实时行情结果
 
     def close(self) -> None:
         """Close the underlying TickFlow client if it was created."""
@@ -472,17 +476,43 @@ class TickFlowFetcher(BaseFetcher):
         if client is None:
             raise DataFetchError("TickFlow 实时行情需要 API Key")
 
+        # 限流退避：冷却期内直接返回缓存
+        now = monotonic()
+        cache_key = ",".join(sorted(symbols[:50]))
+        if now < self._rate_limit_until:
+            cached = self._realtime_cache.get(cache_key)
+            if cached:
+                return cached
+            # 无缓存也不请求，返回空
+            return []
+
         tf_symbols = [to_tickflow_symbol(s) for s in symbols]
 
         all_quotes: List[Dict[str, Any]] = []
+        rate_limited = False
         for offset in range(0, len(tf_symbols), _MAX_SYMBOLS_PER_QUOTE_REQUEST):
+            # 如果本轮已被限流，跳过后续批次
+            if rate_limited:
+                break
             batch = tf_symbols[offset: offset + _MAX_SYMBOLS_PER_QUOTE_REQUEST]
             try:
                 quotes = client.quotes.get(symbols=batch)
                 if quotes:
                     all_quotes.extend(quotes)
             except Exception as exc:
-                logger.warning("[TickFlowFetcher] 实时行情批次失败: %s", exc)
+                exc_msg = str(exc)
+                if "限流" in exc_msg or "rate" in exc_msg.lower():
+                    rate_limited = True
+                    # 解析重试等待时间
+                    retry_ms = self._parse_retry_ms(exc_msg)
+                    self._rate_limit_until = now + (retry_ms / 1000.0) if retry_ms > 0 else now + 60.0
+                    if not self._rate_limit_logged:
+                        logger.warning("[TickFlowFetcher] 实时行情限流，%.0f秒后恢复", self._rate_limit_until - now)
+                        self._rate_limit_logged = True
+                    else:
+                        logger.debug("[TickFlowFetcher] 实时行情仍在限流中，%.0f秒后恢复", self._rate_limit_until - now)
+                else:
+                    logger.warning("[TickFlowFetcher] 实时行情批次失败: %s", exc)
 
         results: List[Dict[str, Any]] = []
         for q in all_quotes:
@@ -504,7 +534,26 @@ class TickFlowFetcher(BaseFetcher):
                 "update_time": q.get("timestamp"),
             })
 
+        if results:
+            self._realtime_cache[cache_key] = results
+            # 限流恢复后重置标志
+            self._rate_limit_logged = False
+        elif rate_limited:
+            # 被限流且没有新结果，返回缓存
+            cached = self._realtime_cache.get(cache_key)
+            if cached:
+                return cached
+
         return results
+
+    @staticmethod
+    def _parse_retry_ms(msg: str) -> int:
+        """从限流异常消息中解析重试等待毫秒数"""
+        import re
+        match = re.search(r"(\d+)\s*ms", msg)
+        if match:
+            return int(match.group(1))
+        return 0
 
     # ==================== P1 内部辅助 ====================
 

@@ -20,6 +20,12 @@
       title="清除搜索"
       @click="$emit('clear')"
     >×</button>
+    <button
+      v-if="!loading"
+      class="search-btn"
+      title="搜索"
+      @click="onClickSearch"
+    >⏎</button>
 
     <!-- 搜索历史下拉 -->
     <div v-if="showHistory && history.length > 0" class="search-history">
@@ -96,6 +102,14 @@ function onInput(e) {
 function onEnterSearch() {
   if (props.modelValue && props.modelValue.trim()) {
     addToHistory(props.modelValue)
+    emit('search', props.modelValue)
+  }
+}
+
+function onClickSearch() {
+  if (props.modelValue && props.modelValue.trim()) {
+    addToHistory(props.modelValue)
+    emit('search', props.modelValue)
   }
 }
 
@@ -161,6 +175,21 @@ onMounted(() => {
 
 .clear-btn:hover {
   color: #ccc;
+}
+
+.search-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.search-btn:hover {
+  color: #0e639c;
 }
 
 .search-spinner {

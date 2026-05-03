@@ -147,6 +147,8 @@ class MarketGateway:
         self._fetch_locks_lock = threading.Lock()
         self._chain = DataSourceChain()
         self._tickflow_fetcher = None
+        self._realtime_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}  # market_type -> (timestamp, data)
+        self._realtime_cache_ttl = 10.0  # 缓存有效期（秒），避免高频触发限流
         self._register_chains()
         self._initialized = True
         logger.info("[MarketGateway] 初始化完成 (含数据源链)")
@@ -833,14 +835,30 @@ class MarketGateway:
         )
 
     def _fetch_tickflow_realtime(self, symbols: List[str] = None, **_kwargs) -> List[Dict[str, Any]]:
-        """通过 TickFlowFetcher 获取实时行情"""
+        """通过 TickFlowFetcher 获取实时行情（带缓存防限流）"""
         fetcher = self._get_tickflow_fetcher()
         if fetcher is None:
             raise Exception("TickFlowFetcher 不可用")
         symbols = symbols or []
         if not symbols:
             return []
-        return fetcher.get_realtime_quotes(symbols)
+
+        cache_key = ",".join(sorted(symbols[:50]))
+        now = time.time()
+        cached = self._realtime_cache.get(cache_key)
+        if cached and (now - cached[0]) < self._realtime_cache_ttl:
+            return cached[1]
+
+        try:
+            result = fetcher.get_realtime_quotes(symbols)
+            if result:
+                self._realtime_cache[cache_key] = (now, result)
+            return result
+        except Exception:
+            # 限流或其他异常，返回缓存数据
+            if cached:
+                return cached[1]
+            raise
 
     def get_chain_health(self) -> Dict[str, Any]:
         """获取数据源链健康报告 (调试/监控)"""

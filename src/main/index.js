@@ -46,11 +46,12 @@ const AGENT_PANEL_WIDTH = 350 // Agent 侧栏默认宽度
 const EXPLORER_PANEL_WIDTH = 250 // 资源管理器默认宽度
 let agentPanelVisible = true // Agent 侧栏是否可见
 let currentAgentPanelWidth = AGENT_PANEL_WIDTH // Agent 侧栏当前宽度
-let explorerPanelVisible = false // 资源管理器是否可见（仅开发模式）
-let currentExplorerPanelWidth = EXPLORER_PANEL_WIDTH // 资源管理器当前宽度
+let explorerPanelVisible = false // 左面板是否可见（开发模式:资源管理器, 交易模式:标的浏览器）
+let currentExplorerPanelWidth = EXPLORER_PANEL_WIDTH // 左面板当前宽度
 let mainWindow // 主进程的唯一窗口，所有tab都被它加载
 let views = new Map() // 所有的view 对象，格式: { view: WebContentsView, type: string, title: string }
 let activeViewId = null // 活动的view对象
+let symbolBrowserView = null // 标的浏览器左面板视图（独立于 tabs）
 let currentDataSource = 'binance' // 当前数据源设置（跨 partition 共享）
 
 // =====================
@@ -696,7 +697,7 @@ function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
 // 模式管理
 let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'portfolio' | 'backtest' | 'settings'
 const modeState = {
-  trading: { viewIds: new Set(), activeViewId: null, pinnedViewId: null },
+  trading: { viewIds: new Set(), activeViewId: null },
   developing: { viewIds: new Set(), activeViewId: null },
   news: { viewId: null },
   market_analyze: { viewId: null },
@@ -751,6 +752,7 @@ function createWindow() {
     if (activeView) {
       updateWebViewBounds(mainWindow, activeView.view)
     }
+    updateSymbolBrowserBounds()
   }
 
   mainWindow.on('move', handleWindowBoundsChange)
@@ -947,8 +949,8 @@ function switchMode(newMode) {
   })
 
   currentMode = newMode
-  // 资源管理器仅在开发模式下显示
-  explorerPanelVisible = newMode === 'developing'
+  // 左面板在开发模式（资源管理器）和交易模式（标的浏览器）下显示
+  explorerPanelVisible = newMode === 'developing' || newMode === 'trading'
   const showTabBar = newMode === 'trading' || newMode === 'developing'
   const showNewTabBtn = newMode === 'trading'
 
@@ -958,30 +960,16 @@ function switchMode(newMode) {
   if (newMode === 'trading') {
     const state = modeState.trading
     if (state.viewIds.size === 0) {
-      // 首次进入交易模式，创建固定的标的浏览器标签页
-      const pinnedId = createView('symbol-browser')
-      state.viewIds.add(pinnedId)
-      state.pinnedViewId = pinnedId
-      // 再创建第一个图表标签页
+      // 首次进入交易模式，创建第一个图表标签页
       const viewId = createView('chart')
       state.viewIds.add(viewId)
       state.activeViewId = viewId
     }
+    // 创建标的浏览器左面板视图（如果尚未创建）
+    createSymbolBrowserView()
     newActiveViewId = state.activeViewId
-    // 构建标签页信息，固定标签页排最前面
-    const pinnedVid = state.pinnedViewId
-    if (pinnedVid) {
-      const vd = views.get(pinnedVid)
-      if (vd)
-        tabs.push({
-          viewId: pinnedVid,
-          title: vd.title || '标的浏览器',
-          type: vd.type,
-          pinned: true
-        })
-    }
+    // 构建标签页信息（仅图表标签页，不含标的浏览器）
     state.viewIds.forEach((vid) => {
-      if (vid === pinnedVid) return // 已加入
       const vd = views.get(vid)
       if (vd) tabs.push({ viewId: vid, title: vd.title || '新标签页', type: vd.type })
     })
@@ -1063,6 +1051,48 @@ function updateWebViewBounds(window, webView) {
     width: mainwin_content_width - ACTIVITY_BAR_WIDTH - leftPanelWidth - rightPanelWidth,
     height: mainwin_content_height - topOffset - STATUS_BAR_HEIGHT
   })
+  // 同步更新标的浏览器左面板视图的边界
+  updateSymbolBrowserBounds()
+}
+
+// 创建标的浏览器左面板视图
+function createSymbolBrowserView() {
+  if (symbolBrowserView) return // 已存在
+  symbolBrowserView = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      partition: 'persist:symbol-browser-panel',
+      preload: join(__dirname, '../preload/index.js')
+    }
+  })
+  symbolBrowserView.setBackgroundColor('#252526')
+  mainWindow.contentView.addChildView(symbolBrowserView)
+
+  const htmlFile = 'symbol-browser.html'
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    symbolBrowserView.webContents.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${htmlFile}`)
+  } else {
+    symbolBrowserView.webContents.loadFile(join(__dirname, `../renderer/${htmlFile}`))
+  }
+}
+
+// 更新标的浏览器视图边界（左面板区域）
+function updateSymbolBrowserBounds() {
+  if (!symbolBrowserView) return
+  if (currentMode !== 'trading' || !explorerPanelVisible) {
+    symbolBrowserView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+    return
+  }
+  const [, mainwin_content_height] = mainWindow.getContentSize()
+  // 标的浏览器左面板从标题栏下方开始（与 activity bar / explorer 面板对齐，不受 tab bar 影响）
+  const panelTop = TITLE_BAR_HEIGHT
+  symbolBrowserView.setBounds({
+    x: ACTIVITY_BAR_WIDTH,
+    y: panelTop,
+    width: currentExplorerPanelWidth - 6,
+    height: mainwin_content_height - panelTop - STATUS_BAR_HEIGHT
+  })
 }
 
 // 关闭所有图表页面
@@ -1143,11 +1173,6 @@ ipcMain.on('close-tab', (event, viewId) => {
   const viewData = views.get(viewId)
   if (!viewData) return
 
-  // 禁止关闭固定标签页（标的浏览器）
-  if (modeState.trading.pinnedViewId === viewId) {
-    return
-  }
-
   // 找到该视图所属的模式
   let viewMode = null
   for (const [mode, state] of Object.entries(modeState)) {
@@ -1157,14 +1182,8 @@ ipcMain.on('close-tab', (event, viewId) => {
     }
   }
 
-  // 至少保留1个标签页（不计固定标签页）
-  if (viewMode === 'trading') {
-    const nonPinnedCount = modeState.trading.viewIds.size - (modeState.trading.pinnedViewId ? 1 : 0)
-    if (nonPinnedCount <= 1) {
-      mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
-      return
-    }
-  } else if (viewMode && modeState[viewMode].viewIds && modeState[viewMode].viewIds.size <= 1) {
+  // 至少保留1个标签页
+  if (viewMode && modeState[viewMode].viewIds && modeState[viewMode].viewIds.size <= 1) {
     mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
     return
   }
@@ -1480,6 +1499,14 @@ ipcMain.on('resize-explorer-panel', (event, width) => {
       updateWebViewBounds(mainWindow, activeView.view)
     }
   }
+  // 广播宽度变化到所有视图，使各页面侧栏宽度同步
+  views.forEach((viewData) => {
+    viewData.view.webContents.send('side-panel-width-changed', width)
+  })
+})
+
+ipcMain.handle('get-side-panel-width', () => {
+  return currentExplorerPanelWidth
 })
 
 // =====================

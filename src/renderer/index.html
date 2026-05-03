@@ -1221,6 +1221,17 @@
       display: flex;
     }
 
+    /* 交易模式下，explorer-panel 仅作为占位，内容由 WebContentsView 覆盖 */
+    .explorer-panel.trading-mode .explorer-panel-header,
+    .explorer-panel.trading-mode .explorer-tree {
+      display: none;
+    }
+
+    .explorer-panel.trading-mode .explorer-resize-handle {
+      right: -3px;
+      width: 8px;
+    }
+
     .explorer-resize-handle {
       position: absolute;
       right: -3px;

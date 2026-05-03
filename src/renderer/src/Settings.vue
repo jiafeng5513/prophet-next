@@ -1,30 +1,17 @@
 <template>
-  <div class="settings-page">
-    <!-- 顶部栏 -->
-    <div class="settings-header">
-      <div class="header-left">
-        <h1>系统设置</h1>
-        <p class="header-desc">管理本地应用配置与 DSA 后端服务参数。</p>
-      </div>
-      <div class="header-actions" v-if="activeCategory !== 'local' && activeCategory !== 'dsa_service'">
-        <button class="btn btn-secondary" @click="importConfig" :disabled="!dsaServerRunning || isSaving" title="从 .env 文件导入配置">导入</button>
-        <button class="btn btn-secondary" @click="exportConfig" :disabled="!dsaServerRunning || dsaItems.length === 0" title="导出当前配置为 .env 文件">导出</button>
-        <button class="btn btn-secondary" @click="resetDraft" :disabled="!hasDirty || isSaving">重置</button>
-        <button class="btn btn-primary" @click="saveDsaBackendConfig" :disabled="!hasDirty || isSaving">
-          {{ isSaving ? '保存中...' : `保存配置${dirtyCount ? ` (${dirtyCount})` : ''}` }}
-        </button>
-      </div>
-    </div>
-
+  <div class="settings-page view-container">
     <!-- 保存提示 -->
     <div class="toast-bar" v-if="toast">
       <div :class="['toast', toast.type]">{{ toast.message }}</div>
     </div>
 
-    <!-- 主体 -->
-    <div class="settings-body">
-      <!-- 左侧导航 -->
-      <aside class="category-nav">
+    <!-- 左侧面板 -->
+    <aside class="category-nav side-panel" ref="sidePanelRef">
+      <div class="side-panel-resize-handle"></div>
+      <div class="side-panel-header">
+        <span>系统设置</span>
+      </div>
+      <div class="side-panel-content">
         <div class="nav-group-label">本地配置</div>
         <template v-for="cat in localCategories" :key="cat.key">
           <div
@@ -53,10 +40,20 @@
             <span class="nav-badge" v-if="cat.count">{{ cat.count }}</span>
           </div>
         </template>
-      </aside>
+      </div>
+      <!-- 操作按钮 -->
+      <div class="side-panel-footer" v-if="activeCategory !== 'local' && activeCategory !== 'dsa_service'">
+        <button class="panel-btn" @click="importConfig" :disabled="!dsaServerRunning || isSaving" title="从 .env 文件导入配置">导入</button>
+        <button class="panel-btn" @click="exportConfig" :disabled="!dsaServerRunning || dsaItems.length === 0" title="导出当前配置为 .env 文件">导出</button>
+        <button class="panel-btn" @click="resetDraft" :disabled="!hasDirty || isSaving">重置</button>
+        <button class="panel-btn btn-primary" @click="saveDsaBackendConfig" :disabled="!hasDirty || isSaving">
+          {{ isSaving ? '保存中...' : `保存配置${dirtyCount ? ` (${dirtyCount})` : ''}` }}
+        </button>
+      </div>
+    </aside>
 
-      <!-- 右侧内容 -->
-      <section class="settings-content">
+    <!-- 主视图 -->
+    <section class="settings-content main-view">
         <!-- 本地设置 -->
         <template v-if="activeCategory === 'local'">
           <div class="section-card">
@@ -645,7 +642,6 @@
           </div>
         </template>
       </section>
-    </div>
 
     <!-- 确认对话框 -->
     <div v-if="confirmDialog.show" class="dialog-overlay" @click.self="confirmDialog.onCancel">
@@ -664,6 +660,11 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
+import '@renderer/styles/layout.css'
+import { useSidePanelWidth } from './composables/useSidePanelWidth'
+
+const sidePanelRef = ref(null)
+useSidePanelWidth(sidePanelRef)
 
 // =============================
 // i18n 翻译
@@ -2403,45 +2404,19 @@ watch(activeCategory, (cat) => {
 }
 
 .settings-page {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #1e1e1e;
   color: #ccc;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
-  overflow: hidden;
 }
 
-/* 顶部 */
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
-}
-.header-left h1 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #fff;
-}
-.header-desc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #888;
-}
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* Toast */
+/* Toast — 浮动在内容上方 */
 .toast-bar {
-  padding: 8px 24px;
-  flex-shrink: 0;
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 0;
 }
 .toast {
   padding: 8px 16px;
@@ -2459,21 +2434,9 @@ watch(activeCategory, (cat) => {
   border: 1px solid rgba(218, 54, 51, 0.3);
 }
 
-/* 主体 */
-.settings-body {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-/* 左侧导航 */
+/* 左侧面板 — 覆盖公共样式的局部调整 */
 .category-nav {
-  width: 240px;
-  min-width: 240px;
-  border-right: 1px solid #333;
-  overflow-y: auto;
-  padding: 8px 0;
-  flex-shrink: 0;
+  padding: 0;
 }
 .nav-group-label {
   padding: 12px 16px 6px;
@@ -2540,9 +2503,25 @@ watch(activeCategory, (cat) => {
 
 /* 右侧内容 */
 .settings-content {
-  flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
+}
+
+/* 左侧面板底部操作按钮 */
+.side-panel-footer .panel-btn {
+  font-size: 12px;
+}
+.side-panel-footer .panel-btn.btn-primary {
+  background: #0e639c;
+  color: #fff;
+  border-color: #0e639c;
+}
+.side-panel-footer .panel-btn.btn-primary:hover:not(:disabled) {
+  background: #1177bb;
+}
+.side-panel-footer .panel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 卡片 */

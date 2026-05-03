@@ -208,12 +208,14 @@ window.electronAPI.onModeSwitched((data) => {
   // 显示/隐藏新建按钮
   newTabBtn.style.display = data.showNewTabBtn ? 'flex' : 'none'
 
-  // 显示/隐藏资源管理器（仅开发模式）
-  const showExplorer = data.mode === 'developing'
-  explorerPanel.classList.toggle('visible', showExplorer)
-  if (showExplorer && explorerTree.children.length === 0) {
+  // 显示/隐藏左面板（开发模式:资源管理器, 交易模式:标的浏览器占位）
+  const showLeftPanel = data.mode === 'developing' || data.mode === 'trading'
+  explorerPanel.classList.toggle('visible', showLeftPanel)
+  if (data.mode === 'developing' && explorerTree.children.length === 0) {
     loadExplorerTree()
   }
+  // 交易模式下隐藏资源管理器内容（由 WebContentsView 覆盖）
+  explorerPanel.classList.toggle('trading-mode', data.mode === 'trading')
 
   // 恢复新模式的标签页
   if (data.showTabBar) {

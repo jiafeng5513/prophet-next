@@ -40,15 +40,15 @@ function getIcon(type) {
 <style scoped>
 .market-type-selector {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  flex-shrink: 0;
 }
 
 .type-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 2px;
+  padding: 3px 6px;
   border: 1px solid #444;
   border-radius: 4px;
   background: transparent;

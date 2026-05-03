@@ -1,35 +1,37 @@
 <template>
-  <div class="portfolio-app">
-    <!-- 顶部导航栏 -->
-    <div class="top-bar">
-      <div class="top-bar-left">
-        <h1 class="app-title">持仓管理</h1>
-        <div class="tab-nav">
-          <button
+  <div class="portfolio-app view-container">
+    <!-- 左侧导航面板 -->
+    <aside class="side-panel" ref="sidePanel">
+      <div class="side-panel-resize-handle"></div>
+      <div class="side-panel-header">持仓管理</div>
+      <div class="account-selector-wrap">
+        <select v-model="selectedAccountId" class="account-select" @change="onAccountChange">
+          <option :value="null">全部账户</option>
+          <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ a.broker || '未知' }})</option>
+        </select>
+      </div>
+      <div class="side-panel-content">
+        <ul class="nav-list">
+          <li
             v-for="tab in tabs"
             :key="tab.key"
-            class="tab-btn"
+            class="nav-item"
             :class="{ active: activeTab === tab.key }"
             @click="activeTab = tab.key"
-          >{{ tab.label }}</button>
-        </div>
+          >{{ tab.label }}</li>
+        </ul>
       </div>
-      <div class="top-bar-right">
-        <div class="account-selector">
-          <select v-model="selectedAccountId" @change="onAccountChange">
-            <option :value="null">全部账户</option>
-            <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ a.broker || '未知' }})</option>
-          </select>
-        </div>
+      <div class="side-panel-footer">
         <div class="service-status" :class="serviceStatus" :title="serviceStatusTip">
           <span class="status-dot"></span>
           <span>{{ serviceStatusLabel }}</span>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- 主内容区 -->
-    <div class="main-area">
+    <div class="main-view">
+      <div class="main-view-content">
       <!-- 概览 -->
       <div v-if="activeTab === 'overview'" class="tab-content">
         <div class="summary-cards">
@@ -430,6 +432,7 @@
           <div v-else class="empty-state">点击刷新获取风险分析</div>
         </div>
       </div>
+      </div>
     </div>
 
     <!-- 交易录入弹窗 -->
@@ -625,6 +628,9 @@
 </template>
 
 <script>
+import '@renderer/styles/layout.css'
+import { setupSidePanelWidth } from './composables/useSidePanelWidth'
+
 const API_BASE = '/api/v1/portfolio'
 
 function getBaseUrl() {
@@ -715,6 +721,9 @@ export default {
     }
   },
   async mounted() {
+    // 同步侧栏宽度并启用拖拽调整
+    setupSidePanelWidth(this.$refs.sidePanel)
+
     try {
       const cfg = window.electronAPI ? await window.electronAPI.getDsaConfig() : {}
       this.baseUrl = `http://127.0.0.1:${cfg.port || 8100}`
@@ -1082,50 +1091,30 @@ export default {
 <style scoped>
 /* ---- Layout ---- */
 .portfolio-app {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
-  background: #1e1e1e;
   color: #ccc;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
 }
 
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  height: 44px;
-  background: #252526;
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
+/* ---- Side Panel ---- */
+.account-selector-wrap {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border-color, #333);
 }
-.top-bar-left { display: flex; align-items: center; gap: 16px; }
-.top-bar-right { display: flex; align-items: center; gap: 12px; }
-.app-title { font-size: 14px; font-weight: 600; color: #e0e0e0; margin: 0; white-space: nowrap; }
-
-.tab-nav { display: flex; gap: 2px; }
-.tab-btn {
-  padding: 6px 14px;
-  background: transparent;
-  color: #999;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
-}
-.tab-btn:hover { color: #e0e0e0; }
-.tab-btn.active { color: #fff; border-bottom-color: #0078d4; }
-
-.account-selector select {
+.account-select {
+  width: 100%;
   background: #333;
   color: #ccc;
   border: 1px solid #555;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 4px;
   font-size: 12px;
+  box-sizing: border-box;
+}
+.account-select:focus {
+  border-color: #0078d4;
+  outline: none;
 }
 
 .service-status {
@@ -1133,8 +1122,7 @@ export default {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 2px 0;
 }
 .service-status .status-dot { width: 6px; height: 6px; border-radius: 50%; }
 .service-status.online .status-dot { background: #4caf50; }
@@ -1142,9 +1130,7 @@ export default {
 .service-status.checking .status-dot { background: #ff9800; }
 
 /* ---- Main ---- */
-.main-area {
-  flex: 1;
-  overflow-y: auto;
+.main-view-content {
   padding: 16px;
 }
 .tab-content { animation: fadeIn 0.15s; }

@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 资源管理器面板
   toggleExplorerPanel: (visible) => ipcRenderer.send('toggle-explorer-panel', visible),
   resizeExplorerPanel: (width) => ipcRenderer.send('resize-explorer-panel', width),
+  onSidePanelWidthChanged: (callback) =>
+    ipcRenderer.on('side-panel-width-changed', (event, width) => callback(width)),
+  getSidePanelWidth: () => ipcRenderer.invoke('get-side-panel-width'),
 
   // 文件操作
   createFile: (filePath) => ipcRenderer.invoke('create-file', filePath),

@@ -1,48 +1,50 @@
 <template>
-  <div class="stock-analysis">
+  <div class="stock-analysis view-container">
     <!-- 左侧历史记录 -->
-    <div class="history-panel" v-show="historyVisible">
-      <div class="history-header">
+    <aside class="side-panel" ref="sidePanelRef">
+      <div class="side-panel-resize-handle"></div>
+      <div class="side-panel-header">
         <span>分析历史</span>
-        <button class="icon-btn" @click="historyVisible = false" title="关闭">✕</button>
       </div>
-      <div class="history-list">
-        <div
-          v-for="task in taskList"
-          :key="task.task_id"
-          class="history-item"
-          :class="{ active: currentTaskId === task.task_id }"
-          @click="loadTaskResult(task)"
-        >
-          <div class="history-item-header">
-            <span class="stock-code">{{ task.stock_code }}</span>
-            <span class="stock-name" v-if="task.stock_name">{{ task.stock_name }}</span>
+      <div class="side-panel-content">
+        <div class="history-list">
+          <div
+            v-for="task in taskList"
+            :key="task.task_id"
+            class="history-item"
+            :class="{ active: currentTaskId === task.task_id }"
+            @click="loadTaskResult(task)"
+          >
+            <div class="history-item-header">
+              <span class="stock-code">{{ task.stock_code }}</span>
+              <span class="stock-name" v-if="task.stock_name">{{ task.stock_name }}</span>
+            </div>
+            <div class="history-item-meta">
+              <span
+                class="status-badge"
+                :class="task.status"
+              >{{ statusText(task.status) }}</span>
+              <span class="time">{{ formatTime(task.created_at) }}</span>
+            </div>
+            <div class="progress-bar" v-if="task.status === 'processing'">
+              <div class="progress-fill" :style="{ width: (task.progress || 0) + '%' }"></div>
+            </div>
           </div>
-          <div class="history-item-meta">
-            <span
-              class="status-badge"
-              :class="task.status"
-            >{{ statusText(task.status) }}</span>
-            <span class="time">{{ formatTime(task.created_at) }}</span>
-          </div>
-          <div class="progress-bar" v-if="task.status === 'processing'">
-            <div class="progress-fill" :style="{ width: (task.progress || 0) + '%' }"></div>
-          </div>
+          <div v-if="taskList.length === 0" class="history-empty">暂无分析记录</div>
         </div>
-        <div v-if="taskList.length === 0" class="history-empty">暂无分析记录</div>
       </div>
-    </div>
+      <div class="side-panel-footer">
+        <div class="service-status" :class="serviceStatus" :title="serviceStatusTip">
+          <span class="status-dot"></span>
+          <span class="status-label">{{ serviceStatusLabel }}</span>
+        </div>
+      </div>
+    </aside>
 
     <!-- 主内容区 -->
-    <div class="main-content">
+    <div class="main-view">
       <!-- 顶部搜索栏 -->
       <div class="search-bar">
-        <button
-          class="icon-btn history-toggle"
-          @click="historyVisible = !historyVisible"
-          title="分析历史"
-          v-show="!historyVisible"
-        >☰</button>
         <div class="search-input-wrapper">
           <input
             ref="searchInput"
@@ -70,14 +72,10 @@
         <button class="analyze-btn" @click="handleAnalyze" :disabled="analyzing">
           {{ analyzing ? '分析中...' : '分析' }}
         </button>
-        <div class="service-status" :class="serviceStatus" :title="serviceStatusTip">
-          <span class="status-dot"></span>
-          <span class="status-label">{{ serviceStatusLabel }}</span>
-        </div>
       </div>
 
       <!-- 内容区 -->
-      <div class="content-area">
+      <div class="main-view-content content-area">
         <!-- 欢迎页 -->
         <div v-if="!reportData && !analyzing" class="welcome">
           <div class="welcome-icon">📊</div>
@@ -157,8 +155,11 @@
 </template>
 
 <script setup>
+import '@renderer/styles/layout.css'
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { useSidePanelWidth } from './composables/useSidePanelWidth'
 import MarkdownIt from 'markdown-it'
+
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import python from 'highlight.js/lib/languages/python'
@@ -176,6 +177,9 @@ import ReportOverview from './components/report/ReportOverview.vue'
 import StrategyGrid from './components/report/StrategyGrid.vue'
 import CollapsiblePanel from './components/report/CollapsiblePanel.vue'
 import ReportNews from './components/report/ReportNews.vue'
+
+const sidePanelRef = ref(null)
+useSidePanelWidth(sidePanelRef)
 
 const md = new MarkdownIt({
   html: true,
@@ -211,7 +215,6 @@ const reportStockCode = ref('')
 const reportStockName = ref('')
 const reportTime = ref('')
 const errorMsg = ref('')
-const historyVisible = ref(true)
 const taskList = ref([])
 const serviceStatus = ref('unknown') // unknown, connected, disconnected
 let searchTimer = null
@@ -753,40 +756,13 @@ onUnmounted(() => {
 <style>
 /* 主布局 */
 .stock-analysis {
-  display: flex;
   height: 100vh;
-  background: #1e1e1e;
   color: #cccccc;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  border-left: 1px solid #333;
 }
 
-/* 历史记录面板 */
-.history-panel {
-  width: 260px;
-  min-width: 260px;
-  background: #252526;
-  border-right: 1px solid #333;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.history-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #999;
-  border-bottom: 1px solid #333;
-}
-
+/* 历史记录列表 */
 .history-list {
-  flex: 1;
-  overflow-y: auto;
   padding: 4px 0;
 }
 
@@ -882,14 +858,6 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-/* 主内容区 */
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 /* 搜索栏 */
 .search-bar {
   display: flex;
@@ -898,25 +866,6 @@ onUnmounted(() => {
   padding: 10px 16px;
   background: #252526;
   border-bottom: 1px solid #333;
-}
-
-.history-toggle {
-  font-size: 18px;
-}
-
-.icon-btn {
-  background: none;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.icon-btn:hover {
-  background: #333;
-  color: #ccc;
 }
 
 .search-input-wrapper {
@@ -1000,13 +949,13 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+/* 服务状态 */
 .service-status {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: 4px 0;
   white-space: nowrap;
 }
 
@@ -1031,8 +980,6 @@ onUnmounted(() => {
 
 /* 内容区 */
 .content-area {
-  flex: 1;
-  overflow-y: auto;
   padding: 0;
 }
 
@@ -1378,26 +1325,22 @@ onUnmounted(() => {
 }
 
 /* 滚动条 */
-.history-list::-webkit-scrollbar,
 .content-area::-webkit-scrollbar,
 .report-container::-webkit-scrollbar {
   width: 8px;
 }
 
-.history-list::-webkit-scrollbar-track,
 .content-area::-webkit-scrollbar-track,
 .report-container::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.history-list::-webkit-scrollbar-thumb,
 .content-area::-webkit-scrollbar-thumb,
 .report-container::-webkit-scrollbar-thumb {
   background: #444;
   border-radius: 4px;
 }
 
-.history-list::-webkit-scrollbar-thumb:hover,
 .content-area::-webkit-scrollbar-thumb:hover,
 .report-container::-webkit-scrollbar-thumb:hover {
   background: #555;

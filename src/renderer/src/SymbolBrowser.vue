@@ -482,9 +482,9 @@ onUnmounted(() => {
 
 .toolbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
   border-bottom: 1px solid #333;
   background: #252526;
   flex-shrink: 0;

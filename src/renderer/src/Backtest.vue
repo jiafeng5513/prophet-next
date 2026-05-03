@@ -1,29 +1,31 @@
 <template>
-  <div class="backtest-app">
-    <!-- 顶部栏 -->
-    <div class="top-bar">
-      <div class="top-bar-left">
-        <h1 class="app-title">回测分析</h1>
-        <div class="tab-nav">
-          <button
+  <div class="backtest-app view-container">
+    <!-- 左侧导航面板 -->
+    <aside class="side-panel" ref="sidePanel">
+      <div class="side-panel-resize-handle"></div>
+      <div class="side-panel-header">回测分析</div>
+      <div class="side-panel-content">
+        <ul class="nav-list">
+          <li
             v-for="tab in tabs"
             :key="tab.key"
-            class="tab-btn"
+            class="nav-item"
             :class="{ active: activeTab === tab.key }"
             @click="activeTab = tab.key"
-          >{{ tab.label }}</button>
-        </div>
+          >{{ tab.label }}</li>
+        </ul>
       </div>
-      <div class="top-bar-right">
+      <div class="side-panel-footer">
         <div class="service-status" :class="serviceStatus" :title="serviceStatusTip">
           <span class="status-dot"></span>
           <span>{{ serviceStatusLabel }}</span>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- 主内容 -->
-    <div class="main-area">
+    <div class="main-view">
+      <div class="main-view-content">
 
       <!-- 运行回测 -->
       <div v-if="activeTab === 'run'" class="tab-content">
@@ -402,6 +404,7 @@
         </div>
       </div>
 
+      </div>
     </div>
 
     <!-- Toast -->
@@ -410,6 +413,9 @@
 </template>
 
 <script>
+import '@renderer/styles/layout.css'
+import { setupSidePanelWidth } from './composables/useSidePanelWidth'
+
 const API_BASE = '/api/v1/backtest'
 
 export default {
@@ -455,6 +461,9 @@ export default {
     }
   },
   async mounted() {
+    // 同步侧栏宽度并启用拖拽调整
+    setupSidePanelWidth(this.$refs.sidePanel)
+
     try {
       const cfg = window.electronAPI ? await window.electronAPI.getDsaConfig() : {}
       this.baseUrl = `http://127.0.0.1:${cfg.port || 8100}`
@@ -611,46 +620,15 @@ export default {
 
 <style scoped>
 .backtest-app {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
-  background: #1e1e1e;
   color: #ccc;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
 }
 
-/* Top bar */
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  height: 44px;
-  background: #252526;
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
-}
-.top-bar-left { display: flex; align-items: center; gap: 16px; }
-.top-bar-right { display: flex; align-items: center; gap: 12px; }
-.app-title { font-size: 14px; font-weight: 600; color: #e0e0e0; margin: 0; white-space: nowrap; }
-
-.tab-nav { display: flex; gap: 2px; }
-.tab-btn {
-  padding: 6px 14px;
-  background: transparent;
-  color: #999;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
-}
-.tab-btn:hover { color: #e0e0e0; }
-.tab-btn.active { color: #fff; border-bottom-color: #0078d4; }
-
+/* Service status */
 .service-status {
-  display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 3px;
+  display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 0;
 }
 .service-status .status-dot { width: 6px; height: 6px; border-radius: 50%; }
 .service-status.online .status-dot { background: #4caf50; }
@@ -658,7 +636,7 @@ export default {
 .service-status.checking .status-dot { background: #ff9800; }
 
 /* Main */
-.main-area { flex: 1; overflow-y: auto; padding: 16px; }
+.main-view-content { padding: 16px; }
 .tab-content { animation: fadeIn 0.15s; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
