@@ -40,10 +40,14 @@ from src.services.realtime_ws import RealtimeWSRelay
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
+    from src.services.download_engine import start_download_engine, stop_download_engine
+
     app.state.system_config_service = SystemConfigService()
+    await start_download_engine()
     try:
         yield
     finally:
+        await stop_download_engine()
         if hasattr(app.state, "system_config_service"):
             delattr(app.state, "system_config_service")
 

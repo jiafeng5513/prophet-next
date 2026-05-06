@@ -855,6 +855,8 @@ class DataFetcherManager:
           3. BaostockFetcher (Priority 3)
           4. YfinanceFetcher (Priority 4)
           5. LongbridgeFetcher (Priority 5) - 长桥（美股/港股兜底）
+          6. BinanceFetcher (Priority 6) - 币安（加密货币）
+          7. OKXFetcher (Priority 7) - 欧易（加密货币兜底）
         """
         from .efinance_fetcher import EfinanceFetcher
         from .akshare_fetcher import AkshareFetcher
@@ -863,6 +865,8 @@ class DataFetcherManager:
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
         from .longbridge_fetcher import LongbridgeFetcher
+        from .binance_fetcher import BinanceFetcher
+        from .okx_fetcher import OKXFetcher
         # 创建所有数据源实例（优先级在各 Fetcher 的 __init__ 中确定）
         efinance = EfinanceFetcher()
         akshare = AkshareFetcher()
@@ -871,6 +875,8 @@ class DataFetcherManager:
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
         longbridge = LongbridgeFetcher()  # 长桥（美股/港股兜底，懒加载）
+        binance = BinanceFetcher()   # 币安（加密货币）
+        okx = OKXFetcher()           # 欧易（加密货币兜底）
 
         # 初始化数据源列表
         self._ensure_concurrency_guards()
@@ -883,6 +889,8 @@ class DataFetcherManager:
                 baostock,
                 yfinance,
                 longbridge,
+                binance,
+                okx,
             ]
 
             # 按优先级排序（Tushare 如果配置了 Token 且初始化成功，优先级为 0）
@@ -898,6 +906,80 @@ class DataFetcherManager:
         with self._fetchers_lock:
             self._fetchers.append(fetcher)
             self._fetchers.sort(key=lambda f: f.priority)
+
+    def _try_cache_read(
+        self, stock_code: str, start_date: Optional[str], end_date: Optional[str], days: int
+    ) -> Optional[pd.DataFrame]:
+        """尝试从本地缓存读取K线数据，完全命中时返回 DataFrame，否则返回 None"""
+        try:
+            from src.services.kline_cache_manager import get_kline_cache_manager
+            manager = get_kline_cache_manager()
+
+            # 确定市场和时间范围
+            market = self._detect_market(stock_code)
+            start_ms, end_ms = self._resolve_time_range(start_date, end_date, days)
+
+            # 查询缓存
+            df = manager.query_klines(
+                market=market, symbol=stock_code, interval="1d",
+                start_time=start_ms, end_time=end_ms
+            )
+            if df is None or df.empty:
+                return None
+
+            # 检查覆盖度：缓存数据是否覆盖请求的大部分时间段
+            gaps = manager.find_gaps(
+                market=market, symbol=stock_code, interval="1d",
+                start_time=start_ms, end_time=end_ms
+            )
+            if gaps:
+                # 有缺口，不走纯缓存路径（后续可扩展为部分命中补齐）
+                return None
+
+            return df
+        except Exception as e:
+            logger.debug(f"[缓存读取] {stock_code} 异常（忽略）: {e}")
+            return None
+
+    def _cache_write_async(self, stock_code: str, df: pd.DataFrame, source: str) -> None:
+        """异步写入缓存（不阻塞主流程）"""
+        try:
+            from src.services.kline_cache_manager import get_kline_cache_manager
+            manager = get_kline_cache_manager()
+            market = self._detect_market(stock_code)
+            manager.upsert_klines(market=market, symbol=stock_code, interval="1d", df=df, source=source)
+        except Exception as e:
+            logger.debug(f"[缓存写入] {stock_code} 异常（忽略）: {e}")
+
+    def _detect_market(self, stock_code: str) -> str:
+        """根据代码推断市场"""
+        from .binance_fetcher import is_crypto_code
+        from .us_index_mapping import is_us_index_code, is_us_stock_code
+        if is_crypto_code(stock_code):
+            return "crypto_binance"
+        if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
+            return "us"
+        if _is_hk_market(stock_code):
+            return "hk"
+        return "cn"
+
+    def _resolve_time_range(
+        self, start_date: Optional[str], end_date: Optional[str], days: int
+    ) -> Tuple[int, int]:
+        """将日期字符串/天数转为毫秒时间戳范围"""
+        from datetime import timedelta
+        now = datetime.now()
+        if end_date:
+            end_dt = datetime.strptime(end_date, "%Y%m%d") if len(end_date) == 8 else datetime.strptime(end_date, "%Y-%m-%d")
+        else:
+            end_dt = now
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y%m%d") if len(start_date) == 8 else datetime.strptime(start_date, "%Y-%m-%d")
+        else:
+            start_dt = end_dt - timedelta(days=days)
+        start_ms = int(start_dt.timestamp() * 1000)
+        end_ms = int(end_dt.timestamp() * 1000)
+        return start_ms, end_ms
     
     def get_daily_data(
         self, 
@@ -929,9 +1011,18 @@ class DataFetcherManager:
             DataFetchError: 所有数据源都失败时抛出
         """
         from .us_index_mapping import is_us_index_code, is_us_stock_code
+        from .binance_fetcher import is_crypto_code
 
         # Normalize code (strip SH/SZ prefix etc.)
         stock_code = normalize_stock_code(stock_code)
+
+        # ====== 缓存优先逻辑 ======
+        # 尝试从本地缓存读取，如命中则跳过网络请求
+        if not getattr(self, '_skip_cache', False):
+            cache_df = self._try_cache_read(stock_code, start_date, end_date, days)
+            if cache_df is not None and not cache_df.empty:
+                logger.info(f"[缓存命中] {stock_code}: rows={len(cache_df)}")
+                return cache_df, "local_cache"
 
         fetchers = self._get_fetchers_snapshot()
         errors = []
@@ -945,6 +1036,51 @@ class DataFetcherManager:
         is_us_index = is_us_index_code(stock_code)
         is_us = is_us_index or is_us_stock_code(stock_code)
         is_hk = (not is_us) and _is_hk_market(stock_code)
+        is_crypto = is_crypto_code(stock_code)
+
+        # 加密货币路由: Binance首选, OKX兜底
+        if is_crypto:
+            source_order = ["BinanceFetcher", "OKXFetcher"]
+            for src_name in source_order:
+                for attempt, fetcher in enumerate(fetchers, start=1):
+                    if fetcher.name != src_name:
+                        continue
+                    try:
+                        role = "首选" if src_name == source_order[0] else "兜底"
+                        logger.info(
+                            f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] "
+                            f"加密货币 {stock_code} {role}路由..."
+                        )
+                        df = self._call_fetcher_method(
+                            fetcher,
+                            "get_daily_data",
+                            stock_code=stock_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                            days=days,
+                        )
+                        if df is not None and not df.empty:
+                            elapsed = time.time() - request_start
+                            logger.info(
+                                f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
+                                f"rows={len(df)}, elapsed={elapsed:.2f}s"
+                            )
+                            self._cache_write_async(stock_code, df, fetcher.name)
+                            return df, fetcher.name
+                    except Exception as e:
+                        error_type, error_reason = summarize_exception(e)
+                        error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
+                        logger.warning(
+                            f"[数据源失败 {attempt}/{total_fetchers}] [{fetcher.name}] {stock_code}: "
+                            f"error_type={error_type}, reason={error_reason}"
+                        )
+                        errors.append(error_msg)
+                    break
+
+            error_summary = f"加密货币 {stock_code} 获取失败:\n" + "\n".join(errors)
+            elapsed = time.time() - request_start
+            logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
+            raise DataFetchError(error_summary)
 
         # 美股（含美股指数）使用 Longbridge/YFinance 特殊路由；港股走下方通用数据源循环
         if is_us:
@@ -980,6 +1116,7 @@ class DataFetcherManager:
                                 f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
                                 f"rows={len(df)}, elapsed={elapsed:.2f}s"
                             )
+                            self._cache_write_async(stock_code, df, fetcher.name)
                             return df, fetcher.name
                     except Exception as e:
                         error_type, error_reason = summarize_exception(e)
@@ -1014,6 +1151,7 @@ class DataFetcherManager:
                         f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
                         f"rows={len(df)}, elapsed={elapsed:.2f}s"
                     )
+                    self._cache_write_async(stock_code, df, fetcher.name)
                     return df, fetcher.name
                     
             except Exception as e:

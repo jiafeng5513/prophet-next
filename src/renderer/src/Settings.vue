@@ -399,21 +399,14 @@
                       </div>
                     </template>
                     <template v-if="ch.authType === 'multi'">
-                      <div class="channel-field">
-                        <label>App Key</label>
+                      <div class="channel-field" v-for="(fieldKey, fIdx) in getDsPresetFields(ch.preset)" :key="fieldKey">
+                        <label>{{ getDsPresetFieldLabel(ch.preset, fIdx) }}</label>
                         <div class="field-row">
-                          <input :type="ch.showKey ? 'text' : 'password'" v-model="ch.credentials.appKey" class="field-input flex-1" placeholder="App Key" @input="dsChannelsDirty = true" />
-                          <button class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
+                          <input :type="(fIdx === 0 && ch.showKey) ? 'text' : 'password'" v-model="ch.credentials[fieldKey]" class="field-input flex-1" :placeholder="getDsPresetFieldLabel(ch.preset, fIdx)" @input="dsChannelsDirty = true" />
+                          <button v-if="fIdx === 0" class="btn btn-browse" @click="ch.showKey = !ch.showKey">{{ ch.showKey ? '隐藏' : '显示' }}</button>
                         </div>
                       </div>
-                      <div class="channel-field">
-                        <label>App Secret</label>
-                        <input type="password" v-model="ch.credentials.appSecret" class="field-input" placeholder="App Secret" @input="dsChannelsDirty = true" />
-                      </div>
-                      <div class="channel-field">
-                        <label>Access Token</label>
-                        <input type="password" v-model="ch.credentials.accessToken" class="field-input" placeholder="Access Token" @input="dsChannelsDirty = true" />
-                      </div>
+                      <div v-if="getDsPresetOptional(ch.preset)" class="field-desc" style="padding: 4px 0; color: var(--color-text-muted);">💡 公开市场数据无需 API Key，但有速率限制。配置后可提升请求配额。</div>
                     </template>
                     <div v-if="ch.authType === 'none'" class="field-desc" style="padding: 4px 0;">此数据源无需配置凭证，开箱即用。</div>
                   </div>
@@ -436,6 +429,12 @@
                   <span>筹码分布</span>
                 </label>
               </div>
+            </div>
+
+            <!-- ①-b 本地缓存管理 -->
+            <div class="llm-group">
+              <div class="llm-group-title">💾 本地缓存管理</div>
+              <CacheTimeline :baseUrl="baseUrl" />
             </div>
 
             <!-- ② 新闻搜索源渠道 -->
@@ -662,6 +661,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import Sortable from 'sortablejs'
 import '@renderer/styles/layout.css'
 import { useSidePanelWidth } from './composables/useSidePanelWidth'
+import CacheTimeline from './components/cache-timeline/CacheTimeline.vue'
 
 const sidePanelRef = ref(null)
 useSidePanelWidth(sidePanelRef)
@@ -1100,7 +1100,9 @@ const dataSourcePresets = {
   pytdx:      { label: '通达信 (Pytdx)', authType: 'server', fields: ['host', 'port', 'servers'], keys: ['PYTDX_HOST', 'PYTDX_PORT', 'PYTDX_SERVERS'], defaultEnabled: false, desc: '需自行部署通达信数据服务器' },
   tushare:    { label: 'Tushare Pro', authType: 'token', fields: ['token'], keys: ['TUSHARE_TOKEN'], defaultEnabled: false, desc: '付费金融数据 API' },
   tickflow:   { label: 'TickFlow', authType: 'apiKey', fields: ['apiKey'], keys: ['TICKFLOW_API_KEY'], defaultEnabled: false, desc: '支持 A/港/美股，REST+WebSocket' },
-  longbridge: { label: 'Longbridge（长桥）', authType: 'multi', fields: ['appKey', 'appSecret', 'accessToken'], keys: ['LONGBRIDGE_APP_KEY', 'LONGBRIDGE_APP_SECRET', 'LONGBRIDGE_ACCESS_TOKEN'], defaultEnabled: false, desc: '长桥证券数据接口' },
+  longbridge: { label: 'Longbridge（长桥）', authType: 'multi', fields: ['appKey', 'appSecret', 'accessToken'], fieldLabels: ['App Key', 'App Secret', 'Access Token'], keys: ['LONGBRIDGE_APP_KEY', 'LONGBRIDGE_APP_SECRET', 'LONGBRIDGE_ACCESS_TOKEN'], defaultEnabled: false, desc: '长桥证券数据接口' },
+  binance:    { label: 'Binance（币安）', authType: 'multi', fields: ['apiKey', 'apiSecret'], fieldLabels: ['API Key', 'API Secret'], keys: ['BINANCE_API_KEY', 'BINANCE_API_SECRET'], defaultEnabled: false, optional: true, desc: '加密货币行情，公开市场数据无需Key（有速率限制）' },
+  okx:        { label: 'OKX（欧易）', authType: 'multi', fields: ['apiKey', 'secretKey', 'passphrase'], fieldLabels: ['API Key', 'Secret Key', 'Passphrase'], keys: ['OKX_API_KEY', 'OKX_SECRET_KEY', 'OKX_PASSPHRASE'], defaultEnabled: false, optional: true, desc: '加密货币行情，公开市场数据无需Key（有速率限制）' },
 }
 
 const newsSourcePresets = {
@@ -2009,6 +2011,8 @@ const DATA_SOURCE_MANAGED_KEYS = new Set([
   'TUSHARE_TOKEN', 'TICKFLOW_API_KEY',
   'PYTDX_HOST', 'PYTDX_PORT', 'PYTDX_SERVERS',
   'LONGBRIDGE_APP_KEY', 'LONGBRIDGE_APP_SECRET', 'LONGBRIDGE_ACCESS_TOKEN',
+  'BINANCE_API_KEY', 'BINANCE_API_SECRET',
+  'OKX_API_KEY', 'OKX_SECRET_KEY', 'OKX_PASSPHRASE',
   'BOCHA_API_KEYS', 'ANSPIRE_API_KEYS', 'TAVILY_API_KEYS', 'SERPAPI_API_KEYS',
   'BRAVE_API_KEYS', 'MINIMAX_API_KEYS', 'SEARXNG_BASE_URLS', 'SEARXNG_PUBLIC_INSTANCES_ENABLED',
   'NEWS_MAX_AGE_DAYS', 'NEWS_STRATEGY_PROFILE', 'BIAS_THRESHOLD',
@@ -2045,6 +2049,18 @@ const dsAdvancedItems = computed(() => {
 function getDsLabel(preset) {
   return dataSourcePresets[preset]?.label || preset
 }
+function getDsPresetFields(preset) {
+  return dataSourcePresets[preset]?.fields || []
+}
+function getDsPresetFieldLabel(preset, idx) {
+  const labels = dataSourcePresets[preset]?.fieldLabels
+  if (labels && labels[idx]) return labels[idx]
+  const fields = dataSourcePresets[preset]?.fields
+  return fields?.[idx] || ''
+}
+function getDsPresetOptional(preset) {
+  return dataSourcePresets[preset]?.optional || false
+}
 function getNsLabel(preset) {
   return newsSourcePresets[preset]?.label || preset
 }
@@ -2054,7 +2070,11 @@ function dsAuthBadgeClass(ch) {
   if (ch.authType === 'apiKey' && ch.credentials.apiKey) return 'badge-ok'
   if (ch.authType === 'token' && ch.credentials.token) return 'badge-ok'
   if (ch.authType === 'server' && ch.credentials.host) return 'badge-ok'
-  if (ch.authType === 'multi' && ch.credentials.appKey) return 'badge-ok'
+  if (ch.authType === 'multi') {
+    const preset = dataSourcePresets[ch.preset]
+    if (preset?.optional) return ch.credentials[preset.fields?.[0]] ? 'badge-ok' : 'badge-free'
+    return ch.credentials[preset?.fields?.[0]] ? 'badge-ok' : 'badge-warn'
+  }
   return 'badge-warn'
 }
 function dsAuthBadgeText(ch) {
@@ -2062,7 +2082,12 @@ function dsAuthBadgeText(ch) {
   if (ch.authType === 'apiKey') return ch.credentials.apiKey ? '✓Key' : '⚠Key'
   if (ch.authType === 'token') return ch.credentials.token ? '✓Token' : '⚠Token'
   if (ch.authType === 'server') return ch.credentials.host ? '✓服务器' : '⚠服务器'
-  if (ch.authType === 'multi') return ch.credentials.appKey ? '✓已配置' : '⚠未配置'
+  if (ch.authType === 'multi') {
+    const preset = dataSourcePresets[ch.preset]
+    const firstField = preset?.fields?.[0]
+    if (preset?.optional) return ch.credentials[firstField] ? '✓已配置' : '可选'
+    return ch.credentials[firstField] ? '✓已配置' : '⚠未配置'
+  }
   return ''
 }
 function nsAuthBadgeClass(ch) {
@@ -2140,6 +2165,8 @@ function parseDsChannels() {
     else if (src === 'tickflow') channelId = 'tickflow'
     else if (src === 'pytdx') channelId = 'pytdx'
     else if (src === 'longbridge') channelId = 'longbridge'
+    else if (src === 'binance') channelId = 'binance'
+    else if (src === 'okx') channelId = 'okx'
     if (channelId && !seen.has(channelId)) {
       seen.add(channelId)
       channelOrder.push(channelId)
@@ -2166,10 +2193,10 @@ function parseDsChannels() {
       creds.host = allItems.get(preset.keys[0]) || ''
       creds.port = allItems.get(preset.keys[1]) || ''
       creds.servers = allItems.get(preset.keys[2]) || ''
-    } else if (preset.authType === 'multi' && preset.keys) {
-      creds.appKey = allItems.get(preset.keys[0]) || ''
-      creds.appSecret = allItems.get(preset.keys[1]) || ''
-      creds.accessToken = allItems.get(preset.keys[2]) || ''
+    } else if (preset.authType === 'multi' && preset.keys && preset.fields) {
+      preset.fields.forEach((fieldName, i) => {
+        creds[fieldName] = allItems.get(preset.keys[i]) || ''
+      })
     }
     // 判断是否启用：在 priority 列表中存在
     const enabled = preset.defaultEnabled || (preset.subSources
@@ -2253,10 +2280,10 @@ async function saveDsNsChannels() {
         items.push({ key: preset.keys[0], value: ch.credentials.host || '' })
         items.push({ key: preset.keys[1], value: ch.credentials.port || '' })
         items.push({ key: preset.keys[2], value: ch.credentials.servers || '' })
-      } else if (ch.authType === 'multi') {
-        items.push({ key: preset.keys[0], value: ch.credentials.appKey || '' })
-        items.push({ key: preset.keys[1], value: ch.credentials.appSecret || '' })
-        items.push({ key: preset.keys[2], value: ch.credentials.accessToken || '' })
+      } else if (ch.authType === 'multi' && preset.fields) {
+        preset.fields.forEach((fieldName, i) => {
+          items.push({ key: preset.keys[i], value: ch.credentials[fieldName] || '' })
+        })
       }
     }
 

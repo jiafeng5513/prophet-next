@@ -38,6 +38,8 @@ from .pytdx_fetcher import PytdxFetcher
 from .baostock_fetcher import BaostockFetcher
 from .yfinance_fetcher import YfinanceFetcher
 from .longbridge_fetcher import LongbridgeFetcher
+from .binance_fetcher import BinanceFetcher, is_crypto_code
+from .okx_fetcher import OKXFetcher
 from .us_index_mapping import is_us_index_code, is_us_stock_code, get_us_index_yf_symbol, US_INDEX_MAPPING
 
 __all__ = [
@@ -50,9 +52,12 @@ __all__ = [
     'BaostockFetcher',
     'YfinanceFetcher',
     'LongbridgeFetcher',
+    'BinanceFetcher',
+    'OKXFetcher',
     'is_us_index_code',
     'is_us_stock_code',
     'is_hk_stock_code',
+    'is_crypto_code',
     'get_us_index_yf_symbol',
     'US_INDEX_MAPPING',
 ]

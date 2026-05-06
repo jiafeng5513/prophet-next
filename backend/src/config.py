@@ -442,6 +442,13 @@ class Config:
     longbridge_app_key: Optional[str] = None
     longbridge_app_secret: Optional[str] = None
     longbridge_access_token: Optional[str] = None
+    binance_api_key: Optional[str] = None
+    binance_api_secret: Optional[str] = None
+    binance_proxy: Optional[str] = None
+    okx_api_key: Optional[str] = None
+    okx_secret_key: Optional[str] = None
+    okx_passphrase: Optional[str] = None
+    okx_proxy: Optional[str] = None
 
     # === 数据源优先级 ===
     # 逗号分隔的数据源名称列表，高优先级在前
@@ -1124,6 +1131,13 @@ class Config:
             longbridge_app_key=os.getenv('LONGBRIDGE_APP_KEY') or None,
             longbridge_app_secret=os.getenv('LONGBRIDGE_APP_SECRET') or None,
             longbridge_access_token=os.getenv('LONGBRIDGE_ACCESS_TOKEN') or None,
+            binance_api_key=os.getenv('BINANCE_API_KEY') or None,
+            binance_api_secret=os.getenv('BINANCE_API_SECRET') or None,
+            binance_proxy=os.getenv('BINANCE_PROXY') or None,
+            okx_api_key=os.getenv('OKX_API_KEY') or None,
+            okx_secret_key=os.getenv('OKX_SECRET_KEY') or None,
+            okx_passphrase=os.getenv('OKX_PASSPHRASE') or None,
+            okx_proxy=os.getenv('OKX_PROXY') or None,
             data_source_priority_cn_kline=os.getenv('DATA_SOURCE_PRIORITY_CN_KLINE', 'tickflow,data_provider'),
             data_source_priority_cn_realtime=os.getenv('DATA_SOURCE_PRIORITY_CN_REALTIME', 'tickflow,data_provider'),
             data_source_priority_cn_symbols=os.getenv('DATA_SOURCE_PRIORITY_CN_SYMBOLS', 'tickflow,akshare'),
