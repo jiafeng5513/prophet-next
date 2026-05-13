@@ -16,10 +16,16 @@
     <template v-else>
       <div class="list-header">
         <span v-if="isWatchlist" class="col-drag"></span>
-        <span class="col-symbol">代码</span>
-        <span class="col-name">名称</span>
-        <span class="col-price">最新价</span>
-        <span class="col-change">涨跌幅</span>
+        <span class="col-symbol" :style="{ width: colWidths.symbol + 'px' }">代码
+          <span class="col-resizer" @mousedown.prevent="startResize($event, 'symbol')"></span>
+        </span>
+        <span class="col-name" :style="{ width: colWidths.name + 'px' }">名称
+          <span class="col-resizer" @mousedown.prevent="startResize($event, 'name')"></span>
+        </span>
+        <span class="col-price" :style="{ width: colWidths.price + 'px' }">最新价
+          <span class="col-resizer" @mousedown.prevent="startResize($event, 'price')"></span>
+        </span>
+        <span class="col-change" :style="{ width: colWidths.change + 'px' }">涨跌幅</span>
       </div>
       <div class="virtual-list" :style="{ height: totalHeight + 'px' }">
         <div
@@ -44,14 +50,14 @@
             @dragend="onDragEnd"
           >
             <span v-if="isWatchlist" class="col-drag" title="拖拽排序">⠿</span>
-            <span class="col-symbol">
+            <span class="col-symbol" :style="{ width: colWidths.symbol + 'px' }">
               <span class="symbol-code" v-html="highlight(item.symbol)"></span>
             </span>
-            <span class="col-name" :title="item.name" v-html="highlight(item.name)"></span>
-            <span class="col-price" :class="priceClass(item)">
+            <span class="col-name" :style="{ width: colWidths.name + 'px' }" :title="item.name" v-html="highlight(item.name)"></span>
+            <span class="col-price" :style="{ width: colWidths.price + 'px' }" :class="priceClass(item)">
               {{ formatPrice(item.current_price) }}
             </span>
-            <span class="col-change" :class="changeClass(item)">
+            <span class="col-change" :style="{ width: colWidths.change + 'px' }" :class="changeClass(item)">
               {{ formatChange(item.change_percent) }}
             </span>
           </div>
@@ -77,6 +83,66 @@ const isWatchlist = computed(() => props.activeMarketType === 'watchlist')
 
 const ROW_HEIGHT = 32
 const BUFFER_COUNT = 10
+
+// ==================== 列宽调整 ====================
+
+// 各列最小宽度（保证表头文字+padding不换行）
+const COL_MIN_WIDTHS = { symbol: 50, name: 56, price: 56, change: 56 }
+// 各列宽度比例（symbol:name:price:change）
+const COL_RATIOS = { symbol: 0.18, name: 0.40, price: 0.21, change: 0.21 }
+
+const colWidths = ref({
+  symbol: 60,
+  name: 160,
+  price: 64,
+  change: 64
+})
+
+function initColWidths() {
+  if (!containerRef.value) return
+  const containerWidth = containerRef.value.clientWidth
+  // 减去左右padding(12*2)、分栏线(3条*1px)、列间padding(4列*16px)
+  const overhead = 24 + 3 + 64
+  const available = containerWidth - overhead
+  if (available <= 0) return
+
+  const keys = ['symbol', 'name', 'price', 'change']
+  keys.forEach(key => {
+    const w = Math.floor(available * COL_RATIOS[key])
+    colWidths.value[key] = Math.max(COL_MIN_WIDTHS[key], w)
+  })
+}
+
+let resizingCol = null
+let resizeStartX = 0
+let resizeStartWidth = 0
+let hasManuallyResized = false
+
+function startResize(e, col) {
+  resizingCol = col
+  resizeStartX = e.clientX
+  resizeStartWidth = colWidths.value[col]
+  hasManuallyResized = true
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function onResizeMove(e) {
+  if (!resizingCol) return
+  const delta = e.clientX - resizeStartX
+  const minWidth = COL_MIN_WIDTHS[resizingCol] || 50
+  colWidths.value[resizingCol] = Math.max(minWidth, resizeStartWidth + delta)
+}
+
+function onResizeEnd() {
+  resizingCol = null
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
 
 const containerRef = ref(null)
 const scrollTop = ref(0)
@@ -191,7 +257,12 @@ let resizeObserver = null
 
 onMounted(() => {
   updateContainerHeight()
-  resizeObserver = new ResizeObserver(updateContainerHeight)
+  initColWidths()
+  resizeObserver = new ResizeObserver(() => {
+    updateContainerHeight()
+    // 仅在用户未手动拖拽过时自适应
+    if (!hasManuallyResized) initColWidths()
+  })
   if (containerRef.value) {
     resizeObserver.observe(containerRef.value)
   }
@@ -201,6 +272,8 @@ onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
 })
 
 watch(() => props.activeMarketType, () => {
@@ -249,6 +322,22 @@ watch(() => props.activeMarketType, () => {
   position: sticky;
   top: 0;
   z-index: 1;
+}
+
+.list-header > span {
+  border-right: 1px solid #3e3e3e;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.list-header > span:first-child {
+  padding-left: 0;
+}
+
+.list-header > span:last-child {
+  border-right: none;
 }
 
 .virtual-list {
@@ -300,35 +389,55 @@ watch(() => props.activeMarketType, () => {
 }
 
 .col-symbol {
-  width: 100px;
   flex-shrink: 0;
+  position: relative;
+  padding-left: 0;
 }
 
 .col-name {
-  flex: 1;
+  flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #aaa;
+  position: relative;
+  padding-left: 8px;
 }
 
 .col-price {
-  width: 80px;
   flex-shrink: 0;
   text-align: right;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
   color: #aaa;
+  position: relative;
+  padding-left: 8px;
 }
 
 .col-change {
-  width: 72px;
-  flex-shrink: 0;
+  flex: 1;
   text-align: right;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 12px;
   color: #aaa;
+  padding-left: 8px;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+  background: transparent;
+}
+
+.col-resizer:hover,
+.col-resizer:active {
+  background: #0e639c;
 }
 
 /* 涨跌颜色 (A股惯例: 红涨绿跌) */

@@ -1624,7 +1624,7 @@ async function exportConfig() {
   if (dsaItems.value.length === 0) return
   // 构建 .env 格式内容
   const lines = []
-  lines.push(`# Prophet DSA Config Export`)
+  lines.push(`# HiveLogic DSA Config Export`)
   lines.push(`# ${new Date().toISOString()}`)
   lines.push('')
   for (const item of dsaItems.value) {
@@ -1634,7 +1634,7 @@ async function exportConfig() {
   }
   const content = lines.join('\n')
   if (window.electronAPI?.exportConfig) {
-    const result = await window.electronAPI.exportConfig(content, 'prophet-config.env')
+    const result = await window.electronAPI.exportConfig(content, 'hivelogic-config.env')
     if (result.success) {
       showToast('success', '配置已导出')
     } else if (result.error) {
@@ -1645,7 +1645,7 @@ async function exportConfig() {
     const blob = new Blob([content], { type: 'text/plain' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = 'prophet-config.env'
+    a.download = 'hivelogic-config.env'
     a.click()
     URL.revokeObjectURL(a.href)
     showToast('success', '配置已导出')

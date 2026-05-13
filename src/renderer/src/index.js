@@ -162,7 +162,13 @@ newTabBtn.addEventListener('click', () => {
 
 // 侧边栏: 模式切换按钮
 sidebarTradingBtn.addEventListener('click', () => {
-  window.electronAPI.switchMode('trading')
+  if (currentMode === 'trading') {
+    // 已在交易模式，切换面板可见性
+    const isVisible = explorerPanel.classList.contains('visible')
+    window.electronAPI.toggleExplorerPanel(!isVisible)
+  } else {
+    window.electronAPI.switchMode('trading')
+  }
 })
 
 sidebarDevelopingBtn.addEventListener('click', () => {
@@ -301,6 +307,13 @@ window.electronAPI.onFileOpened((data) => {
 window.electronAPI.onTabActivated((viewId) => {
   setActiveTab(viewId)
 })
+
+// 响应标的浏览器面板折叠/展开
+if (window.electronAPI.onExplorerPanelVisibilityChanged) {
+  window.electronAPI.onExplorerPanelVisibilityChanged((visible) => {
+    explorerPanel.classList.toggle('visible', visible)
+  })
+}
 
 window.addEventListener('beforeunload', () => {
   window.electronAPI.removeAllListeners()

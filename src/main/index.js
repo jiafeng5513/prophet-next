@@ -23,7 +23,7 @@ import {
 import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/hivelogic_logo.png?asset'
-import terminalManager from './terminal-manager'
+import terminalManager from './terminalManager'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
 function decodeOutput(buffer) {
@@ -60,7 +60,7 @@ let currentTerminalPanelHeight = 250 // 终端面板当前高度
 // =====================
 // 配置文件管理
 // =====================
-const configPath = join(app.getPath('userData'), 'prophet-config.json')
+const configPath = join(app.getPath('userData'), 'hivelogic-config.json')
 
 function readConfig() {
   try {
@@ -763,8 +763,24 @@ function createWindow() {
     updateSymbolBrowserBounds()
   }
 
+  // 最小化恢复后强制刷新所有 WebContentsView 避免黑屏
+  const handleWindowRestore = () => {
+    handleWindowBoundsChange()
+    // 强制各视图重绘
+    views.forEach((viewData) => {
+      if (viewData.view && viewData.view.webContents) {
+        viewData.view.webContents.invalidate()
+      }
+    })
+    if (symbolBrowserView && symbolBrowserView.webContents) {
+      symbolBrowserView.webContents.invalidate()
+    }
+  }
+
   mainWindow.on('move', handleWindowBoundsChange)
   mainWindow.on('resize', handleWindowBoundsChange)
+  mainWindow.on('restore', handleWindowRestore)
+  mainWindow.on('show', handleWindowRestore)
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
@@ -1499,6 +1515,8 @@ ipcMain.on('toggle-explorer-panel', (event, visible) => {
       updateWebViewBounds(mainWindow, activeView.view)
     }
   }
+  // 通知主渲染进程同步面板显示状态
+  mainWindow.webContents.send('explorer-panel-visibility-changed', visible)
 })
 
 ipcMain.on('resize-explorer-panel', (event, width) => {
@@ -1552,7 +1570,7 @@ ipcMain.handle('browse-python-path', async () => {
 ipcMain.handle('export-config', async (_event, content, defaultFileName) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '导出配置',
-    defaultPath: defaultFileName || 'prophet-config.env',
+    defaultPath: defaultFileName || 'hivelogic-config.env',
     filters: [
       { name: 'Env File', extensions: ['env'] },
       { name: 'JSON File', extensions: ['json'] },

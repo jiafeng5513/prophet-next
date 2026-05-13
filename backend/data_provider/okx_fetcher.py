@@ -119,7 +119,7 @@ class OKXFetcher(BaseFetcher):
         session.mount("http://", adapter)
 
         session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Prophet-Next/1.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) HiveLogic/1.0",
             "Content-Type": "application/json",
         })
         if self._proxy:

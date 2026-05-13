@@ -1,5 +1,15 @@
 <template>
   <div class="symbol-browser">
+    <!-- 面板标题栏 -->
+    <div class="panel-header">
+      <span class="panel-title">标的浏览</span>
+      <button class="panel-collapse-btn" title="折叠面板" @click="collapsePanel">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M11 1L5 8l6 7V1z"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <MarketTypeSelector
@@ -57,6 +67,13 @@ import SymbolContextMenu from './components/symbol-browser/SymbolContextMenu.vue
 import { realtimeWS } from './service/realtimeWSClient'
 
 const API_BASE = 'http://127.0.0.1:8100/api/v1/market'
+
+// 折叠面板
+function collapsePanel() {
+  if (window.electronAPI && window.electronAPI.toggleExplorerPanel) {
+    window.electronAPI.toggleExplorerPanel(false)
+  }
+}
 
 // 状态
 const marketTypes = ref([])
@@ -488,6 +505,42 @@ onUnmounted(() => {
   border-bottom: 1px solid #333;
   background: #252526;
   flex-shrink: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panel-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.panel-collapse-btn:hover {
+  background: #3e3e3e;
+  color: #fff;
 }
 
 .status-bar {

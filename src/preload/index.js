@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeExplorerPanel: (width) => ipcRenderer.send('resize-explorer-panel', width),
   onSidePanelWidthChanged: (callback) =>
     ipcRenderer.on('side-panel-width-changed', (event, width) => callback(width)),
+  onExplorerPanelVisibilityChanged: (callback) =>
+    ipcRenderer.on('explorer-panel-visibility-changed', (event, visible) => callback(visible)),
   getSidePanelWidth: () => ipcRenderer.invoke('get-side-panel-width'),
 
   // 文件操作

@@ -455,6 +455,9 @@ window.electronAPI = {
   resizeExplorerPanel: (width) => {
     console.log('[browser-mock] Explorer panel width:', width)
   },
+  onExplorerPanelVisibilityChanged: (callback) => {
+    console.log('[browser-mock] onExplorerPanelVisibilityChanged registered')
+  },
 
   // 文件操作
   createFile: (filePath) => {
