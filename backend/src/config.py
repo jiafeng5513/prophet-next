@@ -535,6 +535,9 @@ class Config:
 
     # === Agent 模式配置 ===
     agent_litellm_model: str = ""  # Optional Agent-only primary model; empty inherits LITELLM_MODEL
+    agent_deep_think_model: str = ""  # 深度推理模型 (decision/risk agent); empty falls back to agent_litellm_model
+    agent_quick_think_model: str = ""  # 快速模型 (technical/intel agent); empty falls back to agent_litellm_model
+    agent_model_assignment: str = ""  # JSON dict override: {"agent_name": "deep_think|quick_think"}
     agent_mode: bool = False
     _agent_mode_explicit: bool = False  # True when AGENT_MODE was explicitly set in env
     agent_max_steps: int = AGENT_MAX_STEPS_DEFAULT
@@ -545,6 +548,7 @@ class Config:
     agent_orchestrator_mode: str = "standard"  # Orchestrator mode: quick/standard/full/specialist
     agent_orchestrator_timeout_s: int = 600  # Cooperative timeout budget for the whole multi-agent pipeline
     agent_risk_override: bool = True  # Allow risk agent to veto buy signals
+    agent_parallel_pipeline: bool = True  # Enable parallel execution of independent agents (technical+intel)
     agent_deep_research_budget: int = 30000  # Max token budget for deep research
     agent_deep_research_timeout: int = 180  # Max seconds for /research command before returning timeout
     agent_memory_enabled: bool = False  # Enable memory & calibration system
@@ -1036,6 +1040,10 @@ class Config:
             configured_models=set(get_configured_llm_models(llm_model_list)),
         )
 
+        agent_deep_think_model = os.getenv('AGENT_DEEP_THINK_MODEL', '')
+        agent_quick_think_model = os.getenv('AGENT_QUICK_THINK_MODEL', '')
+        agent_model_assignment = os.getenv('AGENT_MODEL_ASSIGNMENT', '')
+
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
         # Anspire Search
         anspire_keys_str = os.getenv('ANSPIRE_API_KEYS', '')
@@ -1199,6 +1207,9 @@ class Config:
             ),
             bias_threshold=parse_env_float(os.getenv('BIAS_THRESHOLD'), 5.0, field_name='BIAS_THRESHOLD', minimum=1.0),
             agent_litellm_model=agent_litellm_model,
+            agent_deep_think_model=agent_deep_think_model,
+            agent_quick_think_model=agent_quick_think_model,
+            agent_model_assignment=agent_model_assignment,
             agent_mode=os.getenv('AGENT_MODE', 'false').lower() == 'true',
             _agent_mode_explicit=os.getenv('AGENT_MODE') is not None,
             agent_max_steps=parse_env_int(
@@ -1219,6 +1230,7 @@ class Config:
                 minimum=0,
             ),
             agent_risk_override=os.getenv('AGENT_RISK_OVERRIDE', 'true').lower() == 'true',
+            agent_parallel_pipeline=os.getenv('AGENT_PARALLEL_PIPELINE', 'true').lower() == 'true',
             agent_deep_research_budget=parse_env_int(
                 os.getenv('AGENT_DEEP_RESEARCH_BUDGET'),
                 30000,

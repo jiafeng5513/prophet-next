@@ -367,6 +367,7 @@ def run_agent_loop(
     thinking_labels: Optional[Dict[str, str]] = None,
     max_wall_clock_seconds: Optional[float] = None,
     tool_call_timeout_seconds: Optional[float] = None,
+    agent_name: Optional[str] = None,
 ) -> RunLoopResult:
     """Execute the ReAct LLM ↔ tool loop.
 
@@ -461,11 +462,19 @@ def run_agent_loop(
             progress_callback({"type": "thinking", "step": step + 1, "message": thinking_msg})
 
         # --- LLM call ---
-        response = llm_adapter.call_with_tools(
-            messages,
-            tool_decls,
-            timeout=remaining_timeout,
-        )
+        if agent_name:
+            response = llm_adapter.call_with_tools_tiered(
+                messages,
+                tool_decls,
+                agent_name=agent_name,
+                timeout=remaining_timeout,
+            )
+        else:
+            response = llm_adapter.call_with_tools(
+                messages,
+                tool_decls,
+                timeout=remaining_timeout,
+            )
         provider_used = response.provider
         total_tokens += (response.usage or {}).get("total_tokens", 0)
         m = getattr(response, "model", "") or response.provider

@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from src.agent.llm_adapter import LLMToolAdapter
+from src.agent.pipeline import build_parallel_groups, execute_group_parallel
 from src.agent.protocols import (
     AgentContext,
     AgentRunStats,
@@ -371,6 +372,52 @@ class AgentOrchestrator:
         specialist_agents_inserted = False
         index = 0
 
+        # ── Parallel pre-execution phase ──
+        # If parallel pipeline is enabled, run independent agents (technical + intel)
+        # concurrently before the serial phase handles risk/decision.
+        parallel_enabled = getattr(self.config, "agent_parallel_pipeline", True) if self.config else True
+        parallel_done_names: set = set()
+
+        if parallel_enabled and len(agents) >= 2:
+            groups = build_parallel_groups(agents, enable_parallel=True)
+            first_group = groups[0] if groups else None
+            if first_group and first_group.parallel:
+                elapsed_s = time.time() - t0
+                remaining_budget = timeout_s - elapsed_s if timeout_s else None
+
+                if progress_callback:
+                    names = [a.agent_name for a in first_group.agents]
+                    progress_callback({
+                        "type": "parallel_start",
+                        "agents": names,
+                    })
+
+                def _run_one(agent, _ctx, _timeout):
+                    return self._run_stage_agent(
+                        agent, _ctx,
+                        progress_callback=progress_callback,
+                        timeout_seconds=_timeout,
+                    )
+
+                group_results = execute_group_parallel(
+                    first_group, ctx, _run_one,
+                    timeout_seconds=remaining_budget,
+                )
+
+                for result in group_results:
+                    stats.record_stage(result)
+                    all_tool_calls.extend(result.meta.get("tool_calls_log") or [])
+                    models_used.extend(result.meta.get("models_used", []))
+                    parallel_done_names.add(result.agent_name)
+
+                    if progress_callback:
+                        progress_callback({
+                            "type": "stage_done",
+                            "stage": result.agent_name,
+                            "status": result.status.value,
+                            "duration": result.duration_s,
+                        })
+
         # Minimum seconds required for a stage to do useful work.  Starting
         # a stage with less budget virtually guarantees a timeout that wastes
         # an LLM billing cycle.  Only enforced after at least one stage has
@@ -380,6 +427,12 @@ class AgentOrchestrator:
 
         while index < len(agents):
             agent = agents[index]
+
+            # Skip agents already executed in parallel phase
+            if agent.agent_name in parallel_done_names:
+                index += 1
+                continue
+
             elapsed_s = time.time() - t0
             remaining_budget = timeout_s - elapsed_s if timeout_s else None
             stage_min_budget_s = (

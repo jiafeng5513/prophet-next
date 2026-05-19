@@ -20,8 +20,10 @@ import logging
 from typing import Optional
 
 from src.agent.agents.base_agent import BaseAgent
+from src.agent.output_parser import parse_structured_output
 from src.agent.protocols import AgentContext, AgentOpinion
 from src.agent.runner import try_parse_json
+from src.agent.schemas import RiskFlag, RiskLevel, RiskVerdict
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +109,48 @@ from your search results. Do NOT invent risks.
                     severity=flag.get("severity", "medium"),
                 )
 
+        # 构建结构化 RiskVerdict
+        verdict = self._build_verdict(parsed)
+
         return AgentOpinion(
             agent_name=self.agent_name,
             signal=_risk_to_signal(parsed.get("risk_level", "none")),
             confidence=float(parsed.get("risk_score", 50)) / 100.0,
             reasoning=parsed.get("reasoning", ""),
             raw_data=parsed,
+            structured=verdict,
         )
+
+    @staticmethod
+    def _build_verdict(parsed: dict) -> Optional[RiskVerdict]:
+        """Best-effort: 从现有 JSON 格式构建 RiskVerdict"""
+        try:
+            risk_level_str = parsed.get("risk_level", "none")
+            try:
+                risk_level = RiskLevel(risk_level_str)
+            except ValueError:
+                risk_level = RiskLevel.MEDIUM
+
+            flags = []
+            for f in parsed.get("flags", []):
+                if isinstance(f, dict):
+                    flags.append(RiskFlag(
+                        category=f.get("category", "unknown"),
+                        severity=f.get("severity", "medium"),
+                        description=f.get("description", ""),
+                        source=f.get("source", ""),
+                    ))
+
+            return RiskVerdict(
+                risk_level=risk_level,
+                risk_score=float(parsed.get("risk_score", 50)),
+                flags=flags,
+                veto_buy=bool(parsed.get("veto_buy", False)),
+                signal_adjustment=parsed.get("signal_adjustment", "none"),
+                reasoning=parsed.get("reasoning", ""),
+            )
+        except Exception:
+            return None
 
 
 def _risk_to_signal(risk_level: str) -> str:

@@ -117,6 +117,7 @@ class BaseAgent(ABC):
                 max_steps=self.max_steps,
                 progress_callback=progress_callback,
                 max_wall_clock_seconds=timeout_seconds,
+                agent_name=self.agent_name,
             )
 
             result.tokens_used = loop_result.total_tokens

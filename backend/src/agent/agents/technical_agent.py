@@ -14,8 +14,10 @@ import logging
 from typing import Optional
 
 from src.agent.agents.base_agent import BaseAgent
+from src.agent.output_parser import parse_structured_output, parse_to_dict
 from src.agent.protocols import AgentContext, AgentOpinion
 from src.agent.runner import try_parse_json
+from src.agent.schemas import AnalystReport, SignalLevel
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,12 @@ Return **only** a JSON object (no markdown fences):
             logger.warning("[TechnicalAgent] failed to parse opinion JSON")
             return None
 
+        # 尝试解析为结构化 Schema
+        report = parse_structured_output(raw_text, AnalystReport)
+        if report is None and parsed:
+            # 从 raw dict 构建 AnalystReport (best-effort)
+            report = _dict_to_analyst_report(parsed)
+
         return AgentOpinion(
             agent_name=self.agent_name,
             signal=parsed.get("signal", "hold"),
@@ -99,5 +107,30 @@ Return **only** a JSON object (no markdown fences):
                 if isinstance(v, (int, float))
             },
             raw_data=parsed,
+            structured=report,
         )
+
+
+def _dict_to_analyst_report(data: dict) -> Optional[AnalystReport]:
+    """Best-effort: 从现有 JSON 格式构建 AnalystReport"""
+    try:
+        signal_str = data.get("signal", "hold")
+        try:
+            signal = SignalLevel(signal_str)
+        except ValueError:
+            signal = SignalLevel.HOLD
+
+        return AnalystReport(
+            signal=signal,
+            confidence=float(data.get("confidence", 0.5)),
+            key_findings=[data.get("reasoning", "")] if data.get("reasoning") else [],
+            key_levels=data.get("key_levels", {}),
+            reasoning=data.get("reasoning", ""),
+            extra_data={
+                k: v for k, v in data.items()
+                if k not in ("signal", "confidence", "reasoning", "key_levels")
+            },
+        )
+    except Exception:
+        return None
 

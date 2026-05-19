@@ -24,6 +24,7 @@ from src.config import (
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
 )
+from src.agent.model_tier import ModelTier, get_tier_for_agent
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +363,104 @@ class LLMToolAdapter:
         if "/" in model:
             return model.split("/", 1)[0]
         return "openai"
+
+    # ============================================================
+    # Tier-aware model selection
+    # ============================================================
+
+    def get_model_for_tier(self, tier: ModelTier) -> str:
+        """
+        根据模型层级返回对应的模型名。
+
+        优先级:
+        1. config 中专用 tier 模型 (agent_deep_think_model / agent_quick_think_model)
+        2. 回退到 agent_litellm_model (单模型兼容)
+        3. 回退到全局 LITELLM_MODEL
+        """
+        config = self._config
+        if tier == ModelTier.DEEP:
+            model = config.agent_deep_think_model
+            if model:
+                return model
+        elif tier == ModelTier.QUICK:
+            model = config.agent_quick_think_model
+            if model:
+                return model
+
+        # 回退: agent primary → global
+        return get_effective_agent_primary_model(config)
+
+    def get_model_for_agent(self, agent_name: str) -> str:
+        """根据 agent 名获取对应的模型名。"""
+        import json as _json
+        config = self._config
+        override_map = None
+        if config.agent_model_assignment:
+            try:
+                override_map = _json.loads(config.agent_model_assignment)
+            except (ValueError, TypeError):
+                pass
+        tier = get_tier_for_agent(agent_name, override_map)
+        return self.get_model_for_tier(tier)
+
+    def call_with_tools_tiered(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[dict],
+        agent_name: str,
+        timeout: Optional[float] = None,
+    ) -> LLMResponse:
+        """
+        Tier-aware tool-calling: 根据 agent 名自动选择模型层级。
+
+        如果指定层级的模型与 primary 一致（或未配置），则等效于 call_with_tools。
+        """
+        model = self.get_model_for_agent(agent_name)
+        primary = get_effective_agent_primary_model(self._config)
+
+        # 如果 tier model 与 primary 相同，走正常 fallback 链
+        if model == primary:
+            return self.call_with_tools(messages, tools, timeout=timeout)
+
+        # 否则直接尝试 tier model，失败则 fallback 到 primary 链
+        try:
+            return self._call_litellm_model(messages, tools, model, timeout=timeout)
+        except Exception as e:
+            logger.warning(
+                "Agent LLM tier model %s failed for %s: %s; falling back to primary",
+                model, agent_name, e,
+            )
+            return self.call_with_tools(messages, tools, timeout=timeout)
+
+    def call_text_tiered(
+        self,
+        messages: List[Dict[str, Any]],
+        agent_name: str,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        timeout: Optional[float] = None,
+    ) -> LLMResponse:
+        """Tier-aware text-only completion."""
+        model = self.get_model_for_agent(agent_name)
+        primary = get_effective_agent_primary_model(self._config)
+
+        if model == primary:
+            return self.call_text(messages, temperature=temperature, max_tokens=max_tokens, timeout=timeout)
+
+        try:
+            return self._call_litellm_model(
+                messages, [], model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            )
+        except Exception as e:
+            logger.warning(
+                "Agent LLM tier model %s failed for %s: %s; falling back to primary",
+                model, agent_name, e,
+            )
+            return self.call_text(messages, temperature=temperature, max_tokens=max_tokens, timeout=timeout)
 
     def _call_litellm_model(
         self,

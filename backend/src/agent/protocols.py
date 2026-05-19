@@ -10,6 +10,7 @@ they can be serialised, logged, and passed across process boundaries.
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -91,29 +92,36 @@ class AgentContext:
     # --- timing ---
     created_at: float = field(default_factory=time.time)
 
+    # --- concurrency ---
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
     # -----------------------------------------------------------------
-    # Convenience helpers
+    # Convenience helpers (thread-safe)
     # -----------------------------------------------------------------
 
     def add_opinion(self, opinion: "AgentOpinion") -> None:
         """Append an opinion and auto-set the timestamp if missing."""
         if opinion.timestamp == 0:
             opinion.timestamp = time.time()
-        self.opinions.append(opinion)
+        with self._lock:
+            self.opinions.append(opinion)
 
     def add_risk_flag(self, category: str, description: str, severity: str = "medium") -> None:
-        self.risk_flags.append({
-            "category": category,
-            "description": description,
-            "severity": severity,
-            "timestamp": time.time(),
-        })
+        with self._lock:
+            self.risk_flags.append({
+                "category": category,
+                "description": description,
+                "severity": severity,
+                "timestamp": time.time(),
+            })
 
     def get_data(self, key: str, default: Any = None) -> Any:
-        return self.data.get(key, default)
+        with self._lock:
+            return self.data.get(key, default)
 
     def set_data(self, key: str, value: Any) -> None:
-        self.data[key] = value
+        with self._lock:
+            self.data[key] = value
 
     @property
     def has_risk_flags(self) -> bool:
@@ -141,6 +149,8 @@ class AgentOpinion:
     raw_data: Dict[str, Any] = field(default_factory=dict)
     # Any extra payload the agent wants to pass downstream
     timestamp: float = 0.0
+    # Typed structured output (Pydantic BaseModel instance), set by output_parser
+    structured: Any = None
 
     def __post_init__(self) -> None:
         """Clamp confidence to [0.0, 1.0]."""

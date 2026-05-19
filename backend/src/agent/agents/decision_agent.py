@@ -15,7 +15,9 @@ import logging
 from typing import List, Optional
 
 from src.agent.agents.base_agent import BaseAgent
+from src.agent.output_parser import parse_structured_output
 from src.agent.protocols import AgentContext, AgentOpinion, normalize_decision_signal
+from src.agent.schemas import FinalDecision, SignalLevel
 from src.report_language import normalize_report_language
 
 logger = logging.getLogger(__name__)
@@ -201,15 +203,41 @@ new decision_type values.
                 _score = float(_raw_score)
             except (TypeError, ValueError):
                 _score = 50.0
+
+            # 构建结构化 FinalDecision
+            decision = self._build_final_decision(dashboard, _score)
+
             return AgentOpinion(
                 agent_name=self.agent_name,
                 signal=dashboard.get("decision_type", "hold"),
                 confidence=min(1.0, _score / 100.0),
                 reasoning=dashboard.get("analysis_summary", ""),
                 raw_data=dashboard,
+                structured=decision,
             )
         else:
             # Even if JSON parsing fails, store the raw text for downstream use
             ctx.set_data("final_dashboard_raw", raw_text)
             logger.warning("[DecisionAgent] failed to parse dashboard JSON")
+            return None
+
+    @staticmethod
+    def _build_final_decision(dashboard: dict, score: float) -> Optional[FinalDecision]:
+        """Best-effort: 从 dashboard dict 构建 FinalDecision"""
+        try:
+            decision_type = dashboard.get("decision_type", "hold")
+            signal_map = {"buy": SignalLevel.BUY, "sell": SignalLevel.SELL, "hold": SignalLevel.HOLD}
+            signal = signal_map.get(decision_type, SignalLevel.HOLD)
+
+            risk_warning = dashboard.get("risk_warning", "")
+            risk_warnings = [risk_warning] if risk_warning else []
+
+            return FinalDecision(
+                signal=signal,
+                confidence=min(1.0, score / 100.0),
+                key_reasoning=dashboard.get("analysis_summary", ""),
+                risk_warnings=risk_warnings,
+                dashboard=dashboard,
+            )
+        except Exception:
             return None

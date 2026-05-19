@@ -15,8 +15,10 @@ import logging
 from typing import Optional
 
 from src.agent.agents.base_agent import BaseAgent
+from src.agent.output_parser import parse_structured_output
 from src.agent.protocols import AgentContext, AgentOpinion
 from src.agent.runner import try_parse_json
+from src.agent.schemas import AnalystReport, SignalLevel
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +109,41 @@ Return **only** a JSON object:
             if isinstance(alert, str) and alert:
                 ctx.add_risk_flag(category="intel", description=alert)
 
+        # 构建结构化报告
+        report = self._build_report(parsed)
+
         return AgentOpinion(
             agent_name=self.agent_name,
             signal=parsed.get("signal", "hold"),
             confidence=float(parsed.get("confidence", 0.5)),
             reasoning=parsed.get("reasoning", ""),
             raw_data=parsed,
+            structured=report,
         )
+
+    @staticmethod
+    def _build_report(parsed: dict) -> Optional[AnalystReport]:
+        """Best-effort: 从现有 JSON 格式构建 AnalystReport"""
+        try:
+            signal_str = parsed.get("signal", "hold")
+            try:
+                signal = SignalLevel(signal_str)
+            except ValueError:
+                signal = SignalLevel.HOLD
+
+            return AnalystReport(
+                signal=signal,
+                confidence=float(parsed.get("confidence", 0.5)),
+                key_findings=parsed.get("positive_catalysts", []),
+                risk_factors=parsed.get("risk_alerts", []),
+                reasoning=parsed.get("reasoning", ""),
+                extra_data={
+                    k: v for k, v in parsed.items()
+                    if k not in ("signal", "confidence", "reasoning",
+                                 "positive_catalysts", "risk_alerts")
+                },
+            )
+        except Exception:
+            return None
 
 

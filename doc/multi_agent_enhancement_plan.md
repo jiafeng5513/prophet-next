@@ -457,10 +457,24 @@ parallel_results = await asyncio.gather(
 ## 五、实施路线图
 
 ```
-Phase 1 — 数据基座夯实
-  ├─ Module A: 统一行情数据层（补全港股/美股/期货数据源对接）
-  ├─ Module C: 新闻采集管线 MVP（2-3 个核心源 + 持久化）
-  └─ Module F: 统一标的编码 + 元数据管理
+Phase 1 — 数据基座夯实 ✅ (2026-05-19 完成)
+  ├─ ✅ Module A: 统一行情数据层
+  │     ├─ MarketGateway 单例 (多市场 K线/实时行情/标的列表)
+  │     ├─ DataSourceChain 优先级路由 (TickFlow→各市场备用源)
+  │     ├─ KlineCacheManager (SQLite WAL, 增量补全, 间隙分析)
+  │     ├─ MarketType / PeriodType 枚举 (backend/src/enums.py)
+  │     └─ WebSocket 实时行情中继 (realtime_ws.py, 自动降级轮询)
+  ├─ ✅ Module C: 新闻采集管线 MVP
+  │     ├─ CrawledNewsItem 统一数据模型
+  │     ├─ BaseCrawler 抽象基类 (含股票代码正则提取)
+  │     ├─ EastMoneyCrawler (东方财富全球快讯 API, A/全球/港/美栏目)
+  │     ├─ NewsRepository (SQLite 持久化, 去重, 按标的/时间查询)
+  │     ├─ NewsCrawlScheduler (5min 定时采集, 回调机制)
+  │     ├─ NewsProcessor (LLM 摘要+情感分析+重要性分级)
+  │     └─ API: /api/v1/news-crawler/* (status/start/stop/run-once/feed/process)
+  └─ ✅ Module F: 统一标的编码 + 元数据管理
+        ├─ tickflow_symbol.py (跨市场编码转换 600519↔600519.SH)
+        └─ WatchlistService (自选列表 CRUD, 跨市场混合)
 
 Phase 2 — 智能体核心升级
   ├─ E1: 双层 LLM 分级调度
@@ -475,7 +489,7 @@ Phase 3 — 辩论与反思
 Phase 4 — 交互体验
   ├─ Module D: 统一 AI 交互入口
   ├─ Module B: K 线图增强（信号标注 + 跨市场适配）
-  └─ 新闻采集系统完善 (更多源 + LLM 增强处理)
+  └─ 新闻采集系统完善 (更多源: 雪球/财联社/Reuters)
 ```
 
 ---
