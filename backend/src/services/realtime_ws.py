@@ -224,6 +224,11 @@ class RealtimeWSRelay:
                 await self._connect_upstream()
             except asyncio.CancelledError:
                 break
+            except (AttributeError, RuntimeError) as e:
+                # websockets 14+ cleanup bug: 'ClientConnection' has no attribute 'recv_messages'
+                logger.debug("[RealtimeWS] 上游清理异常 (已忽略): %s", e)
+                await asyncio.sleep(self._reconnect_delay)
+                self._reconnect_delay = min(self._reconnect_delay * 2, 60)
             except Exception as e:
                 logger.warning("[RealtimeWS] 上游连接失败: %s, %s秒后重试",
                                e, self._reconnect_delay)
@@ -237,7 +242,10 @@ class RealtimeWSRelay:
         url = f"{self._upstream_url}?api_key={self._api_key}"
         logger.info("[RealtimeWS] 连接上游 TickFlow WebSocket...")
 
-        async with websockets.connect(url, ping_interval=25, ping_timeout=10) as ws:
+        async with websockets.connect(
+            url, ping_interval=25, ping_timeout=10, open_timeout=15,
+            close_timeout=5,
+        ) as ws:
             self._upstream_ws = ws
             self._upstream_connected = True
             self._reconnect_delay = 1.0
