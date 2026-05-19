@@ -37,6 +37,15 @@ DEFAULT_TIER_MAP: Dict[str, ModelTier] = {
     "decision": ModelTier.DEEP,
     # skill agents 默认用 quick
     "skill": ModelTier.QUICK,
+    # Phase 3: 辩论 agents
+    "bull_researcher": ModelTier.QUICK,
+    "bear_researcher": ModelTier.QUICK,
+    "research_manager": ModelTier.DEEP,
+    # Phase 3: 风险讨论 agents
+    "risk_aggressive": ModelTier.QUICK,
+    "risk_conservative": ModelTier.QUICK,
+    "risk_neutral": ModelTier.QUICK,
+    "risk_manager": ModelTier.DEEP,
 }
 
 

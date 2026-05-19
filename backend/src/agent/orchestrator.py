@@ -418,6 +418,13 @@ class AgentOrchestrator:
                             "duration": result.duration_s,
                         })
 
+        # ── Phase 3: Debate + Risk Debate (full/specialist only) ──
+        debate_results = self._run_debate_phase(ctx, t0, timeout_s, stats, all_tool_calls, models_used, progress_callback)
+        risk_debate_results = self._run_risk_debate_phase(ctx, t0, timeout_s, stats, all_tool_calls, models_used, progress_callback)
+
+        # ── Phase 3: Reflection injection ──
+        self._inject_reflection(ctx)
+
         # Minimum seconds required for a stage to do useful work.  Starting
         # a stage with less budget virtually guarantees a timeout that wastes
         # an LLM billing cycle.  Only enforced after at least one stage has
@@ -618,6 +625,9 @@ class AgentOrchestrator:
                 stats=stats,
             )
 
+        # Record decision for reflection
+        self._record_decision_log(ctx)
+
         return OrchestratorResult(
             success=bool(content),
             content=content,
@@ -741,6 +751,199 @@ class AgentOrchestrator:
     def _aggregate_strategy_opinions(self, ctx: AgentContext) -> None:
         """Compatibility wrapper for legacy tests/imports."""
         self._aggregate_skill_opinions(ctx)
+
+    # -----------------------------------------------------------------
+    # Phase 3: Debate & Risk Debate
+    # -----------------------------------------------------------------
+
+    def _should_run_debate(self) -> bool:
+        """Check if debate should run based on mode and config."""
+        if self.mode not in ("full", "specialist"):
+            return False
+        if self.config and not getattr(self.config, "agent_debate_enabled", True):
+            return False
+        return True
+
+    def _should_run_risk_debate(self) -> bool:
+        """Check if risk debate should run based on mode and config."""
+        if self.mode not in ("full", "specialist"):
+            return False
+        if self.config and not getattr(self.config, "agent_risk_debate_enabled", True):
+            return False
+        return True
+
+    def _run_debate_phase(
+        self,
+        ctx: AgentContext,
+        t0: float,
+        timeout_s: int,
+        stats: AgentRunStats,
+        all_tool_calls: List[Dict[str, Any]],
+        models_used: List[str],
+        progress_callback: Optional[Callable] = None,
+    ) -> List[StageResult]:
+        """Run Bull/Bear debate if enabled."""
+        if not self._should_run_debate():
+            return []
+
+        # Budget check
+        elapsed_s = time.time() - t0
+        if timeout_s and (timeout_s - elapsed_s) < 30:
+            logger.warning("[Orchestrator] skipping debate — insufficient budget")
+            return []
+
+        try:
+            from src.agent.debate import DebateCoordinator
+
+            rounds = getattr(self.config, "agent_debate_rounds", 2) if self.config else 2
+            remaining = (timeout_s - elapsed_s) if timeout_s else None
+
+            coordinator = DebateCoordinator(
+                tool_registry=self.tool_registry,
+                llm_adapter=self.llm_adapter,
+                rounds=rounds,
+                timeout_seconds=remaining,
+            )
+
+            def _run_one(agent, _ctx, _timeout):
+                return self._run_stage_agent(
+                    agent, _ctx,
+                    progress_callback=progress_callback,
+                    timeout_seconds=_timeout,
+                )
+
+            results = coordinator.run(
+                ctx=ctx,
+                progress_callback=progress_callback,
+                run_stage_fn=_run_one,
+            )
+
+            for result in results:
+                stats.record_stage(result)
+                all_tool_calls.extend(result.meta.get("tool_calls_log") or [])
+                models_used.extend(result.meta.get("models_used", []))
+
+            return results
+
+        except Exception as exc:
+            logger.warning("[Orchestrator] debate phase failed (non-critical): %s", exc)
+            return []
+
+    def _run_risk_debate_phase(
+        self,
+        ctx: AgentContext,
+        t0: float,
+        timeout_s: int,
+        stats: AgentRunStats,
+        all_tool_calls: List[Dict[str, Any]],
+        models_used: List[str],
+        progress_callback: Optional[Callable] = None,
+    ) -> List[StageResult]:
+        """Run multi-perspective risk debate if enabled."""
+        if not self._should_run_risk_debate():
+            return []
+
+        # Budget check
+        elapsed_s = time.time() - t0
+        if timeout_s and (timeout_s - elapsed_s) < 30:
+            logger.warning("[Orchestrator] skipping risk debate — insufficient budget")
+            return []
+
+        try:
+            from src.agent.risk_debate_coordinator import RiskDebateCoordinator
+
+            remaining = (timeout_s - elapsed_s) if timeout_s else None
+
+            coordinator = RiskDebateCoordinator(
+                tool_registry=self.tool_registry,
+                llm_adapter=self.llm_adapter,
+                timeout_seconds=remaining,
+            )
+
+            def _run_one(agent, _ctx, _timeout):
+                return self._run_stage_agent(
+                    agent, _ctx,
+                    progress_callback=progress_callback,
+                    timeout_seconds=_timeout,
+                )
+
+            results = coordinator.run(
+                ctx=ctx,
+                progress_callback=progress_callback,
+                run_stage_fn=_run_one,
+            )
+
+            for result in results:
+                stats.record_stage(result)
+                all_tool_calls.extend(result.meta.get("tool_calls_log") or [])
+                models_used.extend(result.meta.get("models_used", []))
+
+            return results
+
+        except Exception as exc:
+            logger.warning("[Orchestrator] risk debate phase failed (non-critical): %s", exc)
+            return []
+
+    def _inject_reflection(self, ctx: AgentContext) -> None:
+        """Inject historical reflection prompt into ctx if enabled."""
+        if not (self.config and getattr(self.config, "agent_reflection_enabled", False)):
+            return
+        if not ctx.stock_code:
+            return
+
+        try:
+            from src.agent.reflection.service import ReflectionService
+            from src.agent.reflection.repository import ReflectionRepository
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            repo = ReflectionRepository(db.session_scope)
+            service = ReflectionService(repo)
+            lookback = getattr(self.config, "agent_reflection_lookback_days", 30)
+            prompt = service.build_reflection_prompt(ctx.stock_code, lookback_days=lookback)
+            if prompt:
+                ctx.set_data("reflection_prompt", prompt)
+                logger.info("[Orchestrator] reflection prompt injected for %s", ctx.stock_code)
+        except Exception as exc:
+            logger.warning("[Orchestrator] reflection injection failed: %s", exc)
+
+    def _record_decision_log(self, ctx: AgentContext) -> None:
+        """Record the final decision for future reflection."""
+        if not (self.config and getattr(self.config, "agent_reflection_enabled", False)):
+            return
+        if not ctx.stock_code:
+            return
+
+        # Find decision opinion
+        decision_op = None
+        for op in reversed(ctx.opinions):
+            if op.agent_name == "decision":
+                decision_op = op
+                break
+        if not decision_op:
+            return
+
+        try:
+            from src.agent.reflection.service import ReflectionService
+            from src.agent.reflection.repository import ReflectionRepository
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            repo = ReflectionRepository(db.session_scope)
+            service = ReflectionService(repo)
+            service.record_decision(
+                stock_code=ctx.stock_code,
+                stock_name=ctx.stock_name or "",
+                signal=decision_op.signal,
+                confidence=decision_op.confidence,
+                reasoning=decision_op.reasoning or "",
+                orchestrator_mode=self.mode,
+                research_plan=ctx.get_data("research_plan"),
+                risk_verdict=ctx.get_data("risk_debate_verdict"),
+                debate_summary=ctx.get_data("debate_history"),
+            )
+        except Exception as exc:
+            logger.warning("[Orchestrator] decision recording failed: %s", exc)
 
     # -----------------------------------------------------------------
     # Helpers

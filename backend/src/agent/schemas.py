@@ -104,13 +104,38 @@ class FinalDecision(BaseModel):
     dashboard: Optional[dict] = None
 
 
-# ──── Phase 3 预留: 研究计划 ────
+# ──── Phase 3: 辩论机制 ────
+
+
+class DebateArgument(BaseModel):
+    """辩论论据 (Bull/Bear Researcher 输出)"""
+    stance: str = "bull"  # bull|bear
+    key_arguments: List[str] = Field(default_factory=list)
+    evidence: List[str] = Field(default_factory=list)
+    rebuttals: List[str] = Field(default_factory=list)  # 对对方论据的反驳
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    conclusion: str = ""
 
 
 class ResearchPlan(BaseModel):
-    """研究主管裁决输出 (Phase 3: Bull/Bear Debate → ResearchManager)"""
+    """研究主管裁决输出 (Bull/Bear Debate → ResearchManager)"""
     recommendation: str = "hold"  # buy|overweight|hold|underweight|sell
     bull_score: float = Field(default=5.0, ge=0.0, le=10.0)
     bear_score: float = Field(default=5.0, ge=0.0, le=10.0)
     rationale: str = ""
     strategic_actions: List[str] = Field(default_factory=list)
+
+
+# ──── Phase 3: 风险三方讨论 ────
+
+
+class RiskPerspective(BaseModel):
+    """单一风险视角分析 (Aggressive/Conservative/Neutral)"""
+    perspective: str = "neutral"  # aggressive|conservative|neutral
+    risk_assessment: str = ""
+    position_recommendation: str = ""  # 建议仓位
+    key_concerns: List[str] = Field(default_factory=list)
+    opportunities_missed: List[str] = Field(default_factory=list)
+    worst_case_scenario: str = ""
+    probability_weighted_outcome: str = ""
+    overall_risk_score: float = Field(default=50.0, ge=0.0, le=100.0)

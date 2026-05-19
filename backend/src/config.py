@@ -558,6 +558,13 @@ class Config:
     agent_event_monitor_interval_minutes: int = 5  # Polling interval for event monitor background checks
     agent_event_alert_rules_json: str = ""  # JSON array of serialized EventMonitor rules
 
+    # === Phase 3: 辩论 + 风险讨论 + 反思 ===
+    agent_debate_enabled: bool = True  # 启用 Bull/Bear 辩论 (仅 full/specialist 模式生效)
+    agent_debate_rounds: int = 2  # 辩论轮数
+    agent_risk_debate_enabled: bool = True  # 启用多视角风险讨论 (仅 full/specialist 模式生效)
+    agent_reflection_enabled: bool = False  # 启用反思机制 (记录历史决策偏差并注入提示)
+    agent_reflection_lookback_days: int = 30  # 反思回溯天数
+
     # === 通知配置（可同时配置多个，全部推送）===
     
     # 企业微信 Webhook
@@ -1260,6 +1267,21 @@ class Config:
                 minimum=1,
             ),
             agent_event_alert_rules_json=os.getenv('AGENT_EVENT_ALERT_RULES_JSON', ''),
+            agent_debate_enabled=os.getenv('AGENT_DEBATE_ENABLED', 'true').lower() == 'true',
+            agent_debate_rounds=parse_env_int(
+                os.getenv('AGENT_DEBATE_ROUNDS'),
+                2,
+                field_name='AGENT_DEBATE_ROUNDS',
+                minimum=1,
+            ),
+            agent_risk_debate_enabled=os.getenv('AGENT_RISK_DEBATE_ENABLED', 'true').lower() == 'true',
+            agent_reflection_enabled=os.getenv('AGENT_REFLECTION_ENABLED', 'false').lower() == 'true',
+            agent_reflection_lookback_days=parse_env_int(
+                os.getenv('AGENT_REFLECTION_LOOKBACK_DAYS'),
+                30,
+                field_name='AGENT_REFLECTION_LOOKBACK_DAYS',
+                minimum=1,
+            ),
             wechat_webhook_url=os.getenv('WECHAT_WEBHOOK_URL'),
             feishu_webhook_url=os.getenv('FEISHU_WEBHOOK_URL'),
             feishu_webhook_secret=os.getenv('FEISHU_WEBHOOK_SECRET'),

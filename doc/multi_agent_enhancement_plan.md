@@ -476,15 +476,43 @@ Phase 1 — 数据基座夯实 ✅ (2026-05-19 完成)
         ├─ tickflow_symbol.py (跨市场编码转换 600519↔600519.SH)
         └─ WatchlistService (自选列表 CRUD, 跨市场混合)
 
-Phase 2 — 智能体核心升级
-  ├─ E1: 双层 LLM 分级调度
-  ├─ E5: 结构化输出 Schema
-  └─ E6: 并行执行优化
+Phase 2 — 智能体核心升级 ✅ (2026-05-19 完成)
+  ├─ ✅ E5: 结构化输出 Schema
+  │     ├─ schemas.py — AnalystReport / RiskVerdict / FinalDecision Pydantic 模型
+  │     ├─ output_parser.py — 3 层 JSON→Schema 解析 (strict→lenient→fallback)
+  │     ├─ AgentOpinion.structured 字段 (类型化输出附加到 opinion)
+  │     └─ 各 Agent post_process() 迁移: 构建 structured 输出并保持向后兼容
+  ├─ ✅ E1: 双层 LLM 分级调度
+  │     ├─ model_tier.py — ModelTier 枚举 + DEFAULT_TIER_MAP (tech/intel→quick, risk/decision→deep)
+  │     ├─ config: AGENT_DEEP_THINK_MODEL / AGENT_QUICK_THINK_MODEL / AGENT_MODEL_ASSIGNMENT
+  │     ├─ LLMToolAdapter.call_with_tools_tiered() — 按 agent 名自动选模型，失败 fallback primary
+  │     └─ runner.py agent_name 参数透传 → base_agent.py 自动传入
+  └─ ✅ E6: 并行执行优化
+        ├─ pipeline.py — PipelineStageGroup / build_parallel_groups() / execute_group_parallel()
+        ├─ AgentContext threading.Lock 并发安全 (add_opinion/set_data/add_risk_flag)
+        ├─ orchestrator.py 并行预执行阶段 (technical+intel 自动并行)
+        └─ config: AGENT_PARALLEL_PIPELINE (默认 true, 可关闭回退串行)
 
-Phase 3 — 辩论与反思
-  ├─ E2: 投资辩论机制 (Bull/Bear + ResearchManager)
-  ├─ E3: 风险三方讨论
-  └─ E4: 决策记忆与反思循环
+Phase 3 — 辩论与反思 ✅ (2026-05-19 完成)
+  ├─ ✅ E2: 投资辩论机制 (Bull/Bear + ResearchManager)
+  │     ├─ agents/bull_researcher.py — BullResearcher (quick_think, stance=bull)
+  │     ├─ agents/bear_researcher.py — BearResearcher (quick_think, stance=bear)
+  │     ├─ agents/research_manager.py — ResearchManager (deep_think, 裁决输出 ResearchPlan)
+  │     ├─ agent/debate.py — DebateCoordinator (多轮并行 Bull∥Bear + Manager 裁决)
+  │     ├─ schemas.py += DebateArgument, ResearchPlan
+  │     └─ 配置: AGENT_DEBATE_ENABLED / AGENT_DEBATE_ROUNDS
+  ├─ ✅ E3: 风险三方讨论
+  │     ├─ agents/risk_debate.py — AggressiveRiskAnalyst / ConservativeRiskAnalyst / NeutralRiskAnalyst / RiskDebateManager
+  │     ├─ agent/risk_debate_coordinator.py — RiskDebateCoordinator (三视角并行 + Manager 裁决)
+  │     ├─ schemas.py += RiskPerspective
+  │     └─ 配置: AGENT_RISK_DEBATE_ENABLED
+  └─ ✅ E4: 决策记忆与反思循环
+        ├─ agent/reflection/models.py — DecisionLog SQLAlchemy ORM
+        ├─ agent/reflection/repository.py — ReflectionRepository (CRUD)
+        ├─ agent/reflection/service.py — ReflectionService (build_reflection_prompt + record_decision)
+        ├─ orchestrator.py: _inject_reflection() + _record_decision_log()
+        ├─ model_tier.py += 7 新 agent 映射 (bull/bear/research_manager/risk_aggressive/conservative/neutral/risk_manager)
+        └─ 配置: AGENT_REFLECTION_ENABLED / AGENT_REFLECTION_LOOKBACK_DAYS
 
 Phase 4 — 交互体验
   ├─ Module D: 统一 AI 交互入口
