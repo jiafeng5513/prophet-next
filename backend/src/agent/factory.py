@@ -271,7 +271,7 @@ def resolve_skill_prompt_state(config=None, skills: Optional[List[str]] = None) 
     )
 
 
-def build_agent_executor(config=None, skills: Optional[List[str]] = None):
+def build_agent_executor(config=None, skills: Optional[List[str]] = None, mode: Optional[str] = None):
     """Build and return a configured AgentExecutor (or future orchestrator).
 
     When ``AGENT_ARCH=multi``, this returns an orchestrator that manages
@@ -284,6 +284,8 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
         skills: Skill ids to activate.  When *None* falls back to
                 ``config.agent_skills``; if that is also empty falls back to
                 the central default skill set.
+        mode: Orchestrator mode override (quick/standard/full/specialist).
+              When *None*, uses the config default.
 
     Returns:
         A ready-to-call :class:`src.agent.executor.AgentExecutor` instance.
@@ -316,6 +318,7 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
             llm_adapter,
             skill_manager,
             technical_skill_policy=prompt_state.technical_skill_policy,
+            mode_override=mode,
         )
 
     from src.agent.executor import AgentExecutor
@@ -330,7 +333,7 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
     )
 
 
-def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technical_skill_policy: str = ""):
+def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technical_skill_policy: str = "", mode_override: Optional[str] = None):
     """Build and return an :class:`AgentOrchestrator` (multi-agent mode).
 
     The orchestrator presents the same ``run()`` / ``chat()`` interface as
@@ -338,7 +341,7 @@ def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technic
     """
     from src.agent.orchestrator import AgentOrchestrator
 
-    mode = getattr(config, "agent_orchestrator_mode", "standard")
+    mode = mode_override or getattr(config, "agent_orchestrator_mode", "standard")
     logger.info("[AgentFactory] Building AgentOrchestrator (mode=%s)", mode)
 
     return AgentOrchestrator(

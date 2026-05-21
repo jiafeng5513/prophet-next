@@ -31,23 +31,26 @@ Prophet-Next 采用相同理念：
 | 决策 | 说明 |
 |------|------|
 | **辩论模式仅限 Agent Window** | Bull/Bear 对抗辩论 + Risk 三方讨论过程复杂、耗时长、需要进度可视化，侧边栏空间无法承载 |
+| **Agent Window 功能超集** | Agent Window 具备侧边栏的全部功能（自由对话/快速分析/单 Agent）**加上**独占的深度分析能力；侧边栏是轻量入口，Agent Window 是完整工作台 |
 | **合并旧入口** | 原有的 `initAgentChat` (问股) + 侧边栏聊天 → 统一为新的 Vue 组件化侧边栏 Chat Panel |
 | **左上角 Agent 启动按钮** | 参考 VS Code 左上角布局，在侧边栏开关按钮旁新增 Agent 窗口启动按钮，提供全局快速入口 |
 | **共享会话** | 侧边栏和 Agent Window 共享 session_id，分析结果可在侧边栏追问 |
 
 ### 模式分配策略
 
-| 模式 | 侧边栏 Chat | Agent Window | 说明 |
-|------|:-----------:|:------------:|------|
-| **chat** (自由对话) | ✅ | ❌ | 纯 LLM 问答，无 pipeline |
-| **quick** (快速分析) | ✅ | ❌ | tech → decision，秒级响应 |
-| **单 Agent** | ✅ | ❌ | 指定 agent_id 直接回答 |
-| **standard** (标准分析) | ✅ | ✅ | tech → intel → decision，侧边栏的增强模式 / Agent Window 的轻量模式 |
-| **full** (完整分析) | ❌ | ✅ | 含 Bull/Bear 辩论 + Risk 讨论 |
-| **specialist** (专家分析) | ❌ | ✅ | full + 策略专家 agents |
-| **plan** (计划模式) | ❌ | ✅ | 先生成计划 → 用户确认 → 执行 |
+| 模式                      | 侧边栏 Chat | Agent Window | 说明 |
+|--------------------------|:-----------:|:------------:|------|
+| **chat** (自由对话)       | ✅         | ✅          | 纯 LLM 问答，无 pipeline |
+| **quick** (快速分析)      | ✅         | ✅          | tech → decision，秒级响应 |
+| **单 Agent**              | ✅         | ✅          | 指定 agent_id 直接回答 |
+| **standard** (标准分析)   | ✅         | ✅          | tech → intel → decision |
+| **full** (完整分析)       | ❌         | ✅          | 含 Bull/Bear 辩论 + Risk 讨论 |
+| **specialist** (专家分析) | ❌         | ✅          | full + 策略专家 agents |
+| **plan** (计划模式)       | ❌         | ✅          | 先生成计划 → 用户确认 → 执行 |
 
-**用户体验路径**: 侧边栏快问快答 → 不满意 → 一键升级到 Agent Window 深度分析
+> **设计原则**: Agent Window 是功能超集，支持全部模式；侧边栏是轻量快捷入口，仅支持简单/标准模式。
+
+**用户体验路径**: 侧边栏快问快答 → 不满意 → 一键升级到 Agent Window 深度分析；或直接在 Agent Window 中完成从问答到深度分析的全流程。
 
 ---
 
@@ -220,13 +223,20 @@ Prophet-Next 采用相同理念：
 
 #### 支持的模式
 
+Agent Window 支持**全部模式**（功能超集），包含侧边栏的所有模式加上独占的深度分析模式：
+
 | 模式 | 前端行为 | 后端路由 | 辩论 |
 |------|---------|---------|------|
+| **chat** (自由对话) | 普通对话气泡，无进度条 | `/agent/chat/stream` (mode=chat) | ❌ |
+| **quick** (快速分析) | 简洁结论卡片 | `/agent/chat/stream` (mode=quick) | ❌ |
+| **单 Agent** | 指定 agent 回答，带 ToolCallCard | `/agent/chat/stream` + `agent_id` | ❌ |
 | **standard** | Agent 进度条 (无辩论) | `/agent/chat/stream` (mode=standard) | ❌ |
 | **full** (默认) | 完整进度 + 辩论可视化 | `/agent/chat/stream` (mode=full) | ✅ Bull/Bear + Risk |
 | **specialist** | 完整进度 + 策略专家 | `/agent/chat/stream` (mode=specialist) | ✅ Bull/Bear + Risk |
 | **plan** | 先展示计划 → 确认 → 执行 | `/agent/chat/stream` (mode=plan) | ✅ (执行阶段) |
 | **对比分析** | 多标的并排 | 多次调用 + 前端拼装 | ✅ |
+
+> chat/quick/单Agent 模式在 Agent Window 中呈现简洁气泡样式，不显示 AgentProgress/DebatePanel 等复杂组件，体验与侧边栏一致但在更大画布上展示。
 
 #### 新增文件
 
@@ -399,7 +409,7 @@ DELETE /api/v1/agent/chat/sessions/{id}  → 删除
 | 在 K 线标注 | Agent Window 结果中 | IPC → Chart 标签添加标注 |
 | 深度分析 | 侧边栏消息中 | 打开 Agent Window + 传入上下文 |
 | 追问细节 | Agent Window 阶段卡片 | 在 Agent Window 内追问 |
-| `/mode` 命令 | 侧边栏输入框 | 切换侧边栏对话模式 (chat/quick/standard) |
+| `/mode` 命令 | 侧边栏输入框 / Agent Window 输入框 | 切换对话模式 (chat/quick/standard/full/specialist/plan) |
 | 查看原始数据 | Agent Window 折叠展开 | 展示 Agent 的 raw_data JSON |
 | 查看辩论详情 | Agent Window 辩论面板 | 展开/折叠 Bull/Bear 完整论据 |
 

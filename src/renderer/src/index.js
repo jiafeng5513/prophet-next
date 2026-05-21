@@ -12,6 +12,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
+import { mountChatPanel } from './chatPanelMount'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -1277,8 +1278,13 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
 })
 
 // =====================
-// Agent 问股功能
+// Agent 问股功能 (Vue ChatPanel)
 // =====================
+mountChatPanel()
+
+// --- 以下为旧版 Agent DOM 实现 (已由 Vue ChatPanel 替代，保留但不执行) ---
+// eslint-disable-next-line no-constant-condition
+if (false) {
 ;(function initAgentChat() {
   const agentMessages = document.getElementById('agent-messages')
   const agentEmpty = document.getElementById('agent-empty')
@@ -1973,6 +1979,7 @@ agentResizeHandle.addEventListener('mousedown', (e) => {
 
   initAgent()
 })()
+} // end if(false) - 旧版 Agent DOM
 
 // =====================
 // 底部状态栏

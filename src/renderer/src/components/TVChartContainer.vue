@@ -237,6 +237,76 @@ onMounted(() => {
 
       button.innerHTML = 'Check API'
     })
+
+    // ===== Agent 信号标注渲染 =====
+    if (window.electronAPI && window.electronAPI.onAnnotationsUpdate) {
+      window.electronAPI.onAnnotationsUpdate(({ annotations }) => {
+        if (!chartWidget || !annotations || !annotations.length) return
+        try {
+          const chart = chartWidget.activeChart()
+          for (const ann of annotations) {
+            // 使用 createExecutionShape 绘制买卖信号标记
+            const shape = chart.createExecutionShape()
+            if (!shape) continue
+
+            const isBuy = ann.type === 'buy'
+            shape
+              .setText(ann.label || (isBuy ? '买入' : '卖出'))
+              .setTextColor(isBuy ? '#22c55e' : '#ef4444')
+              .setArrowColor(isBuy ? '#22c55e' : '#ef4444')
+              .setDirection(isBuy ? 'buy' : 'sell')
+              .setFont('12px Arial')
+              .setArrowHeight(12)
+
+            // 设置时间 (秒)
+            if (ann.timestamp) {
+              shape.setTime(Math.floor(ann.timestamp / 1000))
+            }
+
+            // 设置价格 (如果提供了有效价格)
+            if (ann.price && ann.price > 0) {
+              shape.setPrice(ann.price)
+            }
+          }
+          console.log(`[TVChartContainer] 已渲染 ${annotations.length} 个 Agent 标注`)
+        } catch (err) {
+          console.warn('[TVChartContainer] 标注渲染失败:', err)
+        }
+      })
+    }
+
+    // ===== 右键菜单: AI 分析此标的 =====
+    if (window.electronAPI && window.electronAPI.openAgentWindow) {
+      chartWidget.onContextMenu(function () {
+        return [
+          {
+            position: 'top',
+            text: '🤖 AI 分析此标的',
+            click: function () {
+              const currentSymbol = chartWidget.activeChart().symbol() || props.symbol
+              const cleanSymbol =
+                typeof currentSymbol === 'string'
+                  ? currentSymbol.replace(/^(Binance|OKX|SSE|SZSE|BSE):/i, '').replace(/\//g, '')
+                  : props.symbol
+              window.electronAPI.openAgentWindow({ symbol: cleanSymbol, mode: 'full' })
+            }
+          },
+          '-',
+          {
+            position: 'top',
+            text: '⚡ 快速分析',
+            click: function () {
+              const currentSymbol = chartWidget.activeChart().symbol() || props.symbol
+              const cleanSymbol =
+                typeof currentSymbol === 'string'
+                  ? currentSymbol.replace(/^(Binance|OKX|SSE|SZSE|BSE):/i, '').replace(/\//g, '')
+                  : props.symbol
+              window.electronAPI.openAgentWindow({ symbol: cleanSymbol, mode: 'quick' })
+            }
+          }
+        ]
+      })
+    }
   })
 })
 

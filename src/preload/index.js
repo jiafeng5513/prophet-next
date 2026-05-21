@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAnalyzeSymbol: (callback) =>
     ipcRenderer.on('analyze-symbol', (event, data) => callback(data)),
 
+  // K 线图标注 (Agent → Chart)
+  onAnnotationsUpdate: (callback) =>
+    ipcRenderer.on('chart:annotations-update', (event, data) => callback(data)),
+
   // 数据源设置（跨 partition 共享）
   getDataSource: () => ipcRenderer.invoke('get-data-source'),
   setDataSource: (dataSource) => ipcRenderer.send('set-data-source', dataSource),
@@ -56,6 +60,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Agent 面板调整宽度
   resizeAgentPanel: (width) => ipcRenderer.send('resize-agent-panel', width),
+
+  // Agent Window (独立窗口)
+  openAgentWindow: (options) => ipcRenderer.invoke('agent:open-window', options),
+  toggleAgentWindow: (options) => ipcRenderer.invoke('agent:toggle-window', options),
+  syncAgentResult: (data) => ipcRenderer.invoke('agent:sync-result', data),
+  onAgentResult: (callback) =>
+    ipcRenderer.on('sidebar:agent-result', (event, data) => callback(data)),
+
+  // 通用 invoke (供 Vue 组件使用)
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
 
   // 工作区目录
   getWorkspacePath: () => ipcRenderer.invoke('get-workspace-path'),
@@ -120,4 +134,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportConfig: (content, defaultFileName) =>
     ipcRenderer.invoke('export-config', content, defaultFileName),
   importConfig: () => ipcRenderer.invoke('import-config'),
+
+  // K 线图标注
+  onAnnotationsUpdate: (callback) =>
+    ipcRenderer.on('chart:annotations-update', (event, data) => callback(data)),
 })

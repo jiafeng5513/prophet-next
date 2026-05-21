@@ -1754,55 +1754,8 @@
       <!-- Agent 对话侧栏 -->
       <div class="agent-panel" id="agent-panel">
         <div class="agent-resize-handle" id="agent-resize-handle"></div>
-        <div class="agent-panel-header">
-          <span class="agent-status-dot" id="agent-status-dot" title="DSA 未连接"></span>
-          <span>聊天</span>
-          <div class="agent-header-actions">
-            <button class="agent-header-btn" id="agent-sessions-btn" title="历史会话">☰</button>
-            <button class="agent-header-btn" id="agent-new-chat-btn" title="新对话">+</button>
-          </div>
-        </div>
-        <!-- 会话历史侧边栏 -->
-        <div class="agent-sessions-panel" id="agent-sessions-panel">
-          <div class="agent-sessions-header">
-            <span>历史会话</span>
-            <button class="agent-header-btn" id="agent-sessions-close" title="关闭">✕</button>
-          </div>
-          <div class="agent-sessions-search">
-            <input type="text" id="agent-sessions-search-input" class="agent-sessions-search-input" placeholder="搜索会话..." />
-          </div>
-          <div class="agent-sessions-list" id="agent-sessions-list"></div>
-        </div>
-        <div class="agent-panel-body">
-          <div class="agent-messages" id="agent-messages">
-            <div class="agent-empty" id="agent-empty">
-              <img src="/chat.svg" alt="" width="40" height="40">
-              <div>向 AI 询问个股分析</div>
-              <div style="font-size:11px;color:#555;margin-top:4px;">获取基于技能视角的交易建议与实时决策报告</div>
-              <div class="agent-quick-questions" id="agent-quick-questions">
-                <!-- Dynamic quick questions populated from skills API -->
-              </div>
-            </div>
-          </div>
-          <div class="agent-input-area">
-            <div class="agent-input-wrapper">
-              <textarea class="agent-input" id="agent-input" rows="1" placeholder="输入股票代码或问题..."></textarea>
-              <button class="agent-send-btn" id="agent-send-btn" title="发送">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 1.5l14 6.5-14 6.5v-5l8-1.5-8-1.5z"/></svg>
-              </button>
-            </div>
-            <div class="agent-toolbar">
-              <span style="font-size:11px;color:#666;">Skills</span>
-              <div class="agent-skill-select-wrapper" id="agent-skill-select-wrapper">
-                <button class="agent-skill-trigger" id="agent-skill-trigger">
-                  <span class="skill-label" id="agent-skill-label">选择技能</span>
-                  <span class="skill-arrow">▾</span>
-                </button>
-                <div class="agent-skill-dropdown" id="agent-skill-dropdown"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Vue ChatPanel 挂载点 -->
+        <div id="chat-panel-mount"></div>
       </div>
     </div>
     <!-- 终端面板 -->

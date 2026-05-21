@@ -6,7 +6,8 @@ import {
   ipcMain,
   Menu,
   session,
-  dialog
+  dialog,
+  globalShortcut
 } from 'electron'
 import { join, dirname } from 'path'
 import {
@@ -24,6 +25,7 @@ import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/hivelogic_logo.png?asset'
 import terminalManager from './terminalManager'
+import { initAgentWindowIPC } from './agentWindow'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
 function decodeOutput(buffer) {
@@ -1774,6 +1776,14 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // 初始化 Agent Window IPC
+  initAgentWindowIPC(mainWindow)
+
+  // 注册全局快捷键: Ctrl+Shift+A 打开 Agent Window
+  globalShortcut.register('CommandOrControl+Shift+A', () => {
+    ipcMain.emit('agent:toggle-window')
+  })
+
   // 自动拉起后端服务
   startFastApiServer().then((result) => {
     if (result.success) {
@@ -1801,6 +1811,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll()
   stopFastApiServer()
   terminalManager.destroyAll()
   // 兜底：按端口号清理可能的残留进程

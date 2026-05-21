@@ -45,6 +45,9 @@ class ChatRequest(BaseModel):
 
     message: str
     session_id: Optional[str] = None
+    mode: Optional[str] = None  # chat/quick/standard/full/specialist/plan
+    agent_id: Optional[str] = None  # 单 Agent 模式指定 agent
+    symbol: Optional[str] = None  # 标的代码
     skills: Optional[List[str]] = Field(
         default=None,
         validation_alias=AliasChoices("skills", "strategies"),
@@ -270,10 +273,10 @@ async def send_chat_to_notification(request: SendChatRequest):
     return {"success": True}
 
 
-def _build_executor(config, skills: Optional[List[str]] = None):
+def _build_executor(config, skills: Optional[List[str]] = None, mode: Optional[str] = None):
     """Build and return a configured AgentExecutor (sync helper)."""
     from src.agent.factory import build_agent_executor
-    return build_agent_executor(config, skills=skills)
+    return build_agent_executor(config, skills=skills, mode=mode)
 
 
 async def _run_research_in_background(
@@ -387,6 +390,7 @@ async def agent_chat_stream(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Agent mode is not enabled")
 
     session_id = request.session_id or str(uuid.uuid4())
+    mode = request.mode or "chat"
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -396,6 +400,10 @@ async def agent_chat_stream(request: ChatRequest):
     stream_ctx = dict(request.context or {})
     if skills is not None:
         stream_ctx["skills"] = skills
+    if request.symbol:
+        stream_ctx["symbol"] = request.symbol
+    if request.agent_id:
+        stream_ctx["agent_id"] = request.agent_id
 
     def progress_callback(event: dict):
         # Enrich tool events with display names
@@ -406,7 +414,32 @@ async def agent_chat_stream(request: ChatRequest):
 
     def run_sync():
         try:
-            executor = _build_executor(config, skills or None)
+            # Plan 模式: 仅生成计划，不执行管线
+            if mode == "plan":
+                from src.agent.plan_mode import PlanModeHandler
+                from src.agent.llm_adapter import LLMToolAdapter
+                from src.agent.protocols import AgentContext
+
+                llm_adapter = LLMToolAdapter(config)
+                handler = PlanModeHandler(llm_adapter)
+                ctx = AgentContext(
+                    query=request.message,
+                    stock_code=request.symbol or "",
+                    session_id=session_id,
+                )
+                handler.generate_plan(ctx, progress_callback=progress_callback)
+                asyncio.run_coroutine_threadsafe(
+                    queue.put({
+                        "type": "done",
+                        "success": True,
+                        "content": "",
+                        "session_id": session_id,
+                    }),
+                    loop,
+                )
+                return
+
+            executor = _build_executor(config, skills or None, mode=mode)
             result = executor.chat(
                 message=request.message,
                 session_id=session_id,

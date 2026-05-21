@@ -1,0 +1,257 @@
+/**
+ * ===================================
+ * Chat Service — Agent 对话 API 封装
+ * ===================================
+ *
+ * 职责:
+ * 1. 封装后端 /api/v1/agent/chat/* 系列接口
+ * 2. SSE (EventSource) 流式消息消费
+ * 3. 会话 CRUD
+ * 4. 技能列表获取
+ */
+
+// ==================== 类型定义 ====================
+
+export type ChatMode = 'chat' | 'quick' | 'standard' | 'full' | 'specialist' | 'plan'
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: number
+  mode?: ChatMode
+  metadata?: {
+    thinking?: string
+    tools?: ToolCallInfo[]
+    stages?: StageInfo[]
+    debate?: DebateInfo
+    riskDebate?: RiskDebateInfo
+    dashboard?: DashboardData
+    fromAgentWindow?: boolean
+  }
+}
+
+export interface ToolCallInfo {
+  name: string
+  args?: Record<string, unknown>
+  result?: string
+  status: 'running' | 'done' | 'error'
+  duration?: number
+}
+
+export interface StageInfo {
+  stage: string
+  status: 'pending' | 'running' | 'completed' | 'error'
+  message?: string
+  duration?: number
+}
+
+export interface DebateInfo {
+  round: number
+  totalRounds: number
+  bull?: string
+  bear?: string
+  status: 'running' | 'completed'
+}
+
+export interface RiskDebateInfo {
+  perspectives: string[]
+  content: Record<string, string>
+  status: 'running' | 'completed'
+}
+
+export interface DashboardData {
+  signal?: string
+  confidence?: number
+  summary?: string
+  [key: string]: unknown
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+  message_count: number
+}
+
+export interface AgentSkill {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface ChatRequest {
+  message: string
+  session_id?: string
+  mode?: ChatMode
+  skills?: string[]
+  agent_id?: string
+  symbol?: string
+}
+
+export interface SSEEvent {
+  type: string
+  data: Record<string, unknown>
+}
+
+// ==================== 配置 ====================
+
+const DSA_PORT = 8100
+const BASE_URL = `http://127.0.0.1:${DSA_PORT}`
+
+function getApiUrl(path: string): string {
+  return `${BASE_URL}${path}`
+}
+
+// ==================== 健康检查 ====================
+
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const resp = await fetch(getApiUrl('/api/health'), {
+      signal: AbortSignal.timeout(3000)
+    })
+    return resp.ok
+  } catch {
+    return false
+  }
+}
+
+// ==================== 技能 API ====================
+
+export async function fetchSkills(): Promise<{ skills: AgentSkill[]; defaultSkillId?: string }> {
+  const resp = await fetch(getApiUrl('/api/v1/agent/skills'), {
+    signal: AbortSignal.timeout(5000)
+  })
+  if (!resp.ok) throw new Error(`fetchSkills failed: ${resp.status}`)
+  const data = await resp.json()
+  return {
+    skills: data.skills || [],
+    defaultSkillId: data.default_skill_id
+  }
+}
+
+// ==================== 会话 API ====================
+
+export async function fetchSessions(limit = 30): Promise<ChatSession[]> {
+  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions?limit=${limit}`), {
+    signal: AbortSignal.timeout(5000)
+  })
+  if (!resp.ok) throw new Error(`fetchSessions failed: ${resp.status}`)
+  const data = await resp.json()
+  return data.sessions || []
+}
+
+export async function fetchSessionMessages(sessionId: string): Promise<ChatMessage[]> {
+  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${sessionId}`), {
+    signal: AbortSignal.timeout(10000)
+  })
+  if (!resp.ok) throw new Error(`fetchSessionMessages failed: ${resp.status}`)
+  const data = await resp.json()
+  return data.messages || []
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${sessionId}`), {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(5000)
+  })
+  if (!resp.ok) throw new Error(`deleteSession failed: ${resp.status}`)
+}
+
+// ==================== 流式对话 (SSE) ====================
+
+export type SSECallback = (event: SSEEvent) => void
+
+export interface StreamController {
+  abort: () => void
+}
+
+/**
+ * 发起流式对话请求 (SSE)
+ * @param request 对话请求
+ * @param onEvent SSE 事件回调
+ * @returns StreamController (用于中止)
+ */
+export function streamChat(request: ChatRequest, onEvent: SSECallback): StreamController {
+  const abortController = new AbortController()
+
+  const url = getApiUrl('/api/v1/agent/chat/stream')
+  const body = JSON.stringify({
+    message: request.message,
+    session_id: request.session_id || undefined,
+    mode: request.mode || 'chat',
+    skills: request.skills || [],
+    agent_id: request.agent_id || undefined,
+    symbol: request.symbol || undefined
+  })
+
+  // 使用 fetch + ReadableStream 解析 SSE (比 EventSource 更灵活，支持 POST)
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body,
+    signal: abortController.signal
+  })
+    .then(async (resp) => {
+      if (!resp.ok) {
+        onEvent({ type: 'error', data: { message: `HTTP ${resp.status}` } })
+        return
+      }
+      const reader = resp.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        let currentEvent = ''
+        let currentData = ''
+
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim()
+          } else if (line.startsWith('data:')) {
+            currentData = line.slice(5).trim()
+          } else if (line === '') {
+            // Empty line = end of event
+            if (currentEvent && currentData) {
+              try {
+                const parsed = JSON.parse(currentData)
+                onEvent({ type: currentEvent, data: parsed })
+              } catch {
+                onEvent({ type: currentEvent, data: { raw: currentData } })
+              }
+            } else if (currentData) {
+              // No event type, treat as 'message'
+              try {
+                const parsed = JSON.parse(currentData)
+                onEvent({ type: parsed.type || 'message', data: parsed })
+              } catch {
+                onEvent({ type: 'message', data: { raw: currentData } })
+              }
+            }
+            currentEvent = ''
+            currentData = ''
+          }
+        }
+      }
+
+      // Stream ended
+      onEvent({ type: 'stream_end', data: {} })
+    })
+    .catch((err) => {
+      if (err.name === 'AbortError') {
+        onEvent({ type: 'aborted', data: {} })
+      } else {
+        onEvent({ type: 'error', data: { message: err.message } })
+      }
+    })
+
+  return { abort: () => abortController.abort() }
+}
