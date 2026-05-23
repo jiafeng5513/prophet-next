@@ -408,12 +408,12 @@ class AgentOrchestrator:
                     stats.record_stage(result)
                     all_tool_calls.extend(result.meta.get("tool_calls_log") or [])
                     models_used.extend(result.meta.get("models_used", []))
-                    parallel_done_names.add(result.agent_name)
+                    parallel_done_names.add(result.stage_name)
 
                     if progress_callback:
                         progress_callback({
                             "type": "stage_done",
-                            "stage": result.agent_name,
+                            "stage": result.stage_name,
                             "status": result.status.value,
                             "duration": result.duration_s,
                         })
