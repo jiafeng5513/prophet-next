@@ -68,6 +68,28 @@ export function useChat(options: UseChatOptions = {}) {
       } catch { /* ignore */ }
       await loadSessions()
     }
+
+    // 监听 Agent Window 同步分析结果
+    if (window.electronAPI?.onAgentResult) {
+      window.electronAPI.onAgentResult((data: { sessionId?: string; summary?: string }) => {
+        if (data.sessionId && data.summary) {
+          const syncMsg: ChatMessage = {
+            id: `sync-${Date.now()}`,
+            role: 'assistant',
+            content: data.summary,
+            timestamp: Date.now(),
+            mode: 'full',
+            metadata: { syncedFromAgentWindow: true }
+          }
+          messages.value.push(syncMsg)
+          if (data.sessionId !== 'current') {
+            currentSessionId.value = data.sessionId
+          }
+        }
+        // 刷新会话列表
+        loadSessions()
+      })
+    }
   }
 
   // ==================== 会话管理 ====================

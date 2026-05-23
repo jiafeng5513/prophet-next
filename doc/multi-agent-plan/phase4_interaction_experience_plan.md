@@ -132,19 +132,19 @@ Prophet-Next 采用相同理念：
                           v
 
 +--------------------------------------------------------------+
-|  Agent Window (独立窗口)                                       |
-|  +----------------------------------------------------------+ |
+|  Agent Window (独立窗口)                                      |
+|  +----------------------------------------------------------+|
 |  | [模式: ▾ full] [标的: 600519] [设置]          [x 关闭]    | |
 |  +----------------------------------------------------------+ |
-|  |  Agent Progress:                                          | |
-|  |  ✅ Technical  ✅ Intel  🔄 Debate (Round 1/2)  ○ Risk   | |
-|  |                                                           | |
-|  |  ┌─ 🐂 Bull Researcher ──────────────────────┐           | |
-|  |  │ "基于近3月技术面突破..."                      │           | |
-|  |  └──────────────────────────────────────────┘           | |
+|  |  Agent Progress:                                         | |
+|  |  ✅ Technical  ✅ Intel  🔄 Debate (Round 1/2)  ○ Risk  | |
+|  |                                                          | |
+|  |  ┌─ 🐂 Bull Researcher ─────────────────────┐           | |
+|  |  │ "基于近3月技术面突破..."                   │         | |
+|  |  └───────────────────────────────────────────┘           | |
 |  |  ┌─ 🐻 Bear Researcher ──────────────────────┐           | |
-|  |  │ "估值已高于历史均值..."                       │           | |
-|  |  └──────────────────────────────────────────┘           | |
+|  |  │ "估值已高于历史均值..."                     │           | |
+|  |  └────────────────────────────────────────────┘           | |
 |  |                                                           | |
 |  |  ## 分析结论                                               | |
 |  |  **信号**: 买入 | **置信度**: 0.78                          | |
@@ -920,3 +920,198 @@ Step 10 (旧入口下线) — 依赖 Step 1 + Step 2 + Step 4 全部完成
 ```
 
 **建议执行顺序**: Step 1 → Step 2 → Step 3 → Step 4 → (Step 5 ∥ Step 6 ∥ Step 7 ∥ Step 8) → Step 9 → Step 10
+
+---
+
+## 完成状态追踪 (更新于 2026-05-23)
+
+### 总体进度: **~80%**
+
+### Step 1: 侧边栏 Chat Panel — ✅ 95% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 1.1 | ChatPanel.vue 侧边栏主组件 | ✅ | 完整实现，含模式切换/会话/升级建议 |
+| 1.2 | ChatMessageList + ChatMessage 组件 | ✅ | 支持思考块/工具调用/辩论摘要 |
+| 1.3 | ChatInput 组件 | ✅ | 输入框 + 模式选择 + 技能选择 |
+| 1.4 | useChatStream composable | ✅ | 完整 SSE 状态机 (支持全部事件类型) |
+| 1.5 | chatService.ts | ✅ | SSE 流 + 会话 CRUD + 技能列表 |
+| 1.6 | SessionList 组件 | ✅ | 会话列表/切换/删除 |
+| 1.7 | 集成到侧边栏 | ✅ | 通过 chatPanelMount.ts 挂载到 #chat-panel-mount |
+| 1.8 | 智能升级提示 | ✅ | shouldUpgrade 逻辑 + 🚀 启动深度分析按钮 |
+| 1.9 | 移除 initAgentChat() 旧代码 | ⚠️ | 已用 `if (false)` 禁用，代码仍保留未彻底清理 |
+
+### Step 2: Agent Window + 左上角入口 — ✅ 90% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 2.1 | agent-window.html + agentWindow.ts 入口 | ✅ | 已创建 |
+| 2.2 | AgentWindow.vue 主视图 | ✅ | 含模式选择/工具栏/消息列表 |
+| 2.3 | AgentProgress 组件 | ✅ | 阶段进度 + 耗时显示 |
+| 2.4 | DebatePanel 组件 | ✅ | Bull/Bear 辩论 + 展开/收起 |
+| 2.5 | RiskDebatePanel 组件 | ✅ | 三方讨论 (激进/保守/中立) |
+| 2.6 | ThinkingBlock + ToolCallCard | ✅ | 思考过程 + 工具调用卡片 |
+| 2.7 | StreamRenderer 组件 | ✅ | 流式 Markdown 渲染 |
+| 2.8 | DashboardResult 组件 | ✅ | 结果 Dashboard + 标注按钮 |
+| 2.9 | Electron BrowserWindow 管理 | ✅ | agentWindow.js (单例/打开/关闭) |
+| 2.10 | 左上角 [🤖] Agent 启动按钮 | ⚠️ | 侧边栏 ChatPanel 内有 🤖 按钮；但未按计划在主窗口 titlebar 左上角独立放置 |
+| 2.11 | 快捷键 Ctrl+Shift+A | ✅ | globalShortcut 已注册 |
+
+### Step 3: 后端 SSE 增强 — ✅ 95% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 3.1 | stage_start/stage_done/debate_round/risk_debate 事件 | ✅ | agent.py 已实现 |
+| 3.2 | orchestrator progress_callback 辩论事件 | ✅ | 完整 |
+| 3.3 | mode 请求参数 | ✅ | chat/quick/standard/full/specialist/plan |
+| 3.4 | agent_id 参数 (单 Agent 模式) | ✅ | 已支持 |
+| 3.5 | 模式权限校验 | ⚠️ | 待验证是否严格限制 full/specialist/plan 仅 Agent Window 调用 |
+
+### Step 4: 侧边栏 ↔ Agent Window 联动 — ✅ 85% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 4.1 | IPC: sidebar → main → Agent Window | ✅ | agent:toggle-window / agent:open-window |
+| 4.2 | IPC: Agent Window → main → sidebar | ✅ | agent:sync-result → sidebar:agent-result |
+| 4.3 | 共享 session_id 机制 | ✅ | 打开 Agent Window 时传递 sessionId |
+| 4.4 | K 线图右键菜单 "AI 分析此标的" | ✅ | TVChartContainer.vue 已集成 (full/quick 模式) |
+| 4.5 | Agent Window 辩论摘要同步到侧边栏会话 | ⚠️ | IPC 通道已建立，前端消费逻辑待验证 |
+
+### Step 5: K 线信号标注 — ✅ 80% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 5.1 | annotation.ts 类型定义 | ✅ | AnnotationType/AnnotationSource/ChartAnnotation |
+| 5.2 | annotationService.ts | ✅ | CRUD + 持久化 |
+| 5.3 | KLineChart 标注渲染集成 | ⚠️ | 待验证 Chart.vue 是否已完整集成 annotationService |
+| 5.4 | IPC: Agent Window → Main → Chart | ✅ | chart:add-annotations IPC 已实现 |
+| 5.5 | 标注管理面板 | ⚠️ | 待验证 |
+
+### Step 6: 跨市场时间轴 — ✅ 70% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 6.1 | tradingHours.ts (时段配置) | ✅ | 已实现 |
+| 6.2 | KLineChart x 轴非交易时段折叠 | ⚠️ | 待验证集成 |
+| 6.3 | 标的切换时自动适配时区 | ⚠️ | 待验证 |
+
+### Step 7: Plan 模式 — ✅ 90% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 7.1 | PlanModeHandler 后端实现 | ✅ | backend/src/agent/plan_mode.py |
+| 7.2 | PlanCard 前端组件 | ✅ | Agent Window 内的计划确认卡片 |
+| 7.3 | 前端确认 → 触发执行流 | ✅ | useChat.ts 支持 plan 模式 |
+
+### Step 8: 新闻采集扩展 — ❌ 15% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 8.1 | XueqiuCrawler (雪球) | ❌ | 未实现 |
+| 8.2 | CLSCrawler (财联社) | ❌ | 未实现 |
+| 8.3 | ReutersCrawler (Reuters RSS) | ❌ | 未实现 |
+| 8.4 | 新闻实时推送 (WebSocket) | ⚠️ | WebSocket 基础设施已有 (market)，news channel 待扩展 |
+| 8.5 | 前端 NewsFilter 源筛选 | ❌ | 未实现 |
+| 8.6 | 新闻 → Chat 拖拽关联 | ❌ | 未实现 |
+
+> 当前仅有 EastMoney 一个 crawler，基础架构 (BaseCrawler/Scheduler/Repository/Processor) 已完备。
+
+### Step 9: 快捷操作 — ⚠️ 60% 完成
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 9.1 | [在K线标注] 按钮 + IPC | ✅ | DashboardResult 中已有按钮，chart:add-annotations IPC 已通 |
+| 9.2 | `/mode` 斜杠命令解析 | ⚠️ | 待验证 ChatInput 是否支持 |
+| 9.3 | Agent 阶段点击追问 | ⚠️ | 待验证 |
+| 9.4 | [继续对话 ↗ 侧边栏] 焦点切换 | ⚠️ | 待验证 |
+| 9.5 | 辩论面板展开/折叠 | ✅ | DebatePanel 已支持 |
+
+### Step 10: 旧入口下线 — ❌ 未开始
+
+| # | 任务 | 状态 | 备注 |
+|---|------|:----:|------|
+| 10.1 | 验证 Chat Panel 覆盖 initAgentChat | ⚠️ | 功能已覆盖，需全面回归测试 |
+| 10.2 | 验证 Agent Window 覆盖 StockAnalysis.vue | ⚠️ | 功能已覆盖，需回归测试 |
+| 10.3 | 移除 StockAnalysis.vue + stock-analysis.html | ❌ | 文件仍存在 |
+| 10.4 | 移除 initAgentChat 旧代码 | ❌ | 已禁用但代码保留 |
+
+---
+
+### 关键阻塞问题 (2026-05-23 诊断)
+
+#### 🚨 问题 1: 侧边栏 Chat Panel 完全空白
+
+**根因**: `src/renderer/src/index.js` 第 44 行声明了 `const agentInput = document.getElementById('agent-input')`，但 `index.html` 中 `#agent-input` 元素已被移除（改为 `#chat-panel-mount` Vue 挂载点）。因此 `agentInput` 为 `null`。
+
+在第 1239 行：
+```javascript
+agentInput.addEventListener('input', () => { ... })
+```
+此处抛出 `TypeError: Cannot read properties of null`，导致**整个 index.js 脚本崩溃**，后续的 `mountChatPanel()`（第 1283 行）永远不会执行 → ChatPanel Vue 组件无法挂载 → 侧边栏空白。
+
+**修复方案**: 删除或加 null guard 对 `agentInput` 的引用（第 1239-1242 行），因为此代码属于旧版 DOM 逻辑的遗留。
+
+#### 🚨 问题 2: 状态栏一直显示"后端: 未启动"
+
+**根因**: 问题 1 的脚本崩溃是连锁效应。`initStatusBar()` 函数在 `index.js` 约第 1987 行定义，位于崩溃点之后。由于脚本在第 1239 行已崩溃：
+- `initStatusBar()` 从未执行
+- `window.electronAPI.onDsaStatusChanged` 监听器从未注册
+- 状态栏文字保持 HTML 默认值 "后端: 未启动"
+
+实际上后端是正常启动的（main process 中 `startFastApiServer()` 正常调用），只是前端从未收到状态更新通知。
+
+**修复方案**: 修复问题 1 后，问题 2 自动解决。
+
+---
+
+### 下一步开发计划 (优先级排序)
+
+#### 🔴 P0: 紧急修复 — 恢复 UI 正常工作
+
+| # | 任务 | 说明 | 文件 |
+|---|------|------|------|
+| P0.1 | **删除 agentInput 旧引用** | 移除第 44 行的 `const agentInput` 声明，以及第 1239-1242 行的 `agentInput.addEventListener(...)` 代码块。这些是旧 DOM 逻辑遗留，ChatPanel Vue 组件内部已有自己的输入框逻辑 | `src/renderer/src/index.js` |
+| P0.2 | **验证 mountChatPanel() 正常执行** | 确认修复后 ChatPanel 能成功挂载，侧边栏显示聊天界面 | 运行时验证 |
+| P0.3 | **验证 initStatusBar() 正常执行** | 确认修复后状态栏正确显示后端运行状态 | 运行时验证 |
+
+#### 🔴 P1: 清理旧代码 — 防止类似问题再发
+
+| # | 任务 | 说明 | 文件 |
+|---|------|------|------|
+| P1.1 | **彻底移除 `if (false)` 内的旧 initAgentChat 代码** | 约 700 行死代码（第 1285-1985 行），包含所有旧版 Agent DOM 操作逻辑 | `src/renderer/src/index.js` |
+| P1.2 | **移除 index.html 中旧 agent 相关 CSS** | `.agent-input`, `.agent-send-btn`, `.agent-messages`, `.agent-empty` 等不再使用的样式（约 200 行） | `src/renderer/index.html` |
+| P1.3 | **移除 StockAnalysis.vue + stock-analysis.html** | Agent Window 已完全覆盖其功能 | `src/renderer/src/StockAnalysis.vue`, `src/renderer/stock-analysis.html`, `src/renderer/src/stockAnalysis.js` |
+
+#### 🟡 P2: 功能补全 — 完成 Phase 4 遗留
+
+| # | 任务 | 说明 |
+|---|------|------|
+| P2.1 | **左上角 Agent 启动按钮 (titlebar 独立放置)** | 当前 🤖 按钮仅在侧边栏 ChatPanel header 内，应按计划在 `index.html` 的 `.titlebar-actions` 中独立放置，确保侧边栏关闭时仍可一键启动 Agent Window |
+| P2.2 | **KLineChart 标注渲染集成验证** | 验证 `TVChartContainer.vue` 是否已正确集成 `annotationService`，如未集成则完成 Chart 端的标注渲染逻辑 |
+| P2.3 | **跨市场时间轴折叠** | 验证 `tradingHours.ts` 是否已被 Chart 组件消费，完成 KLineChart x 轴非交易时段折叠 |
+| P2.4 | **`/mode` 斜杠命令** | ChatInput 中支持 `/chat`, `/quick`, `/standard` 等命令切换模式 |
+| P2.5 | **辩论摘要同步到侧边栏** | 验证 Agent Window 分析完成后，结果是否正确通过 IPC 同步到侧边栏会话 |
+
+#### 🟢 P3: 新闻扩展 — 低优先级
+
+| # | 任务 | 说明 |
+|---|------|------|
+| P3.1 | 雪球 Crawler | 基于 BaseCrawler 实现 xueqiu_crawler.py |
+| P3.2 | 财联社 Crawler | cls_crawler.py |
+| P3.3 | WebSocket news channel | 扩展 realtime_ws.py 新增 news 频道 |
+| P3.4 | 前端新闻源筛选 | NewsFilter.vue 支持多源选择 |
+
+---
+
+### 执行建议
+
+```
+P0 (紧急修复, 5 分钟)
+  → P0 验证通过
+  → P1 (清理旧代码, 30 分钟)
+  → P2.1 (titlebar Agent 按钮)
+  → P2.2-P2.5 (功能补全, 可并行)
+  → P3 (新闻扩展, 按需)
+```
+
+> **P0 修复是所有后续工作的前提**。一旦 `agentInput` 引用被移除，整个 UI 恢复正常（侧边栏 Chat + 状态栏），Phase 4 的 ~80% 已完成功能立即可用。

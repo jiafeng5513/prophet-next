@@ -117,6 +117,7 @@ import PlanCard from './components/agent/PlanCard.vue'
 import ChatInput from './components/sidebar/ChatInput.vue'
 import { useChat } from './composables/useChat'
 import type { ChatMode, ChatMessage } from './service/chatService'
+import { annotateFromDashboard } from './service/annotationService'
 
 const modeLabels: Record<ChatMode, string> = {
   chat: '自由对话',
@@ -211,19 +212,9 @@ function onSkillToggle(skillId: string) {
 }
 
 function onAnnotate(msg: ChatMessage) {
-  // IPC: 通知主进程标注到 K 线图
-  if (window.electronAPI?.invoke) {
-    window.electronAPI.invoke('chart:add-annotations', {
-      symbol: symbolInput.value,
-      annotations: [{
-        symbol: symbolInput.value,
-        timestamp: Date.now(),
-        type: msg.metadata?.dashboard?.signal || 'alert',
-        label: `${msg.metadata?.dashboard?.signal || ''} (${((msg.metadata?.dashboard?.confidence || 0) * 100).toFixed(0)}%)`,
-        price: 0,
-        source: 'agent'
-      }]
-    })
+  const dashboard = msg.metadata?.dashboard
+  if (dashboard) {
+    annotateFromDashboard(symbolInput.value, dashboard, 'current')
   }
 }
 

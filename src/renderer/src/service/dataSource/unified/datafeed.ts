@@ -22,6 +22,7 @@ import {
 } from '../../marketDataService'
 import { realtimeWS } from '../../realtimeWSClient'
 import type { RealtimeQuote } from '../../marketDataService'
+import { toTradingViewSession, getTradingViewTimezone, type MarketType } from '../../tradingHours'
 
 // ==================== 周期映射 ====================
 
@@ -39,21 +40,22 @@ const RESOLUTION_MAP: Record<string, string> = {
   '1M': '1M',
 }
 
+/** 后端 market_type → tradingHours MarketType */
+function toMarketType(marketType: string): MarketType {
+  if (marketType === 'crypto') return 'CRYPTO'
+  if (marketType === 'us_stock') return 'US'
+  if (marketType === 'hk_stock') return 'HK'
+  return 'A_SHARE'
+}
+
 /** 根据市场类型返回交易时段 */
 function getSession(marketType: string): string {
-  if (marketType === 'crypto') return '24x7'
-  if (marketType === 'us_stock') return '0930-1600'
-  if (marketType === 'hk_stock') return '0930-1200,1300-1600'
-  // A 股 / ETF: 9:30-11:30, 13:00-15:00 (不含夜盘)
-  return '0930-1130,1300-1500'
+  return toTradingViewSession(toMarketType(marketType))
 }
 
 /** 根据市场类型返回时区 */
 function getTimezone(marketType: string): string {
-  if (marketType === 'crypto') return 'Etc/UTC'
-  if (marketType === 'us_stock') return 'America/New_York'
-  if (marketType === 'hk_stock') return 'Asia/Hong_Kong'
-  return 'Asia/Shanghai'
+  return getTradingViewTimezone(toMarketType(marketType))
 }
 
 /** 交易所显示名 */
