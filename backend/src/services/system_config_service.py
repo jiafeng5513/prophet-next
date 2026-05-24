@@ -74,8 +74,11 @@ class SystemConfigService:
     }
     _DISPLAY_VALUE_ALIASES: Dict[str, Dict[str, str]] = {
         "AGENT_ORCHESTRATOR_MODE": {
-            "strategy": "specialist",
-            "skill": "specialist",
+            "strategy": "deep",
+            "skill": "deep",
+            "specialist": "deep",
+            "full": "deep",
+            "standard": "quick",
         }
     }
 

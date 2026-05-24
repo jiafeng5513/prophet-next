@@ -39,6 +39,18 @@
     <div class="main-view">
       <!-- 顶部搜索栏 -->
       <div class="search-bar">
+        <div class="mode-toggle">
+          <button
+            class="mode-btn"
+            :class="{ active: analysisMode === 'quick' }"
+            @click="analysisMode = 'quick'"
+          >⚡ 快速</button>
+          <button
+            class="mode-btn"
+            :class="{ active: analysisMode === 'deep' }"
+            @click="analysisMode = 'deep'"
+          >🔬 深度</button>
+        </div>
         <div class="search-input-wrapper">
           <input
             ref="searchInput"
@@ -63,15 +75,15 @@
             </div>
           </div>
         </div>
-        <button class="analyze-btn" @click="handleAnalyze" :disabled="analyzing || serviceStatus !== 'connected'" :title="serviceStatus !== 'connected' ? 'DSA 服务未连接' : ''">
-          {{ analyzing ? '分析中...' : '分析' }}
+        <button class="analyze-btn" @click="handleAnalyze" :disabled="analyzing || agentStreaming || serviceStatus !== 'connected'" :title="serviceStatus !== 'connected' ? 'DSA 服务未连接' : ''">
+          {{ (analyzing || agentStreaming) ? '分析中...' : '分析' }}
         </button>
       </div>
 
       <!-- 内容区 -->
       <div class="main-view-content content-area">
         <!-- 欢迎页 -->
-        <div v-if="!reportData && !analyzing" class="welcome">
+        <div v-if="!reportData && !analyzing && !agentStreaming && !agentDashboard" class="welcome">
           <div class="welcome-icon">📊</div>
           <h2>股票智能分析</h2>
           <p>输入股票代码或名称，AI 将从技术面、基本面、舆情等多维度进行深度分析</p>
@@ -86,8 +98,50 @@
           </div>
         </div>
 
-        <!-- 分析进度 -->
-        <div v-if="analyzing" class="analyzing-panel">
+        <!-- Agent 流式分析中 (deep/quick 模式走 agent 管道) -->
+        <div v-if="agentStreaming" class="analyzing-panel">
+          <div class="analyzing-header">
+            <div class="analyzing-spinner"></div>
+            <span>正在{{ analysisMode === 'deep' ? '深度' : '快速' }}分析 {{ currentStockCode }}
+              <template v-if="currentStockName">（{{ currentStockName }}）</template>
+            </span>
+          </div>
+          <div class="agent-stream-content" v-if="agentStreamResult.content">
+            <StreamRenderer :content="agentStreamResult.content" :streaming="true" />
+          </div>
+        </div>
+
+        <!-- Agent 分析结果 (Dashboard) -->
+        <div v-if="agentDashboard && !agentStreaming" class="report-container">
+          <div class="report-header">
+            <h2>
+              {{ reportStockCode }}
+              <span v-if="reportStockName">{{ reportStockName }}</span>
+            </h2>
+            <div class="report-header-actions">
+              <span class="analysis-mode-badge">{{ analysisMode === 'deep' ? '🔬 深度分析' : '⚡ 快速分析' }}</span>
+              <AnalysisExport
+                :dashboard="agentDashboard"
+                :stock-code="reportStockCode"
+                :stock-name="reportStockName"
+              />
+            </div>
+          </div>
+          <DashboardResult
+            :dashboard="agentDashboard"
+            @annotate="onAnnotateDashboard"
+            @chat="onFollowUp"
+          />
+          <!-- 对比分析 -->
+          <CompareAnalysis
+            v-if="compareItems.length > 1"
+            :items="compareItems"
+            @close="compareItems = []"
+          />
+        </div>
+
+        <!-- 分析进度 (传统任务模式兜底) -->
+        <div v-if="analyzing && !agentStreaming" class="analyzing-panel">
           <div class="analyzing-header">
             <div class="analyzing-spinner"></div>
             <span>正在分析 {{ currentStockCode }}
@@ -145,13 +199,41 @@
         </div>
       </div>
     </div>
+
+    <!-- 右侧面板: 实时进度 + 追问 -->
+    <aside class="right-panel" v-show="showRightPanel">
+      <div class="right-panel-header">
+        <span>实时进度</span>
+        <button class="panel-collapse-btn" @click="rightPanelVisible = false" title="折叠">✕</button>
+      </div>
+      <div class="right-panel-content">
+        <AnalysisSideProgress
+          :stages="agentStreamResult.stages"
+          :debate="agentStreamResult.debate"
+          :risk-debate="agentStreamResult.riskDebate"
+          :thinking="agentStreamResult.thinking"
+          :mode="analysisMode"
+        />
+        <AnalysisRadar
+          v-if="radarDimensions.length > 0 && !agentStreaming"
+          :dimensions="radarDimensions"
+        />
+        <FollowUpInput
+          v-if="agentDashboard && !agentStreaming"
+          :stock-code="currentStockCode"
+          :signal="agentDashboard?.signal"
+          @send="onFollowUpSend"
+        />
+      </div>
+    </aside>
   </div>
 </template>
 
 <script setup>
 import '@renderer/styles/layout.css'
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useSidePanelWidth } from './composables/useSidePanelWidth'
+import { useChatStream } from './composables/useChatStream'
 import MarkdownIt from 'markdown-it'
 
 import hljs from 'highlight.js/lib/core'
@@ -171,6 +253,13 @@ import ReportOverview from './components/report/ReportOverview.vue'
 import StrategyGrid from './components/report/StrategyGrid.vue'
 import CollapsiblePanel from './components/report/CollapsiblePanel.vue'
 import ReportNews from './components/report/ReportNews.vue'
+import StreamRenderer from './components/agent/StreamRenderer.vue'
+import DashboardResult from './components/agent/DashboardResult.vue'
+import AnalysisSideProgress from './components/analysis/AnalysisSideProgress.vue'
+import FollowUpInput from './components/analysis/FollowUpInput.vue'
+import AnalysisRadar from './components/analysis/AnalysisRadar.vue'
+import AnalysisExport from './components/analysis/AnalysisExport.vue'
+import CompareAnalysis from './components/analysis/CompareAnalysis.vue'
 
 const sidePanelRef = ref(null)
 useSidePanelWidth(sidePanelRef)
@@ -214,6 +303,68 @@ const serviceStatus = ref('unknown') // unknown, connected, disconnected
 let searchTimer = null
 let eventSource = null
 let dsaPort = 8100
+
+// Agent 模式 & 流式分析状态
+const analysisMode = ref('deep') // 'quick' | 'deep'
+const rightPanelVisible = ref(true)
+const agentDashboard = ref(null)
+const { state: agentState, result: agentStreamResult, error: agentError, send: agentSend, abort: agentAbort } = useChatStream()
+const agentStreaming = computed(() =>
+  agentState.value !== 'idle' && agentState.value !== 'done' && agentState.value !== 'error'
+)
+const showRightPanel = computed(() =>
+  rightPanelVisible.value && (agentStreaming.value || agentDashboard.value)
+)
+
+// 监听 agent stream 完成 → 提取 dashboard
+watch(agentState, (newState) => {
+  if (newState === 'done') {
+    if (agentStreamResult.value.dashboard) {
+      agentDashboard.value = agentStreamResult.value.dashboard
+      reportStockCode.value = currentStockCode.value
+      reportStockName.value = currentStockName.value
+    }
+    analyzing.value = false
+  } else if (newState === 'error') {
+    errorMsg.value = agentError.value || '分析失败'
+    analyzing.value = false
+  }
+})
+
+// 对比分析列表
+const compareItems = ref([])
+
+// 雷达图维度 — 从 dashboard 提取
+const radarDimensions = computed(() => {
+  const d = agentDashboard.value
+  if (!d) return []
+  const dims = []
+  if (d.confidence != null) dims.push({ key: 'confidence', label: '置信度', value: Math.round(d.confidence * 100) })
+  if (d.market_context) {
+    const mc = d.market_context
+    if (mc.strength) {
+      const strengthMap = { strong: 80, moderate: 55, weak: 30 }
+      dims.push({ key: 'strength', label: '趋势', value: strengthMap[mc.strength] || 50 })
+    }
+    if (mc.sentiment) {
+      const sentMap = { bullish: 80, neutral: 50, bearish: 25 }
+      dims.push({ key: 'sentiment', label: '情绪', value: sentMap[mc.sentiment] || 50 })
+    }
+  }
+  if (d.risk_assessment?.max_acceptable_position) {
+    const pos = parseInt(d.risk_assessment.max_acceptable_position)
+    if (!isNaN(pos)) dims.push({ key: 'position', label: '仓位', value: pos })
+  }
+  if (d.debate_summary?.confidence_shift != null) {
+    dims.push({ key: 'debate', label: '辩论', value: Math.min(100, Math.max(0, 50 + d.debate_summary.confidence_shift * 50)) })
+  }
+  if (d.skill_opinions?.length) {
+    const buyCount = d.skill_opinions.filter(s => ['buy', '买入'].includes(s.signal)).length
+    dims.push({ key: 'skills', label: '策略', value: Math.round((buyCount / d.skill_opinions.length) * 100) })
+  }
+  // 保证至少3个维度才显示雷达
+  return dims.length >= 3 ? dims : []
+})
 
 const quickStocks = [
   { code: '600519', name: '贵州茅台' },
@@ -301,52 +452,40 @@ async function handleAnalyze() {
     return
   }
 
-  analyzing.value = true
+  // 重置状态
   currentStockCode.value = code
-  currentProgress.value = 0
-  currentMessage.value = '提交分析请求...'
   errorMsg.value = ''
   reportData.value = null
   reportSections.value = []
   newsItems.value = []
+  agentDashboard.value = null
+  rightPanelVisible.value = true
 
-  try {
-    const resp = await fetch(`${getBaseUrl()}/api/v1/analysis/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        stock_code: code,
-        stock_name: currentStockName.value || null,
-        original_query: code,
-        report_type: 'detailed',
-        async_mode: true,
-        selection_source: 'manual'
-      })
-    })
+  // 使用 Agent 管道 (useChatStream) 进行分析
+  agentSend({
+    message: `分析 ${code}`,
+    mode: analysisMode.value,
+    symbol: code
+  })
+}
 
-    if (resp.status === 409) {
-      // 重复任务
-      const data = await resp.json()
-      currentTaskId.value = data.existing_task_id
-      currentMessage.value = '该股票正在分析中，等待结果...'
-      return
-    }
+// 追问发送
+function onFollowUpSend(text) {
+  agentSend({
+    message: text,
+    mode: analysisMode.value,
+    symbol: currentStockCode.value
+  })
+  agentDashboard.value = null
+  rightPanelVisible.value = true
+}
 
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}))
-      throw new Error(data.message || `请求失败 (${resp.status})`)
-    }
+function onFollowUp() {
+  rightPanelVisible.value = true
+}
 
-    const data = await resp.json()
-    currentTaskId.value = data.task_id
-    currentMessage.value = '任务已提交，等待分析...'
-
-    // 刷新任务列表
-    await fetchTaskList()
-  } catch (e) {
-    analyzing.value = false
-    errorMsg.value = `分析失败: ${e.message}`
-  }
+function onAnnotateDashboard() {
+  // TODO: 联动 K 线图标注
 }
 
 // 快速分析
@@ -1292,5 +1431,106 @@ onUnmounted(() => {
 .content-area::-webkit-scrollbar-thumb:hover,
 .report-container::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* ===== 模式切换按钮 ===== */
+.mode-toggle {
+  display: flex;
+  gap: 2px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.mode-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.mode-btn.active {
+  background: #0e639c;
+  color: #fff;
+}
+
+.mode-btn:hover:not(.active) {
+  color: #ccc;
+  background: #333;
+}
+
+/* ===== 右侧面板 ===== */
+.right-panel {
+  width: 280px;
+  min-width: 240px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1a2634;
+  border-left: 1px solid #2a3a4a;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.right-panel-header {
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8bb8d4;
+  border-bottom: 1px solid #2a3a4a;
+  flex-shrink: 0;
+}
+
+.panel-collapse-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+}
+
+.panel-collapse-btn:hover {
+  color: #ccc;
+}
+
+.right-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #3a5060 transparent;
+}
+
+/* ===== 分析模式徽章 ===== */
+.analysis-mode-badge {
+  font-size: 12px;
+  color: #8bb8d4;
+  background: #1e2e3e;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+
+.report-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ===== Agent 流式内容区 ===== */
+.agent-stream-content {
+  max-width: 800px;
+  margin: 16px auto 0;
+  padding: 0 32px;
 }
 </style>

@@ -52,7 +52,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Valid orchestrator modes (ordered by cost/depth)
-VALID_MODES = ("quick", "standard", "full", "specialist")
+VALID_MODES = ("quick", "deep")
+
+# Backward-compatible mapping: old mode names → new canonical modes
+MODE_MAPPING: Dict[str, str] = {
+    # New canonical modes
+    "chat": "chat",
+    "quick": "quick",
+    "deep": "deep",
+    # Legacy modes (deprecated but still accepted)
+    "standard": "quick",   # standard → quick (always includes Intel now)
+    "full": "deep",        # full → deep
+    "specialist": "deep",  # specialist → deep (auto skill selection)
+    "plan": "deep",        # plan is no longer a standalone mode
+}
 
 
 @dataclass
@@ -86,7 +99,7 @@ class AgentOrchestrator:
         skill_instructions: str = "",
         technical_skill_policy: str = "",
         max_steps: int = AGENT_MAX_STEPS_DEFAULT,
-        mode: str = "standard",
+        mode: str = "quick",
         skill_manager=None,
         config=None,
     ):
@@ -95,8 +108,11 @@ class AgentOrchestrator:
         self.skill_instructions = skill_instructions
         self.technical_skill_policy = technical_skill_policy
         self.max_steps = max_steps
-        normalized_mode = "specialist" if mode in {"strategy", "skill"} else mode
-        self.mode = normalized_mode if normalized_mode in VALID_MODES else "standard"
+        # Normalize mode through MODE_MAPPING for backward compatibility
+        mapped_mode = MODE_MAPPING.get(mode, mode)
+        if mapped_mode != mode:
+            logger.info("[Orchestrator] mode '%s' mapped to '%s' (deprecated alias)", mode, mapped_mode)
+        self.mode = mapped_mode if mapped_mode in VALID_MODES else "quick"
         self.skill_manager = skill_manager
         self.config = config
 
@@ -503,7 +519,7 @@ class AgentOrchestrator:
                 )
 
             if (
-                self.mode == "specialist"
+                self.mode == "deep"
                 and agent.agent_name == "decision"
                 and not specialist_agents_inserted
             ):
@@ -666,16 +682,15 @@ class AgentOrchestrator:
         decision = self._prepare_agent(DecisionAgent(**common_kwargs))
 
         if self.mode == "quick":
-            return [technical, decision]
-        elif self.mode == "standard":
+            # Quick: Technical + Intel (parallel) → Decision
             return [technical, intel, decision]
-        elif self.mode == "full":
-            return [technical, intel, risk, decision]
-        elif self.mode == "specialist":
+        elif self.mode == "deep":
+            # Deep: Technical + Intel (parallel) → Risk → [Debate] → [RiskDebate] → [Skills] → Decision
             # Specialist agents are inserted lazily right before the decision
             # stage so the router can see the finished technical opinion.
             return [technical, intel, risk, decision]
         else:
+            # Fallback to quick
             return [technical, intel, decision]
 
     def _build_specialist_agents(self, ctx: AgentContext) -> list:
@@ -758,7 +773,7 @@ class AgentOrchestrator:
 
     def _should_run_debate(self) -> bool:
         """Check if debate should run based on mode and config."""
-        if self.mode not in ("full", "specialist"):
+        if self.mode != "deep":
             return False
         if self.config and not getattr(self.config, "agent_debate_enabled", True):
             return False
@@ -766,7 +781,7 @@ class AgentOrchestrator:
 
     def _should_run_risk_debate(self) -> bool:
         """Check if risk debate should run based on mode and config."""
-        if self.mode not in ("full", "specialist"):
+        if self.mode != "deep":
             return False
         if self.config and not getattr(self.config, "agent_risk_debate_enabled", True):
             return False

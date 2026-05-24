@@ -34,30 +34,24 @@ interface DisplayStage {
 
 // 根据模式决定所有预期阶段
 const stageDefinitions: Record<string, { id: string; label: string }[]> = {
-  standard: [
+  quick: [
     { id: 'technical', label: 'Technical' },
     { id: 'intel', label: 'Intel' },
     { id: 'decision', label: 'Decision' }
   ],
-  full: [
+  deep: [
     { id: 'technical', label: 'Technical' },
     { id: 'intel', label: 'Intel' },
-    { id: 'debate', label: 'Debate' },
     { id: 'risk', label: 'Risk' },
-    { id: 'decision', label: 'Decision' }
-  ],
-  specialist: [
-    { id: 'technical', label: 'Technical' },
-    { id: 'intel', label: 'Intel' },
-    { id: 'specialist', label: 'Specialist' },
     { id: 'debate', label: 'Debate' },
-    { id: 'risk', label: 'Risk' },
+    { id: 'risk_debate', label: 'Risk Debate' },
+    { id: 'specialist', label: 'Skill' },
     { id: 'decision', label: 'Decision' }
   ]
 }
 
 const allStages = computed<DisplayStage[]>(() => {
-  const defs = stageDefinitions[props.mode] || stageDefinitions.standard
+  const defs = stageDefinitions[props.mode] || stageDefinitions.quick
   return defs.map(def => {
     const actual = props.stages.find(s => s.stage === def.id)
     return {

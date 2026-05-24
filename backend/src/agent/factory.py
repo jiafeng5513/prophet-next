@@ -341,7 +341,7 @@ def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technic
     """
     from src.agent.orchestrator import AgentOrchestrator
 
-    mode = mode_override or getattr(config, "agent_orchestrator_mode", "standard")
+    mode = mode_override or getattr(config, "agent_orchestrator_mode", "quick")
     logger.info("[AgentFactory] Building AgentOrchestrator (mode=%s)", mode)
 
     return AgentOrchestrator(

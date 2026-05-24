@@ -61,7 +61,7 @@ class AnalysisPlan:
     steps: List[Dict[str, str]] = field(default_factory=list)
     estimated_time: str = ""
     estimated_tokens: int = 0
-    mode_recommendation: str = "full"
+    mode_recommendation: str = "deep"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -113,7 +113,7 @@ class PlanModeHandler:
                     steps=plan_data.get("steps", _DEFAULT_PLAN_STEPS),
                     estimated_time=plan_data.get("estimated_time", "30-60秒"),
                     estimated_tokens=plan_data.get("estimated_tokens", 15000),
-                    mode_recommendation=plan_data.get("mode_recommendation", "full"),
+                    mode_recommendation=plan_data.get("mode_recommendation", "deep"),
                 )
             else:
                 plan = self._default_plan()
@@ -137,5 +137,5 @@ class PlanModeHandler:
             steps=list(_DEFAULT_PLAN_STEPS),
             estimated_time="30-60秒",
             estimated_tokens=15000,
-            mode_recommendation="full",
+            mode_recommendation="deep",
         )

@@ -45,7 +45,7 @@ class ChatRequest(BaseModel):
 
     message: str
     session_id: Optional[str] = None
-    mode: Optional[str] = None  # chat/quick/standard/full/specialist/plan
+    mode: Optional[str] = None  # chat/quick/deep/plan (legacy: standard/full/specialist also accepted)
     agent_id: Optional[str] = None  # 单 Agent 模式指定 agent
     symbol: Optional[str] = None  # 标的代码
     skills: Optional[List[str]] = Field(
@@ -391,6 +391,10 @@ async def agent_chat_stream(request: ChatRequest):
 
     session_id = request.session_id or str(uuid.uuid4())
     mode = request.mode or "chat"
+
+    # Apply mode mapping for backward compatibility (6 modes → 3)
+    from src.agent.orchestrator import MODE_MAPPING
+    mode = MODE_MAPPING.get(mode, mode)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
 

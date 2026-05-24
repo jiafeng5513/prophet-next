@@ -545,7 +545,7 @@ class Config:
     agent_skill_dir: Optional[str] = None
     agent_nl_routing: bool = False  # Enable natural language routing in bot dispatcher
     agent_arch: str = "single"     # Agent architecture: 'single' (legacy) or 'multi' (orchestrator)
-    agent_orchestrator_mode: str = "standard"  # Orchestrator mode: quick/standard/full/specialist
+    agent_orchestrator_mode: str = "quick"  # Orchestrator mode: quick/deep
     agent_orchestrator_timeout_s: int = 600  # Cooperative timeout budget for the whole multi-agent pipeline
     agent_risk_override: bool = True  # Allow risk agent to veto buy signals
     agent_parallel_pipeline: bool = True  # Enable parallel execution of independent agents (technical+intel)
@@ -794,7 +794,7 @@ class Config:
 
     # --- Post-init validation ---------------------------------------------------
     _VALID_AGENT_ARCH = {"single", "multi"}
-    _VALID_ORCHESTRATOR_MODES = {"quick", "standard", "full", "specialist"}
+    _VALID_ORCHESTRATOR_MODES = {"quick", "deep", "standard", "full", "specialist"}
     _VALID_SKILL_ROUTING = {"auto", "manual"}
     _WEBUI_RUNTIME_ENV_FILE_PRIORITY_KEYS = frozenset(
         {
@@ -818,16 +818,25 @@ class Config:
             object.__setattr__(self, "agent_arch", "single")
         if self.agent_orchestrator_mode in {"strategy", "skill"}:
             _log.info(
-                "AGENT_ORCHESTRATOR_MODE=%s is deprecated; normalizing to 'specialist'",
+                "AGENT_ORCHESTRATOR_MODE=%s is deprecated; normalizing to 'deep'",
                 self.agent_orchestrator_mode,
             )
-            object.__setattr__(self, "agent_orchestrator_mode", "specialist")
+            object.__setattr__(self, "agent_orchestrator_mode", "deep")
+        # Map legacy mode names to new canonical modes
+        _legacy_mode_map = {"standard": "quick", "full": "deep", "specialist": "deep"}
+        if self.agent_orchestrator_mode in _legacy_mode_map:
+            new_mode = _legacy_mode_map[self.agent_orchestrator_mode]
+            _log.info(
+                "AGENT_ORCHESTRATOR_MODE=%s is deprecated; normalizing to '%s'",
+                self.agent_orchestrator_mode, new_mode,
+            )
+            object.__setattr__(self, "agent_orchestrator_mode", new_mode)
         if self.agent_orchestrator_mode not in self._VALID_ORCHESTRATOR_MODES:
             _log.warning(
-                "Invalid AGENT_ORCHESTRATOR_MODE=%r, falling back to 'standard'. Valid: %s",
+                "Invalid AGENT_ORCHESTRATOR_MODE=%r, falling back to 'quick'. Valid: %s",
                 self.agent_orchestrator_mode, self._VALID_ORCHESTRATOR_MODES,
             )
-            object.__setattr__(self, "agent_orchestrator_mode", "standard")
+            object.__setattr__(self, "agent_orchestrator_mode", "quick")
         if self.agent_skill_routing not in self._VALID_SKILL_ROUTING:
             _log.warning(
                 "Invalid AGENT_SKILL_ROUTING=%r, falling back to 'auto'. Valid: %s",
@@ -1229,7 +1238,7 @@ class Config:
             agent_skill_dir=os.getenv('AGENT_SKILL_DIR') or os.getenv('AGENT_STRATEGY_DIR'),
             agent_nl_routing=os.getenv('AGENT_NL_ROUTING', 'false').lower() == 'true',
             agent_arch=os.getenv('AGENT_ARCH', 'single').lower(),
-            agent_orchestrator_mode=os.getenv('AGENT_ORCHESTRATOR_MODE', 'standard').lower(),
+            agent_orchestrator_mode=os.getenv('AGENT_ORCHESTRATOR_MODE', 'quick').lower(),
             agent_orchestrator_timeout_s=parse_env_int(
                 os.getenv('AGENT_ORCHESTRATOR_TIMEOUT_S'),
                 600,

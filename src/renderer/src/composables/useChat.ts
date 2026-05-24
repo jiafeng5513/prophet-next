@@ -32,7 +32,7 @@ export interface UseChatOptions {
 export function useChat(options: UseChatOptions = {}) {
   const {
     defaultMode = 'chat',
-    allowedModes = ['chat', 'quick', 'standard', 'full', 'specialist', 'plan'],
+    allowedModes = ['chat', 'quick', 'deep', 'plan'],
     showUpgradeHint = false
   } = options
 

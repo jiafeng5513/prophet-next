@@ -1,5 +1,15 @@
 # 02 — 模式合并方案（6 → 3+1）
 
+> **状态: ✅ 已完成 (2026-05-24)**
+>
+> 已实施内容:
+> - `orchestrator.py`: VALID_MODES=("quick","deep"), MODE_MAPPING 兼容旧名
+> - `config.py`: 默认 mode "quick", __post_init__ 映射遗留值
+> - `factory.py`: 默认 mode "quick"
+> - `plan_mode.py`: 推荐 deep
+> - `api/v1/endpoints/agent.py`: 入口处映射
+> - 前端: ChatInput/AgentWindow/AgentProgress/Settings 全部更新为 quick/deep
+
 ## 一、设计原则
 
 1. **用户视角优先**: 用户只需关心"我要多详细的分析"，不需要理解 Agent 架构

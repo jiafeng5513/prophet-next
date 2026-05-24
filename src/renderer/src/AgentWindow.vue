@@ -3,27 +3,24 @@
     <!-- 顶部工具栏 -->
     <div class="agent-window__toolbar">
       <div class="toolbar-left">
+        <span class="window-title">💬 AI 助手</span>
         <div class="mode-select">
-          <label>模式:</label>
           <select v-model="currentMode" @change="setMode(currentMode)">
             <option v-for="mode in allowedModes" :key="mode" :value="mode">
               {{ modeLabels[mode] }}
             </option>
           </select>
         </div>
-        <div class="symbol-input">
-          <label>标的:</label>
-          <input v-model="symbolInput" placeholder="600519" @keydown.enter="onSymbolEnter" />
-        </div>
       </div>
       <div class="toolbar-right">
+        <button class="toolbar-btn" @click="newChat" title="新对话">🗑️</button>
         <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
       </div>
     </div>
 
     <!-- 主内容区 -->
     <div class="agent-window__body" ref="bodyRef">
-      <!-- Agent 进度 (standard/full/specialist 模式) -->
+      <!-- Agent 进度 (quick/deep 模式) -->
       <AgentProgress
         v-if="showProgress"
         :stages="streamResult.stages"
@@ -120,16 +117,14 @@ import type { ChatMode, ChatMessage } from './service/chatService'
 import { annotateFromDashboard } from './service/annotationService'
 
 const modeLabels: Record<ChatMode, string> = {
-  chat: '自由对话',
-  quick: '快速分析',
-  standard: '标准分析',
-  full: '完整分析',
-  specialist: '专家分析',
-  plan: '计划模式'
+  chat: '💬 对话',
+  quick: '⚡ 快速',
+  deep: '🔬 深度',
+  plan: '📋 计划'
 }
 
-// Agent Window 支持全部模式
-const allowedModes: ChatMode[] = ['chat', 'quick', 'standard', 'full', 'specialist', 'plan']
+// 浮动助手: 支持对话和快速分析
+const allowedModes: ChatMode[] = ['chat', 'quick', 'deep']
 
 const {
   messages,
@@ -145,7 +140,7 @@ const {
   setMode,
   newChat
 } = useChat({
-  defaultMode: 'full',
+  defaultMode: 'chat',
   allowedModes,
   showUpgradeHint: false
 })
@@ -160,7 +155,7 @@ const planExecuting = ref(false)
 
 // 显示进度条的模式
 const showProgress = computed(() =>
-  ['standard', 'full', 'specialist', 'plan'].includes(currentMode.value) &&
+  ['quick', 'deep', 'plan'].includes(currentMode.value) &&
   (isStreaming.value || streamResult.value.stages.length > 0)
 )
 
@@ -277,11 +272,16 @@ function onPlanCancel() {
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
-.mode-select,
-.symbol-input {
+.window-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.mode-select {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -298,24 +298,23 @@ function onPlanCancel() {
   font-size: 12px;
 }
 
-.symbol-input input {
-  background: #1e1e1e;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #e0e0e0;
-  padding: 4px 8px;
-  font-size: 12px;
-  width: 100px;
+.toolbar-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
 }
 
-.symbol-input input:focus {
-  border-color: #0e639c;
-  outline: none;
+.toolbar-btn:hover {
+  color: #ccc;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .status-dot {

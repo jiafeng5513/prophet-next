@@ -91,11 +91,9 @@ const showSkillDropdown = ref(false)
 
 const modeLabels: Record<ChatMode, { label: string; desc: string }> = {
   chat: { label: '对话', desc: '自由对话，纯 LLM 问答' },
-  quick: { label: '快速', desc: '快速分析，秒级响应' },
-  standard: { label: '标准', desc: '标准分析 (tech → intel → decision)' },
-  full: { label: '完整', desc: '完整分析，含 Bull/Bear 辩论' },
-  specialist: { label: '专家', desc: '专家分析，含策略专家' },
-  plan: { label: '计划', desc: '先生成计划后执行' }
+  quick: { label: '快速', desc: '⚡ 快速分析 (tech + intel → decision)' },
+  deep: { label: '深度', desc: '🔬 深度分析，含辩论 + 策略评估' },
+  plan: { label: '计划', desc: '📋 先生成计划后执行' }
 }
 
 const availableModes = computed(() =>
@@ -112,9 +110,7 @@ const placeholder = computed(() => {
   switch (props.currentMode) {
     case 'chat': return '输入问题...'
     case 'quick': return '输入股票代码，快速分析...'
-    case 'standard': return '输入标的进行标准分析...'
-    case 'full': return '输入标的进行完整分析...'
-    case 'specialist': return '输入标的进行专家分析...'
+    case 'deep': return '输入标的进行深度分析...'
     case 'plan': return '描述分析目标...'
     default: return '输入问题...'
   }

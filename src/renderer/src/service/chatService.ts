@@ -12,7 +12,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ChatMode = 'chat' | 'quick' | 'standard' | 'full' | 'specialist' | 'plan'
+export type ChatMode = 'chat' | 'quick' | 'deep' | 'plan'
 
 export interface ChatMessage {
   id: string
@@ -64,6 +64,30 @@ export interface DashboardData {
   signal?: string
   confidence?: number
   summary?: string
+  // Extended fields from Phase 2
+  debate_summary?: {
+    bull_core_thesis?: string
+    bear_core_thesis?: string
+    manager_verdict?: string
+    confidence_shift?: string
+  }
+  risk_assessment?: {
+    aggressive_view?: string
+    conservative_view?: string
+    verdict?: string
+    max_acceptable_position?: string
+  }
+  market_context?: {
+    index_trend?: string
+    sector_strength?: string
+    market_sentiment?: string
+  }
+  skill_opinions?: Array<{
+    skill_name: string
+    signal: string
+    confidence: number
+    key_observation: string
+  }>
   [key: string]: unknown
 }
 

@@ -942,7 +942,7 @@ const fieldDescMap = {
   AGENT_SKILLS: '逗号分隔的交易策略列表。留空使用默认策略，填 all 启用全部。',
   AGENT_SKILL_DIR: '存放 Agent 策略定义文件的目录路径。',
   AGENT_ARCH: 'Agent 执行架构。single 为经典单 Agent；multi 为多 Agent 编排。',
-  AGENT_ORCHESTRATOR_MODE: 'Multi-Agent 编排深度。quick/standard/full/specialist。',
+  AGENT_ORCHESTRATOR_MODE: 'Multi-Agent 编排深度。quick（快速分析）/ deep（深度分析，含辩论+策略）。',
   AGENT_ORCHESTRATOR_TIMEOUT_S: 'Agent 执行总超时预算（秒），0 表示不限制。',
   AGENT_RISK_OVERRIDE: '允许风控 Agent 在发现关键风险时否决买入信号。',
   AGENT_SKILL_AUTOWEIGHT: '根据回测表现自动调整策略权重。',

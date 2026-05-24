@@ -70,8 +70,8 @@ const emit = defineEmits<{
 
 // 初始化 chat composable
 const allowedModes: ChatMode[] = props.fullMode
-  ? ['chat', 'quick', 'standard', 'full', 'specialist', 'plan']
-  : ['chat', 'quick', 'standard']
+  ? ['chat', 'quick', 'deep', 'plan']
+  : ['chat', 'quick']
 
 const {
   messages,

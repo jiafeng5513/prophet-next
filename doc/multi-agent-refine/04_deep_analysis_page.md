@@ -1,5 +1,16 @@
 # 04 — 深度分析页面增强计划
 
+> **状态: ✅ 已完成 (2026-05-24)**
+>
+> 已实施内容:
+> - `StockAnalysis.vue`: 三栏布局(左历史+中结果+右进度), 模式切换, useChatStream 集成
+> - `AnalysisSideProgress.vue`: 右侧栏实时进度(阶段/辩论/风险/思考)
+> - `FollowUpInput.vue`: 追问输入(快捷问题+自由输入)
+> - `AnalysisRadar.vue`: 纯 SVG 多维雷达图
+> - `AnalysisExport.vue`: 导出(Markdown/复制/JSON)
+> - `CompareAnalysis.vue`: 对比分析表格
+> - `AgentWindow.vue`: 轻量化为浮动对话助手
+
 ## 一、现状分析
 
 ### 当前有两个分析入口

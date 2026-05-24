@@ -25,12 +25,14 @@ logger = logging.getLogger(__name__)
 
 class IntelAgent(BaseAgent):
     agent_name = "intel"
-    max_steps = 4
+    max_steps = 5
     tool_names = [
         "search_stock_news",
         "search_comprehensive_intel",
         "get_stock_info",
         "get_capital_flow",
+        "get_market_indices",
+        "get_sector_rankings",
     ]
 
     def system_prompt(self, ctx: AgentContext) -> str:
@@ -38,8 +40,8 @@ class IntelAgent(BaseAgent):
 You are an **Intelligence & Sentiment Agent** specialising in A-shares, \
 HK, and US equities.
 
-Your task: gather the latest news, announcements, and risk signals for \
-the given stock, then produce a structured JSON opinion.
+Your task: gather the latest news, announcements, risk signals, AND market \
+context for the given stock, then produce a structured JSON opinion.
 
 ## Workflow
 1. Search latest stock news (earnings, announcements, insider activity)
@@ -47,8 +49,10 @@ the given stock, then produce a structured JSON opinion.
 announcements (公司公告), market analysis, risk checks, and earnings outlook
 3. For A-share stocks, call get_capital_flow to obtain main-force (主力) \
 capital inflow/outflow data and include it in your analysis
-4. Classify positive catalysts and risk alerts
-5. Assess overall sentiment
+4. Call get_market_indices to obtain the broader market environment
+5. Call get_sector_rankings to identify sector momentum
+6. Classify positive catalysts and risk alerts
+7. Assess overall sentiment considering both stock-level and market-level factors
 
 ## Risk Detection Priorities
 - Insider / major shareholder sell-downs (减持)
@@ -76,7 +80,12 @@ Return **only** a JSON object:
   "capital_flow_signal": "inflow|outflow|neutral|not_available",
   "key_news": [
     {"title": "...", "impact": "positive|negative|neutral"}
-  ]
+  ],
+  "market_context": {
+    "index_trend": "up|sideways|down",
+    "sector_strength": "strong|neutral|weak",
+    "market_sentiment": "greedy|neutral|fearful"
+  }
 }
 """
 
@@ -90,7 +99,9 @@ Return **only** a JSON object:
             "(公司公告), risk events, and earnings outlook.\n"
             "2. Call get_capital_flow to obtain main-force (主力) capital flow data "
             "(A-share only; skip for HK/US).\n"
-            "3. Output the JSON opinion including capital_flow_signal."
+            "3. Call get_market_indices to understand the broader market environment.\n"
+            "4. Call get_sector_rankings to gauge sector momentum.\n"
+            "5. Output the JSON opinion including capital_flow_signal and market_context."
         )
         return "\n".join(parts)
 
@@ -103,6 +114,11 @@ Return **only** a JSON object:
         # Cache parsed intel so downstream agents (especially RiskAgent) can
         # reuse it instead of re-searching the same evidence.
         ctx.set_data("intel_opinion", parsed)
+
+        # Store market context for DecisionAgent
+        market_context = parsed.get("market_context")
+        if market_context and isinstance(market_context, dict):
+            ctx.set_data("market_context", market_context)
 
         # Propagate risk alerts to context
         for alert in parsed.get("risk_alerts", []):

@@ -1,5 +1,14 @@
 # 03 — 数据源最大化利用方案
 
+> **状态: ✅ 已完成 (2026-05-24)**
+>
+> 已实施内容:
+> - `decision_agent.py`: build_user_message 注入 research_plan/risk_debate_verdict/skill_consensus/market_context
+> - `decision_agent.py`: system_prompt 新增权重 (35%技术/25%情报/20%风险/10%辩论/10%策略)
+> - `intel_agent.py`: 新增 get_market_indices/get_sector_rankings 工具, 输出 market_context
+> - `chatService.ts`: DashboardData 扩展 debate_summary/risk_assessment/market_context/skill_opinions
+> - `DashboardResult.vue`: 完整展示所有新字段
+
 ## 一、问题诊断
 
 ### 1.1 DecisionAgent 数据断层

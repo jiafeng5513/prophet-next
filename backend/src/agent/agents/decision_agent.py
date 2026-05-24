@@ -66,9 +66,12 @@ Decision Dashboard.
 You will receive:
 1. Structured opinions from a Technical Agent and an Intel Agent
 2. Any risk flags raised by a Risk Agent
-        3. Skill evaluation results (if applicable)
+3. Bull/Bear debate conclusion (if available)
+4. Risk debate verdict from multiple risk perspectives (if available)
+5. Skill/strategy evaluation results (if available)
+6. Market context — broader market environment (if available)
 
-Your task: synthesise all inputs into a single, actionable Decision Dashboard.
+Your task: synthesise ALL inputs into a single, actionable Decision Dashboard.
 {skills}
 ## Core Principles
 1. **Core conclusion first** — one sentence, ≤30 chars
@@ -77,12 +80,15 @@ Your task: synthesise all inputs into a single, actionable Decision Dashboard.
 4. **Checklist visual** — ✅⚠️❌ for each checkpoint
 5. **Risk priority** — risk alerts must be prominent. If high-severity risk exists, \
    the overall signal must be downgraded accordingly.
+6. **Debate integration** — if debate conclusions are provided, they MUST influence \
+   your final signal and be reflected in the dashboard.
 
 ## Signal Weighting Guidelines
-- Technical opinion weight: ~40%
-- Intel / sentiment weight: ~30%
-- Risk flags weight: ~30% (negative override: any high-severity risk caps signal at "hold")
-- If a skill opinion is present, blend it at 20% weight (reducing others proportionally)
+- Technical opinion weight: ~35%
+- Intel / sentiment weight: ~25%
+- Risk flags weight: ~20% (negative override: any high-severity risk caps signal at "hold")
+- Debate conclusion weight: ~10% (confidence adjustment based on bull/bear consensus)
+- Skill opinion weight: ~10% (if present)
 
 ## Scoring
 - 80-100: buy (all conditions met, high conviction)
@@ -97,6 +103,40 @@ must include at minimum these top-level keys:
   stock_name, sentiment_score, trend_prediction, operation_advice,
   decision_type, confidence_level, dashboard, analysis_summary,
   key_points, risk_warning
+
+Additionally, include these extended fields when source data is available:
+  debate_summary, risk_assessment, market_context, skill_opinions
+
+## Extended Fields Schema (include when data available)
+
+"debate_summary": {{
+  "bull_core_thesis": "多方核心论点 (one sentence)",
+  "bear_core_thesis": "空方核心论点 (one sentence)",
+  "manager_verdict": "裁决结论",
+  "confidence_shift": "+/-N% (辩论后信心变化)"
+}}
+
+"risk_assessment": {{
+  "aggressive_view": "激进视角简述",
+  "conservative_view": "保守视角简述",
+  "verdict": "综合风险裁决",
+  "max_acceptable_position": "建议最大仓位 (e.g. 30%)"
+}}
+
+"market_context": {{
+  "index_trend": "up|sideways|down",
+  "sector_strength": "strong|neutral|weak",
+  "market_sentiment": "greedy|neutral|fearful"
+}}
+
+"skill_opinions": [
+  {{
+    "skill_name": "策略名",
+    "signal": "buy|hold|sell",
+    "confidence": 0.0-1.0,
+    "key_observation": "核心发现"
+  }}
+]
 
 Important: ``decision_type`` must stay within the existing enum
 ``buy|hold|sell``. Express stronger conviction via ``confidence_level``,
@@ -156,6 +196,48 @@ new decision_type values.
             parts.append("## Risk Flags")
             for rf in ctx.risk_flags:
                 parts.append(f"- [{rf.get('severity', 'medium')}] {rf.get('category', '')}: {rf.get('description', '')}")
+            parts.append("")
+
+        # Debate conclusion (Bull/Bear research plan)
+        research_plan = ctx.get_data("research_plan")
+        if research_plan:
+            parts.append("## Bull/Bear Debate Conclusion")
+            if isinstance(research_plan, dict):
+                parts.append(json.dumps(research_plan, ensure_ascii=False, indent=2))
+            else:
+                parts.append(str(research_plan))
+            parts.append("")
+
+        # Risk debate verdict (multi-perspective)
+        risk_verdict = ctx.get_data("risk_debate_verdict")
+        if risk_verdict:
+            parts.append("## Risk Debate Verdict")
+            if isinstance(risk_verdict, dict):
+                parts.append(json.dumps(risk_verdict, ensure_ascii=False, indent=2))
+            else:
+                parts.append(str(risk_verdict))
+            parts.append("")
+
+        # Skill consensus
+        skill_consensus = ctx.get_data("skill_consensus")
+        if skill_consensus:
+            parts.append("## Skill Strategy Assessment")
+            if isinstance(skill_consensus, dict):
+                parts.append(f"Signal: {skill_consensus.get('signal', 'N/A')} | "
+                             f"Confidence: {skill_consensus.get('confidence', 'N/A')}")
+                parts.append(f"Reasoning: {skill_consensus.get('reasoning', '')}")
+            else:
+                parts.append(str(skill_consensus))
+            parts.append("")
+
+        # Market context (if available)
+        market_context = ctx.get_data("market_context")
+        if market_context:
+            parts.append("## Market Context")
+            if isinstance(market_context, dict):
+                parts.append(json.dumps(market_context, ensure_ascii=False, indent=2))
+            else:
+                parts.append(str(market_context))
             parts.append("")
 
         # Skill meta
