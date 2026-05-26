@@ -57,24 +57,24 @@
 ## 四、开发顺序与依赖关系
 
 ```
-Phase 1 模式合并                              ✅ 已完成
-    ├─ 1.1 后端: orchestrator 支持新模式映射    ✅
-    ├─ 1.2 后端: 合并 quick/standard 逻辑      ✅
-    ├─ 1.3 后端: 合并 full/specialist，自动 skill 选择  ✅
-    ├─ 1.4 前端: 模式选择器 UI 简化            ✅
-    └─ 1.5 plan 模式改为深度分析的选项          ✅
+Phase 1 模式合并                                        ✅ 已完成
+    ├─ 1.1 后端: orchestrator 支持新模式映射             ✅
+    ├─ 1.2 后端: 合并 quick/standard 逻辑               ✅
+    ├─ 1.3 后端: 合并 full/specialist，自动 skill 选择   ✅
+    ├─ 1.4 前端: 模式选择器 UI 简化                      ✅
+    └─ 1.5 plan 模式改为深度分析的选项                   ✅
 
-Phase 2 数据流优化 (依赖 Phase 1)              ✅ 已完成
-    ├─ 2.1 DecisionAgent 接入 debate 结论       ✅
-    ├─ 2.2 DecisionAgent 接入 risk_debate 结论  ✅
-    ├─ 2.3 Dashboard JSON schema 扩展          ✅
-    └─ 2.4 前端 DashboardResult 组件展示新字段  ✅
+Phase 2 数据流优化 (依赖 Phase 1)                       ✅ 已完成
+    ├─ 2.1 DecisionAgent 接入 debate 结论               ✅
+    ├─ 2.2 DecisionAgent 接入 risk_debate 结论          ✅
+    ├─ 2.3 Dashboard JSON schema 扩展                   ✅
+    └─ 2.4 前端 DashboardResult 组件展示新字段           ✅
 
-Phase 3 深度分析页面 (依赖 Phase 2)            ✅ 已完成
+Phase 3 深度分析页面 (依赖 Phase 2)                     ✅ 已完成
     ├─ 3.1 合并 StockAnalysis + AgentWindow 为统一体验  ✅
-    ├─ 3.2 增加分析结果可视化组件 (雷达图/导出)         ✅
+    ├─ 3.2 增加分析结果可视化组件 (雷达图/导出)           ✅
     ├─ 3.3 追问与对比功能                               ✅
-    └─ 3.4 AgentWindow 轻量化为浮动助手                  ✅
+    └─ 3.4 AgentWindow 轻量化为浮动助手                 ✅
 ```
 
 ## 五、技术约束
