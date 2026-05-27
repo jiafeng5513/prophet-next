@@ -17,8 +17,72 @@
       </div>
 
       <!-- 摘要 -->
-      <div v-if="dashboard.summary" class="dashboard-summary">
-        {{ dashboard.summary }}
+      <div v-if="dashboard.summary || dashboard.analysis_summary" class="dashboard-summary">
+        {{ dashboard.summary || dashboard.analysis_summary }}
+      </div>
+
+      <!-- 评分仪表 -->
+      <div v-if="dashboard.sentiment_score != null" class="dashboard-section">
+        <div class="section-title">📈 综合评分</div>
+        <div class="score-gauge">
+          <div class="score-bar">
+            <div class="score-fill" :style="{ width: Math.min(100, Math.max(0, dashboard.sentiment_score)) + '%' }" :class="scoreClass"></div>
+          </div>
+          <span class="score-number" :class="scoreClass">{{ dashboard.sentiment_score }}</span>
+          <span class="score-label">{{ scoreLabel }}</span>
+        </div>
+      </div>
+
+      <!-- 关键要点 (checklist) -->
+      <div v-if="keyPoints.length" class="dashboard-section">
+        <div class="section-title">✅ 关键要点</div>
+        <ul class="key-points-list">
+          <li v-for="(point, idx) in keyPoints" :key="idx" class="key-point-item">
+            {{ point }}
+          </li>
+        </ul>
+      </div>
+
+      <!-- 操作建议 (含价格水平) -->
+      <div v-if="dashboard.operation_advice" class="dashboard-section">
+        <div class="section-title">🎯 操作建议</div>
+        <div class="operation-advice">
+          <template v-if="typeof dashboard.operation_advice === 'string'">
+            <p class="advice-text">{{ dashboard.operation_advice }}</p>
+          </template>
+          <template v-else-if="typeof dashboard.operation_advice === 'object'">
+            <div v-if="dashboard.operation_advice.no_position" class="advice-block">
+              <span class="advice-label">空仓者:</span>
+              <span class="advice-content">{{ dashboard.operation_advice.no_position }}</span>
+            </div>
+            <div v-if="dashboard.operation_advice.has_position" class="advice-block">
+              <span class="advice-label">持仓者:</span>
+              <span class="advice-content">{{ dashboard.operation_advice.has_position }}</span>
+            </div>
+            <div v-if="dashboard.operation_advice.entry_price" class="price-level">
+              入场参考: <strong>{{ dashboard.operation_advice.entry_price }}</strong>
+            </div>
+            <div v-if="dashboard.operation_advice.stop_loss" class="price-level price-level--loss">
+              止损位: <strong>{{ dashboard.operation_advice.stop_loss }}</strong>
+            </div>
+            <div v-if="dashboard.operation_advice.take_profit" class="price-level price-level--profit">
+              止盈位: <strong>{{ dashboard.operation_advice.take_profit }}</strong>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 详细指标数值表 -->
+      <div v-if="dashboard.dashboard && typeof dashboard.dashboard === 'object'" class="dashboard-section">
+        <div class="section-title">📋 指标数据</div>
+        <table class="indicators-table">
+          <tbody>
+            <tr v-for="(value, key) in flatIndicators" :key="key">
+              <td class="indicator-key">{{ key }}</td>
+              <td class="indicator-value">{{ value }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- 市场环境 -->
@@ -85,13 +149,42 @@
       <!-- 策略意见 -->
       <div v-if="dashboard.skill_opinions?.length" class="dashboard-section">
         <div class="section-title">🎯 策略评估</div>
-        <div class="skill-opinions">
-          <div v-for="(skill, idx) in dashboard.skill_opinions" :key="idx" class="skill-item">
-            <span class="skill-name">{{ skill.skill_name }}</span>
-            <span class="skill-signal" :class="`signal--${skill.signal}`">{{ signalLabel(skill.signal) }}</span>
-            <span class="skill-obs">{{ skill.key_observation }}</span>
-          </div>
-        </div>
+        <table class="strategy-compare-table">
+          <thead>
+            <tr>
+              <th>策略</th>
+              <th>信号</th>
+              <th>置信度</th>
+              <th>核心观察</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(skill, idx) in dashboard.skill_opinions" :key="idx">
+              <td class="skill-name-cell">{{ skill.skill_name }}</td>
+              <td><span class="skill-signal" :class="`signal--${skill.signal}`">{{ signalLabel(skill.signal) }}</span></td>
+              <td>{{ skill.confidence != null ? (skill.confidence * 100).toFixed(0) + '%' : '-' }}</td>
+              <td class="skill-obs-cell">{{ skill.key_observation }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 风险警告 -->
+      <div v-if="dashboard.risk_warning" class="dashboard-section risk-warning-section">
+        <div class="section-title">⚠️ 风险警告</div>
+        <div class="risk-warning-text">{{ dashboard.risk_warning }}</div>
+      </div>
+
+      <!-- 相关新闻 -->
+      <div v-if="newsItems.length" class="dashboard-section">
+        <div class="section-title">📰 相关新闻</div>
+        <ul class="news-list">
+          <li v-for="(item, idx) in newsItems" :key="idx" class="news-item">
+            <span class="news-impact" :class="`news-impact--${item.impact}`">●</span>
+            <a v-if="item.url" :href="item.url" target="_blank" rel="noopener" class="news-link">{{ item.title }}</a>
+            <span v-else class="news-title-text">{{ item.title }}</span>
+          </li>
+        </ul>
       </div>
 
       <!-- 操作按钮 -->
@@ -108,9 +201,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DashboardData } from '../../service/chatService'
 
-defineProps<{
+const props = defineProps<{
   dashboard: DashboardData
 }>()
 
@@ -118,6 +212,62 @@ defineEmits<{
   'annotate': []
   'chat': []
 }>()
+
+// 关键要点列表
+const keyPoints = computed(() => {
+  const kp = (props.dashboard as any).key_points
+  if (!kp) return []
+  if (Array.isArray(kp)) return kp
+  if (typeof kp === 'string') return kp.split('\n').filter((s: string) => s.trim())
+  return []
+})
+
+// 评分等级
+const scoreClass = computed(() => {
+  const score = (props.dashboard as any).sentiment_score
+  if (score == null) return ''
+  if (score >= 70) return 'score--high'
+  if (score >= 40) return 'score--mid'
+  return 'score--low'
+})
+
+const scoreLabel = computed(() => {
+  const score = (props.dashboard as any).sentiment_score
+  if (score == null) return ''
+  if (score >= 80) return '强烈看多'
+  if (score >= 60) return '看多'
+  if (score >= 40) return '中性'
+  if (score >= 20) return '看空'
+  return '强烈看空'
+})
+
+// 扁平化指标数据
+const flatIndicators = computed(() => {
+  const d = (props.dashboard as any).dashboard
+  if (!d || typeof d !== 'object') return {}
+  const result: Record<string, string> = {}
+  for (const [key, val] of Object.entries(d)) {
+    if (val != null && typeof val !== 'object') {
+      result[key] = String(val)
+    }
+  }
+  return result
+})
+
+// 新闻列表 — 从 intelligence.key_news 或顶层 key_news 中提取
+const newsItems = computed(() => {
+  const d = props.dashboard as any
+  const raw = d?.intelligence?.key_news || d?.key_news
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((item: any) => item && item.title)
+    .slice(0, 8)
+    .map((item: any) => ({
+      title: item.title,
+      impact: item.impact || 'neutral',
+      url: item.url || '',
+    }))
+})
 
 function signalLabel(signal: string) {
   const map: Record<string, string> = { buy: '买入', sell: '卖出', hold: '持有', alert: '警戒' }
@@ -396,5 +546,211 @@ function sentimentLabel(sentiment?: string) {
 .action-btn:hover {
   background: #2d4f6a;
   border-color: #4a7fa0;
+}
+
+/* ===== 评分仪表 ===== */
+.score-gauge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-bar {
+  flex: 1;
+  height: 8px;
+  background: #252525;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.score-fill.score--high { background: #52c41a; }
+.score-fill.score--mid { background: #faad14; }
+.score-fill.score--low { background: #ff4d4f; }
+
+.score-number {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 32px;
+}
+
+.score-number.score--high { color: #52c41a; }
+.score-number.score--mid { color: #faad14; }
+.score-number.score--low { color: #ff4d4f; }
+
+.score-label {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ===== 关键要点 ===== */
+.key-points-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.key-point-item {
+  padding: 4px 0;
+  font-size: 13px;
+  color: #d0d0d0;
+  line-height: 1.5;
+}
+
+.key-point-item::before {
+  content: '✓ ';
+  color: #52c41a;
+}
+
+/* ===== 操作建议 ===== */
+.operation-advice {
+  font-size: 13px;
+  color: #d0d0d0;
+}
+
+.advice-text {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.advice-block {
+  margin-bottom: 6px;
+}
+
+.advice-label {
+  color: #7ec8e3;
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.advice-content {
+  color: #d0d0d0;
+}
+
+.price-level {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.price-level strong {
+  color: #7ec8e3;
+}
+
+.price-level--loss strong { color: #ff4d4f; }
+.price-level--profit strong { color: #52c41a; }
+
+/* ===== 指标数据表 ===== */
+.indicators-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.indicators-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #2a3a4a;
+}
+
+.indicator-key {
+  color: #888;
+  width: 40%;
+}
+
+.indicator-value {
+  color: #d0d0d0;
+}
+
+/* ===== 策略对比表 ===== */
+.strategy-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.strategy-compare-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: #888;
+  border-bottom: 1px solid #2a3a4a;
+  font-weight: 500;
+}
+
+.strategy-compare-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1f2f3f;
+  color: #d0d0d0;
+}
+
+.skill-name-cell {
+  font-weight: 500;
+  color: #7ec8e3;
+}
+
+.skill-obs-cell {
+  color: #aaa;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 风险警告 ===== */
+.risk-warning-section {
+  border: 1px solid #5a3000;
+  border-radius: 6px;
+  background: rgba(250, 173, 20, 0.05);
+}
+
+.risk-warning-text {
+  font-size: 13px;
+  color: #faad14;
+  line-height: 1.6;
+}
+
+/* ===== 相关新闻 ===== */
+.news-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.news-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.news-impact {
+  font-size: 8px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.news-impact--positive { color: #52c41a; }
+.news-impact--negative { color: #ff4d4f; }
+.news-impact--neutral { color: #8c8c8c; }
+
+.news-link {
+  color: #69b1ff;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.news-link:hover {
+  text-decoration: underline;
+  color: #91caff;
+}
+
+.news-title-text {
+  color: #b8d4e8;
 }
 </style>

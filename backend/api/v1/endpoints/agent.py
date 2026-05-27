@@ -450,15 +450,18 @@ async def agent_chat_stream(request: ChatRequest):
                 progress_callback=progress_callback,
                 context=stream_ctx,
             )
+            done_event = {
+                "type": "done",
+                "success": result.success,
+                "content": result.content,
+                "error": result.error,
+                "total_steps": result.total_steps,
+                "session_id": session_id,
+            }
+            if result.dashboard:
+                done_event["dashboard"] = result.dashboard
             asyncio.run_coroutine_threadsafe(
-                queue.put({
-                    "type": "done",
-                    "success": result.success,
-                    "content": result.content,
-                    "error": result.error,
-                    "total_steps": result.total_steps,
-                    "session_id": session_id,
-                }),
+                queue.put(done_event),
                 loop,
             )
         except Exception as exc:

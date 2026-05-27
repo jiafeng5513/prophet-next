@@ -138,6 +138,16 @@ Additionally, include these extended fields when source data is available:
   }}
 ]
 
+"operation_advice": {{
+  "no_position": "空仓者操作建议 (一句话)",
+  "has_position": "持仓者操作建议 (一句话)",
+  "entry_price": "建议入场价位 (精确数字)",
+  "stop_loss": "止损价位 (精确数字)",
+  "take_profit": "止盈价位 (精确数字)"
+}}
+
+"key_points": ["要点1", "要点2", "要点3"]
+
 Important: ``decision_type`` must stay within the existing enum
 ``buy|hold|sell``. Express stronger conviction via ``confidence_level``,
 ``sentiment_score``, and the natural-language fields instead of inventing

@@ -23,50 +23,45 @@ LEGACY_STRATEGY_AGENT_PREFIX = "strategy_"
 SKILL_CONSENSUS_AGENT_NAME = "skill_consensus"
 LEGACY_STRATEGY_CONSENSUS_AGENT_NAME = "strategy_consensus"
 
-CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线（必须严格遵守）
+CORE_TRADING_SKILL_POLICY_ZH = """## 默认技能基线（中性策略，无方向性偏见）
 
-当前激活的 skills 可以补充细化分析视角，但默认风险控制和交易节奏必须遵守以下基线。
+当前未激活特定交易技能时，分析应遵循以下中性基线。
 
-### 1. 严进策略（不追高）
-- **绝对不追高**：当股价偏离 MA5 超过 5% 时，坚决不买入
-- 乖离率 < 2%：最佳买点区间
-- 乖离率 2-5%：可小仓介入
-- 乖离率 > 5%：严禁追高！直接判定为"观望"
+### 1. 客观分析（不预设立场）
+- 综合评估多空双方力量，不预设看多或看空
+- 根据实际技术指标和市场数据得出结论
+- 明确区分"趋势向上"、"横盘震荡"、"趋势向下"三种状态
 
-### 2. 趋势交易（顺势而为）
-- **多头排列必须条件**：MA5 > MA10 > MA20
-- 只做多头排列的股票，空头排列坚决不碰
-- 均线发散上行优于均线粘合
+### 2. 关键指标观察
+- **均线系统**：观察 MA5/MA10/MA20 排列方向
+- **量能特征**：放量/缩量与价格方向的配合关系
+- **支撑阻力**：识别关键价格位置
 
-### 3. 效率优先（筹码结构）
-- 关注筹码集中度：90%集中度 < 15% 表示筹码集中
-- 获利比例分析：70-90% 获利盘时需警惕获利回吐
-- 平均成本与现价关系：现价高于平均成本 5-15% 为健康
+### 3. 风险优先
+- 任何建议必须附带风险提示和止损参考
+- 不明朗时明确建议"观望"
+- 高位股与低位股适用不同风险评估标准
 
-### 4. 买点偏好（回踩支撑）
-- **最佳买点**：缩量回踩 MA5 获得支撑
-- **次优买点**：回踩 MA10 获得支撑
-- **观望情况**：跌破 MA20 时观望
+### 4. 信号确认
+- 单一指标不构成交易信号
+- 需要至少两个维度（趋势+量能 / 趋势+形态）互相印证
+- 强调"等待确认"而非"预测抢跑"
 
-### 5. 风险排查重点
-- 减持公告、业绩预亏、监管处罚、行业政策利空、大额解禁
-
-### 6. 估值关注（PE/PB）
-- PE 明显偏高时需在风险点中说明
-
-### 7. 强势趋势股放宽
-- 强势趋势股可适当放宽乖离率要求，轻仓追踪但需设止损
+### 5. 估值与基本面提示
+- PE/PB 明显异常时应在风险点中说明
+- 重大公告（减持、业绩预亏、监管处罚）需优先排查
 """
 
-TECHNICAL_SKILL_RULES_EN = """## Default Skill Baseline
+TECHNICAL_SKILL_RULES_EN = """## Default Skill Baseline (Neutral)
 
-Treat the currently activated skills as the primary analysis lens, but keep the
-following default risk controls as the shared baseline:
+When no specific skill is activated, apply neutral technical analysis:
 
-- Bullish alignment: MA5 > MA10 > MA20
-- Bias from MA5 < 2% -> ideal buy zone; 2-5% -> small position; > 5% -> no chase
-- Shrink-pullback to MA5 is the preferred entry rhythm
-- Below MA20 -> hold off unless the active skill explicitly proves a better setup
+- Observe MA5/MA10/MA20 alignment without assuming bullish direction
+- Identify the current market regime: trending_up, trending_down, or sideways
+- Note support and resistance levels based on price structure
+- Volume-price divergence or confirmation as secondary signal
+- Report findings objectively — do not bias toward buy or sell
+- When signals are mixed or unclear, recommend "hold/observe"
 """
 
 
@@ -188,10 +183,7 @@ def _pick_primary_default_skill_id(candidates: List[object]) -> str:
     if preferred:
         return preferred[0]
 
-    fallback = [str(getattr(skill, "name", "")).strip() for skill in candidates]
-    if fallback:
-        return fallback[0]
-
+    # 无 default_active 的技能时，返回空 → 前端显示"无偏见（中性分析）"
     return ""
 
 
@@ -228,11 +220,8 @@ def get_default_router_skill_ids(
     if preferred:
         return _slice_skill_ids(preferred, max_count)
 
-    return get_default_active_skill_ids(
-        candidates,
-        max_count=max_count,
-        available_skill_ids=normalized_available,
-    )
+    # P2: 无 default_router 标记的技能时返回空列表（中性化）
+    return []
 
 
 def get_regime_skill_ids(

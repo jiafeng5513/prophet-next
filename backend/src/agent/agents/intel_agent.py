@@ -79,7 +79,7 @@ Return **only** a JSON object:
   "sentiment_label": "very_positive|positive|neutral|negative|very_negative",
   "capital_flow_signal": "inflow|outflow|neutral|not_available",
   "key_news": [
-    {"title": "...", "impact": "positive|negative|neutral"}
+    {"title": "...", "impact": "positive|negative|neutral", "url": "source_url_if_available"}
   ],
   "market_context": {
     "index_trend": "up|sideways|down",

@@ -148,8 +148,8 @@ export function useChatStream() {
         if (event.data.dashboard) {
           result.value.dashboard = event.data.dashboard as DashboardData
         }
-        // Final content (if provided as whole)
-        if (event.data.content && !result.value.content) {
+        // Final content (if provided as whole) — skip when dashboard is present to avoid raw JSON display
+        if (event.data.content && !result.value.content && !event.data.dashboard) {
           result.value.content = event.data.content as string
         }
         break

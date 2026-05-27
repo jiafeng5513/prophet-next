@@ -4,6 +4,7 @@
       📤 导出
     </button>
     <div class="export-menu" v-if="showMenu">
+      <button class="export-option" @click="exportPDF">📄 PDF 报告</button>
       <button class="export-option" @click="exportMarkdown">📝 Markdown</button>
       <button class="export-option" @click="copyToClipboard">📋 复制文本</button>
       <button class="export-option" @click="exportJSON">💾 JSON 数据</button>
@@ -74,6 +75,18 @@ function buildMarkdownReport(): string {
     lines.push('')
   }
 
+  // 相关新闻
+  const newsItems = d.intelligence?.key_news || d.key_news
+  if (Array.isArray(newsItems) && newsItems.length) {
+    lines.push(`## 相关新闻`)
+    newsItems.forEach((item: any) => {
+      const prefix = item.impact === 'positive' ? '🟢' : item.impact === 'negative' ? '🔴' : '⚪'
+      const link = item.url ? ` [链接](${item.url})` : ''
+      lines.push(`- ${prefix} ${item.title}${link}`)
+    })
+    lines.push('')
+  }
+
   lines.push(`---`)
   lines.push(`*生成时间: ${new Date().toLocaleString('zh-CN')}*`)
 
@@ -84,6 +97,47 @@ function exportMarkdown() {
   const content = buildMarkdownReport()
   downloadFile(`${props.stockCode}_analysis.md`, content, 'text/markdown')
   showMenu.value = false
+}
+
+async function exportPDF() {
+  const markdown = buildMarkdownReport()
+  const html = buildPDFHtml(markdown)
+  if (window.electronAPI?.exportPDF) {
+    await window.electronAPI.exportPDF(html, `${props.stockCode}_analysis.pdf`)
+  } else {
+    // 浏览器环境 fallback: 打开新窗口打印
+    const w = window.open('', '_blank')
+    if (w) {
+      w.document.write(html)
+      w.document.close()
+      w.print()
+    }
+  }
+  showMenu.value = false
+}
+
+function buildPDFHtml(markdown: string): string {
+  // 简单的 Markdown → HTML 转换（仅处理常用标记）
+  let body = markdown
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^- \*\*(.+?)\*\*: (.+)$/gm, '<li><strong>$1</strong>: $2</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^---$/gm, '<hr/>')
+    .replace(/\n{2,}/g, '<br/><br/>')
+    .replace(/\n/g, '<br/>')
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; padding: 40px; color: #333; line-height: 1.8; }
+  h1 { font-size: 20px; border-bottom: 2px solid #1890ff; padding-bottom: 8px; }
+  h2 { font-size: 16px; color: #1890ff; margin-top: 20px; }
+  li { margin: 4px 0; list-style: disc; margin-left: 20px; }
+  hr { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+  em { color: #888; font-size: 12px; }
+</style></head><body>${body}</body></html>`
 }
 
 async function copyToClipboard() {

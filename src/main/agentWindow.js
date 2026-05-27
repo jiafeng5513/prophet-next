@@ -60,7 +60,7 @@ function toggleAgentWindow(options = {}) {
  * 打开 Agent Window
  * @param {{ symbol?: string, mode?: string, sessionId?: string }} options
  */
-function openAgentWindow(options = {}) {
+export function openAgentWindow(options = {}) {
   if (agentWindow && !agentWindow.isDestroyed()) {
     agentWindow.focus()
     return

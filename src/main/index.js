@@ -25,7 +25,7 @@ import { spawn, spawnSync } from 'child_process'
 import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/hivelogic_logo.png?asset'
 import terminalManager from './terminalManager'
-import { initAgentWindowIPC } from './agentWindow'
+import { initAgentWindowIPC, openAgentWindow } from './agentWindow'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
 function decodeOutput(buffer) {
@@ -1022,6 +1022,9 @@ function switchMode(newMode) {
     }
     newActiveViewId = state.viewId
   } else if (newMode === 'market_analyze') {
+    // P1: 市场分析能力已迁移至 Agent Window
+    openAgentWindow({ mode: 'deep' })
+    // 仍维持 stock-analysis 视图作为兼容兜底
     const state = modeState.market_analyze
     if (!state.viewId) {
       state.viewId = createView('stock-analysis')
@@ -1505,6 +1508,32 @@ ipcMain.handle('save-file', (event, filePath, content) => {
     return { success: true }
   } catch (e) {
     return { success: false, error: e.message }
+  }
+})
+
+// 导出 PDF — 利用隐藏窗口 printToPDF
+ipcMain.handle('export-pdf', async (_event, { html, defaultFileName }) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '导出 PDF',
+    defaultPath: defaultFileName || 'analysis_report.pdf',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  })
+  if (result.canceled || !result.filePath) return { success: false }
+
+  const pdfWin = new BrowserWindow({ show: false, width: 800, height: 1200 })
+  try {
+    await pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    const pdfBuffer = await pdfWin.webContents.printToPDF({
+      printBackground: true,
+      marginType: 1, // minimum margins
+      pageSize: 'A4'
+    })
+    writeFileSync(result.filePath, pdfBuffer)
+    return { success: true, path: result.filePath }
+  } catch (e) {
+    return { success: false, error: e.message }
+  } finally {
+    pdfWin.destroy()
   }
 })
 

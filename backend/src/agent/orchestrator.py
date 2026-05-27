@@ -324,25 +324,33 @@ class AgentOrchestrator:
         Conversation history is managed externally by the caller (via
         ``conversation_manager``); the orchestrator focuses on multi-agent
         coordination.
+
+        When ``self.mode`` is 'quick' or 'deep' and the session has no prior
+        history, the pipeline produces a structured dashboard (same as
+        ``run()``) so that the frontend can render the Decision Dashboard.
         """
         from src.agent.executor import AgentResult
         from src.agent.conversation import conversation_manager
 
         ctx = self._build_context(message, context)
         ctx.session_id = session_id
-        ctx.meta["response_mode"] = "chat"
 
         session = conversation_manager.get_or_create(session_id)
         history = session.get_history()
         if history:
             ctx.meta["conversation_history"] = history
 
+        # Determine response mode: first analysis in quick/deep → dashboard;
+        # follow-up or pure chat → free-form text.
+        use_dashboard = self.mode in ("quick", "deep") and not history
+        ctx.meta["response_mode"] = "dashboard" if use_dashboard else "chat"
+
         # Persist user turn
         conversation_manager.add_message(session_id, "user", message)
 
         orch_result = self._execute_pipeline(
             ctx,
-            parse_dashboard=False,
+            parse_dashboard=use_dashboard,
             progress_callback=progress_callback,
         )
 
@@ -1230,6 +1238,12 @@ class AgentOrchestrator:
             intelligence["positive_catalysts"] = positive_catalysts
         if latest_news and not intelligence.get("latest_news"):
             intelligence["latest_news"] = latest_news
+
+        # 从 intel_opinion 中补充 key_news（含 url）
+        intel_opinion = ctx.get_data("intel_opinion")
+        if intel_opinion and isinstance(intel_opinion, dict):
+            if not intelligence.get("key_news") and intel_opinion.get("key_news"):
+                intelligence["key_news"] = intel_opinion["key_news"]
 
         if not core.get("one_sentence"):
             core["one_sentence"] = _truncate_text(analysis_summary, 60)

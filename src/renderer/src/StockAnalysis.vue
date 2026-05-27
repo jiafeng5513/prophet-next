@@ -83,7 +83,7 @@
       <!-- 内容区 -->
       <div class="main-view-content content-area">
         <!-- 欢迎页 -->
-        <div v-if="!reportData && !analyzing && !agentStreaming && !agentDashboard" class="welcome">
+        <div v-if="!reportData && !analyzing && !agentStreaming && !agentDashboard && !agentFallbackContent" class="welcome">
           <div class="welcome-icon">📊</div>
           <h2>股票智能分析</h2>
           <p>输入股票代码或名称，AI 将从技术面、基本面、舆情等多维度进行深度分析</p>
@@ -138,6 +138,22 @@
             :items="compareItems"
             @close="compareItems = []"
           />
+        </div>
+
+        <!-- Agent 分析结果降级显示 (无 dashboard 但有 content) -->
+        <div v-if="!agentDashboard && agentFallbackContent && !agentStreaming" class="report-container">
+          <div class="report-header">
+            <h2>
+              {{ reportStockCode }}
+              <span v-if="reportStockName">{{ reportStockName }}</span>
+            </h2>
+            <div class="report-header-actions">
+              <span class="analysis-mode-badge fallback">⚠️ 文本模式</span>
+            </div>
+          </div>
+          <div class="agent-fallback-content">
+            <StreamRenderer :content="agentFallbackContent" :streaming="false" />
+          </div>
         </div>
 
         <!-- 分析进度 (传统任务模式兜底) -->
@@ -308,12 +324,13 @@ let dsaPort = 8100
 const analysisMode = ref('deep') // 'quick' | 'deep'
 const rightPanelVisible = ref(true)
 const agentDashboard = ref(null)
+const agentFallbackContent = ref('') // 降级内容：无 dashboard 时的 markdown 输出
 const { state: agentState, result: agentStreamResult, error: agentError, send: agentSend, abort: agentAbort } = useChatStream()
 const agentStreaming = computed(() =>
   agentState.value !== 'idle' && agentState.value !== 'done' && agentState.value !== 'error'
 )
 const showRightPanel = computed(() =>
-  rightPanelVisible.value && (agentStreaming.value || agentDashboard.value)
+  rightPanelVisible.value && (agentStreaming.value || agentDashboard.value || agentFallbackContent.value)
 )
 
 // 监听 agent stream 完成 → 提取 dashboard
@@ -321,6 +338,11 @@ watch(agentState, (newState) => {
   if (newState === 'done') {
     if (agentStreamResult.value.dashboard) {
       agentDashboard.value = agentStreamResult.value.dashboard
+      reportStockCode.value = currentStockCode.value
+      reportStockName.value = currentStockName.value
+    } else if (agentStreamResult.value.content) {
+      // 降级逻辑：后端未返回 dashboard 但有 content，仍保留内容供 StreamRenderer 显示
+      agentFallbackContent.value = agentStreamResult.value.content
       reportStockCode.value = currentStockCode.value
       reportStockName.value = currentStockName.value
     }
@@ -459,6 +481,7 @@ async function handleAnalyze() {
   reportSections.value = []
   newsItems.value = []
   agentDashboard.value = null
+  agentFallbackContent.value = ''
   rightPanelVisible.value = true
 
   // 使用 Agent 管道 (useChatStream) 进行分析
@@ -477,6 +500,7 @@ function onFollowUpSend(text) {
     symbol: currentStockCode.value
   })
   agentDashboard.value = null
+  agentFallbackContent.value = ''
   rightPanelVisible.value = true
 }
 
@@ -1532,5 +1556,17 @@ onUnmounted(() => {
   max-width: 800px;
   margin: 16px auto 0;
   padding: 0 32px;
+}
+
+/* ===== Agent 降级内容区 ===== */
+.agent-fallback-content {
+  max-width: 800px;
+  margin: 16px auto 0;
+  padding: 16px 32px;
+}
+
+.analysis-mode-badge.fallback {
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
 }
 </style>

@@ -15,10 +15,17 @@
         </button>
       </div>
       <div v-if="skills.length" class="skill-selector" @click="showSkillDropdown = !showSkillDropdown">
-        <span class="skill-label">{{ selectedSkillName || '技能' }}</span>
+        <span class="skill-label">{{ selectedSkillName || '⚖️ 无偏见' }}</span>
         <span class="skill-arrow">▾</span>
         <!-- 技能下拉 -->
         <div v-if="showSkillDropdown" class="skill-dropdown">
+          <div
+            class="skill-option neutral-hint"
+            :class="{ selected: selectedSkills.length === 0 }"
+            @click.stop="$emit('skill-toggle', '')"
+          >
+            <span class="skill-option-name">⚖️ 无偏见（中性分析）</span>
+          </div>
           <div
             v-for="skill in skills"
             :key="skill.id"
@@ -247,6 +254,12 @@ defineExpose({ focus })
 .skill-option.selected {
   background: #1a3a5c;
   color: #7ec8e3;
+}
+
+.skill-option.neutral-hint {
+  border-bottom: 1px solid #333;
+  color: #999;
+  font-style: italic;
 }
 
 .chat-input-wrapper {

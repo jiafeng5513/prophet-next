@@ -101,6 +101,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteItem: (targetPath) => ipcRenderer.invoke('delete-item', targetPath),
   moveItem: (srcPath, destDir) => ipcRenderer.invoke('move-item', srcPath, destDir),
   saveFile: (filePath, content) => ipcRenderer.invoke('save-file', filePath, content),
+  exportPDF: (html, defaultFileName) => ipcRenderer.invoke('export-pdf', { html, defaultFileName }),
 
   // DSA (daily_stock_analysis) 集成
   getDsaConfig: () => ipcRenderer.invoke('get-dsa-config'),

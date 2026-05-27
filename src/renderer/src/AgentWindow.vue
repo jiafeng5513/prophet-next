@@ -13,13 +13,24 @@
         </div>
       </div>
       <div class="toolbar-right">
+        <button class="toolbar-btn" title="历史会话" @click="showSessions = !showSessions">☰</button>
         <button class="toolbar-btn" @click="newChat" title="新对话">🗑️</button>
         <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
       </div>
     </div>
 
+    <!-- 会话列表 -->
+    <SessionList
+      v-if="showSessions"
+      :sessions="sessions"
+      :current-session-id="currentSessionId"
+      @close="showSessions = false"
+      @switch="onSwitchSession"
+      @delete="onDeleteSession"
+    />
+
     <!-- 主内容区 -->
-    <div class="agent-window__body" ref="bodyRef">
+    <div class="agent-window__body" ref="bodyRef" v-show="!showSessions">
       <!-- Agent 进度 (quick/deep 模式) -->
       <AgentProgress
         v-if="showProgress"
@@ -49,8 +60,8 @@
             <!-- 风险讨论 -->
             <RiskDebatePanel v-if="msg.metadata?.riskDebate" :risk-debate="msg.metadata.riskDebate" />
 
-            <!-- 正文 -->
-            <StreamRenderer :content="msg.content" />
+            <!-- 正文（dashboard 已有时不重复渲染 JSON） -->
+            <StreamRenderer v-if="!msg.metadata?.dashboard" :content="msg.content" />
 
             <!-- 结果 Dashboard -->
             <DashboardResult
@@ -59,6 +70,18 @@
               @annotate="onAnnotate(msg)"
               @chat="onContinueChat"
             />
+            <!-- 雷达图 & 导出 -->
+            <div v-if="msg.metadata?.dashboard" class="aw-dashboard-extras">
+              <AnalysisRadar
+                v-if="getRadarDimensions(msg.metadata.dashboard).length >= 3"
+                :dimensions="getRadarDimensions(msg.metadata.dashboard)"
+              />
+              <AnalysisExport
+                :dashboard="msg.metadata.dashboard"
+                :stock-code="symbolInput"
+                :stock-name="''"
+              />
+            </div>
           </div>
         </template>
 
@@ -79,6 +102,13 @@
           @execute="onPlanExecute"
           @modify="onPlanModify"
           @cancel="onPlanCancel"
+        />
+
+        <!-- 多股票对比分析 -->
+        <CompareAnalysis
+          v-if="compareItems.length > 1"
+          :items="compareItems"
+          @close="compareItems = []"
         />
       </div>
     </div>
@@ -112,6 +142,10 @@ import StreamRenderer from './components/agent/StreamRenderer.vue'
 import DashboardResult from './components/agent/DashboardResult.vue'
 import PlanCard from './components/agent/PlanCard.vue'
 import ChatInput from './components/sidebar/ChatInput.vue'
+import SessionList from './components/sidebar/SessionList.vue'
+import AnalysisRadar from './components/analysis/AnalysisRadar.vue'
+import AnalysisExport from './components/analysis/AnalysisExport.vue'
+import CompareAnalysis from './components/analysis/CompareAnalysis.vue'
 import { useChat } from './composables/useChat'
 import type { ChatMode, ChatMessage } from './service/chatService'
 import { annotateFromDashboard } from './service/annotationService'
@@ -128,6 +162,8 @@ const allowedModes: ChatMode[] = ['chat', 'quick', 'deep']
 
 const {
   messages,
+  sessions,
+  currentSessionId,
   currentMode,
   skills,
   selectedSkills,
@@ -138,7 +174,9 @@ const {
   sendMessage,
   stopStreaming,
   setMode,
-  newChat
+  newChat,
+  switchSession,
+  removeSession
 } = useChat({
   defaultMode: 'chat',
   allowedModes,
@@ -148,6 +186,8 @@ const {
 const bodyRef = ref<HTMLElement | null>(null)
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 const symbolInput = ref('')
+const showSessions = ref(false)
+const compareItems = ref<Array<{ code: string; dashboard: Record<string, unknown> }>>([])
 
 // Plan 模式状态
 const pendingPlan = ref<{ steps: { description: string; done?: boolean; running?: boolean }[]; estimated_time?: string; estimated_tokens?: number } | null>(null)
@@ -179,8 +219,15 @@ onMounted(() => {
   }
 })
 
-// 自动滚动
-watch([() => messages.value.length, () => streamResult.value.content], () => {
+// 自动滚动 — 监听所有可能导致内容变化的数据源
+const _scrollTrigger = computed(() => [
+  messages.value.length,
+  streamResult.value.content,
+  streamResult.value.thinking,
+  streamResult.value.stages.length,
+  streamResult.value.tools.length,
+])
+watch(_scrollTrigger, () => {
   nextTick(() => {
     if (bodyRef.value) {
       bodyRef.value.scrollTop = bodyRef.value.scrollHeight
@@ -248,6 +295,59 @@ function onPlanCancel() {
   pendingPlan.value = null
   stopStreaming()
 }
+
+// ==================== 会话管理 ====================
+function onSwitchSession(sessionId: string) {
+  switchSession(sessionId)
+  showSessions.value = false
+}
+
+function onDeleteSession(sessionId: string) {
+  removeSession(sessionId)
+}
+
+// ==================== 雷达图维度提取 ====================
+function getRadarDimensions(dashboard: Record<string, unknown>) {
+  const dims: { key: string; label: string; value: number }[] = []
+  const d = dashboard as Record<string, any>
+  if (d.confidence != null) dims.push({ key: 'confidence', label: '置信度', value: Math.round(d.confidence * 100) })
+  if (d.market_context) {
+    const mc = d.market_context
+    if (mc.strength) {
+      const strengthMap: Record<string, number> = { strong: 80, moderate: 55, weak: 30 }
+      dims.push({ key: 'strength', label: '趋势', value: strengthMap[mc.strength] || 50 })
+    }
+    if (mc.sentiment) {
+      const sentMap: Record<string, number> = { bullish: 80, neutral: 50, bearish: 25 }
+      dims.push({ key: 'sentiment', label: '情绪', value: sentMap[mc.sentiment] || 50 })
+    }
+  }
+  if (d.risk_assessment?.max_acceptable_position) {
+    const pos = parseInt(d.risk_assessment.max_acceptable_position)
+    if (!isNaN(pos)) dims.push({ key: 'position', label: '仓位', value: pos })
+  }
+  if (d.debate_summary?.confidence_shift != null) {
+    dims.push({ key: 'debate', label: '辩论', value: Math.min(100, Math.max(0, 50 + d.debate_summary.confidence_shift * 50)) })
+  }
+  if (d.skill_opinions?.length) {
+    const buyCount = d.skill_opinions.filter((s: any) => ['buy', '买入'].includes(s.signal)).length
+    dims.push({ key: 'skills', label: '策略', value: Math.round((buyCount / d.skill_opinions.length) * 100) })
+  }
+  return dims
+}
+
+// ==================== 对比分析收集 ====================
+watch(
+  () => streamResult.value.dashboard,
+  (dashboard) => {
+    if (dashboard && symbolInput.value) {
+      const existing = compareItems.value.find(i => i.code === symbolInput.value)
+      if (!existing) {
+        compareItems.value.push({ code: symbolInput.value, dashboard: dashboard as Record<string, unknown> })
+      }
+    }
+  }
+)
 </script>
 
 <style scoped>
@@ -372,5 +472,13 @@ function onPlanCancel() {
 
 .agent-window__input {
   flex-shrink: 0;
+}
+
+.aw-dashboard-extras {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 </style>
