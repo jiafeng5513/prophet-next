@@ -31,8 +31,8 @@ export interface UseChatOptions {
 
 export function useChat(options: UseChatOptions = {}) {
   const {
-    defaultMode = 'chat',
-    allowedModes = ['chat', 'quick', 'deep', 'plan'],
+    defaultMode = 'quick',
+    allowedModes = ['quick', 'deep', 'plan'],
     showUpgradeHint = false
   } = options
 
@@ -48,7 +48,7 @@ export function useChat(options: UseChatOptions = {}) {
   const shouldUpgrade = ref(false)
 
   // SSE 流
-  const { state: streamState, result: streamResult, error: streamError, send: streamSend, abort: streamAbort } = useChatStream()
+  const { state: streamState, result: streamResult, error: streamError, send: streamSend, abort: streamAbort, reset: streamReset } = useChatStream()
 
   // ==================== 计算属性 ====================
   const isStreaming = computed(() =>
@@ -122,6 +122,7 @@ export function useChat(options: UseChatOptions = {}) {
     messages.value = []
     currentSessionId.value = null
     shouldUpgrade.value = false
+    streamReset()
   }
 
   // ==================== 发送消息 ====================

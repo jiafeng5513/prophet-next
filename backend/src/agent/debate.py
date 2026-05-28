@@ -94,9 +94,11 @@ class DebateCoordinator:
 
             if progress_callback:
                 progress_callback({
+                    "type": "debate_round",
                     "stage": "debate",
                     "round": round_idx + 1,
                     "total_rounds": self.rounds,
+                    "total": self.rounds,
                     "status": "running",
                 })
 
@@ -118,8 +120,11 @@ class DebateCoordinator:
         logger.info("[Debate] ResearchManager synthesizing verdict")
         if progress_callback:
             progress_callback({
+                "type": "debate_round",
                 "stage": "debate",
-                "status": "research_manager",
+                "round": self.rounds,
+                "total": self.rounds,
+                "status": "completed",
             })
 
         manager_result = run_stage_fn(self.manager, ctx, self.timeout_seconds)

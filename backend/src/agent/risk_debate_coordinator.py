@@ -90,8 +90,10 @@ class RiskDebateCoordinator:
 
         if progress_callback:
             progress_callback({
+                "type": "risk_debate",
                 "stage": "risk_debate",
                 "status": "running",
+                "perspectives": ["aggressive", "conservative", "neutral"],
             })
 
         # 三个视角并行执行
@@ -112,8 +114,9 @@ class RiskDebateCoordinator:
         logger.info("[RiskDebate] RiskManager synthesizing verdict")
         if progress_callback:
             progress_callback({
+                "type": "risk_debate",
                 "stage": "risk_debate",
-                "status": "risk_manager",
+                "status": "completed",
             })
 
         manager_result = run_stage_fn(self.manager, ctx, self.timeout_seconds)

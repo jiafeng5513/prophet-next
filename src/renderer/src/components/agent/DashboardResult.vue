@@ -22,25 +22,27 @@
       </div>
 
       <!-- 评分仪表 -->
-      <div v-if="dashboard.sentiment_score != null" class="dashboard-section">
+      <div class="dashboard-section">
         <div class="section-title">📈 综合评分</div>
-        <div class="score-gauge">
+        <div v-if="dashboard.sentiment_score != null" class="score-gauge">
           <div class="score-bar">
             <div class="score-fill" :style="{ width: Math.min(100, Math.max(0, dashboard.sentiment_score)) + '%' }" :class="scoreClass"></div>
           </div>
           <span class="score-number" :class="scoreClass">{{ dashboard.sentiment_score }}</span>
           <span class="score-label">{{ scoreLabel }}</span>
         </div>
+        <div v-else class="empty-state">暂无数据</div>
       </div>
 
       <!-- 关键要点 (checklist) -->
-      <div v-if="keyPoints.length" class="dashboard-section">
+      <div class="dashboard-section">
         <div class="section-title">✅ 关键要点</div>
-        <ul class="key-points-list">
+        <ul v-if="keyPoints.length" class="key-points-list">
           <li v-for="(point, idx) in keyPoints" :key="idx" class="key-point-item">
             {{ point }}
           </li>
         </ul>
+        <div v-else class="empty-state">暂无数据</div>
       </div>
 
       <!-- 操作建议 (含价格水平) -->
@@ -85,10 +87,44 @@
         </table>
       </div>
 
+      <!-- 资金流向 -->
+      <div v-if="capitalFlow" class="dashboard-section">
+        <div class="section-title">💰 资金流向</div>
+        <div class="capital-flow-indicator" :class="`capital-flow--${capitalFlow.signal}`">
+          <span class="flow-icon">{{ capitalFlow.signal === 'inflow' ? '🔴' : capitalFlow.signal === 'outflow' ? '🟢' : '⚪' }}</span>
+          <span class="flow-label">{{ capitalFlow.label }}</span>
+        </div>
+      </div>
+
+      <!-- 技术指标 MACD / RSI -->
+      <div v-if="technicalIndicators" class="dashboard-section">
+        <div class="section-title">📉 技术指标</div>
+        <div class="tech-indicators-grid">
+          <div class="tech-group">
+            <span class="tech-group-label">MACD</span>
+            <div class="tech-values">
+              <span class="tech-item">DIF: <strong>{{ technicalIndicators.macd_dif ?? '-' }}</strong></span>
+              <span class="tech-item">DEA: <strong>{{ technicalIndicators.macd_dea ?? '-' }}</strong></span>
+              <span class="tech-item">BAR: <strong>{{ technicalIndicators.macd_bar ?? '-' }}</strong></span>
+              <span class="tech-item tech-status" :class="`macd--${technicalIndicators.macd_status}`">{{ technicalIndicators.macd_status }}</span>
+            </div>
+          </div>
+          <div class="tech-group">
+            <span class="tech-group-label">RSI</span>
+            <div class="tech-values">
+              <span class="tech-item">RSI6: <strong>{{ technicalIndicators.rsi_6 ?? '-' }}</strong></span>
+              <span class="tech-item">RSI12: <strong>{{ technicalIndicators.rsi_12 ?? '-' }}</strong></span>
+              <span class="tech-item">RSI24: <strong>{{ technicalIndicators.rsi_24 ?? '-' }}</strong></span>
+              <span class="tech-item tech-status" :class="`rsi--${technicalIndicators.rsi_status}`">{{ technicalIndicators.rsi_status }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 市场环境 -->
-      <div v-if="dashboard.market_context" class="dashboard-section">
+      <div class="dashboard-section">
         <div class="section-title">📊 市场环境</div>
-        <div class="market-context-grid">
+        <div v-if="dashboard.market_context" class="market-context-grid">
           <div class="context-item">
             <span class="context-label">大盘趋势</span>
             <span class="context-value" :class="`trend--${dashboard.market_context.index_trend}`">
@@ -104,6 +140,7 @@
             <span class="context-value">{{ sentimentLabel(dashboard.market_context.market_sentiment) }}</span>
           </div>
         </div>
+        <div v-else class="empty-state">暂无数据</div>
       </div>
 
       <!-- 辩论摘要 -->
@@ -170,9 +207,10 @@
       </div>
 
       <!-- 风险警告 -->
-      <div v-if="dashboard.risk_warning" class="dashboard-section risk-warning-section">
+      <div class="dashboard-section risk-warning-section">
         <div class="section-title">⚠️ 风险警告</div>
-        <div class="risk-warning-text">{{ dashboard.risk_warning }}</div>
+        <div v-if="dashboard.risk_warning" class="risk-warning-text">{{ dashboard.risk_warning }}</div>
+        <div v-else class="empty-state">暂无额外风险提示</div>
       </div>
 
       <!-- 相关新闻 -->
@@ -191,9 +229,6 @@
       <div class="dashboard-actions">
         <button class="action-btn" @click="$emit('annotate')" title="在K线图上标注信号">
           📍 在K线标注
-        </button>
-        <button class="action-btn" @click="$emit('chat')" title="在侧边栏继续追问">
-          💬 继续对话
         </button>
       </div>
     </div>
@@ -252,6 +287,18 @@ const flatIndicators = computed(() => {
     }
   }
   return result
+})
+
+// 资金流向
+const capitalFlow = computed(() => {
+  const d = (props.dashboard as any).dashboard
+  return d?.data_perspective?.capital_flow || null
+})
+
+// 技术指标 (MACD / RSI)
+const technicalIndicators = computed(() => {
+  const d = (props.dashboard as any).dashboard
+  return d?.data_perspective?.technical_indicators || null
 })
 
 // 新闻列表 — 从 intelligence.key_news 或顶层 key_news 中提取
@@ -753,4 +800,91 @@ function sentimentLabel(sentiment?: string) {
 .news-title-text {
   color: #b8d4e8;
 }
+
+/* ===== 空状态 ===== */
+.empty-state {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ===== 资金流向 ===== */
+.capital-flow-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.capital-flow--inflow {
+  background: rgba(82, 196, 26, 0.08);
+  color: #52c41a;
+}
+
+.capital-flow--outflow {
+  background: rgba(255, 77, 79, 0.08);
+  color: #ff4d4f;
+}
+
+.capital-flow--neutral {
+  background: rgba(140, 140, 140, 0.08);
+  color: #aaa;
+}
+
+.flow-icon { font-size: 14px; }
+.flow-label { font-size: 13px; }
+
+/* ===== 技术指标 ===== */
+.tech-indicators-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tech-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tech-group-label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tech-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tech-item {
+  font-size: 12px;
+  color: #bbb;
+}
+
+.tech-item strong {
+  color: #d0d0d0;
+}
+
+.tech-status {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.macd--golden_cross, .macd--bullish { background: #1b4332; color: #52c41a; }
+.macd--death_cross, .macd--bearish { background: #3b1325; color: #ff4d4f; }
+.macd--neutral { background: #2a2a2a; color: #aaa; }
+
+.rsi--overbought { background: #3b1325; color: #ff4d4f; }
+.rsi--oversold { background: #1b4332; color: #52c41a; }
+.rsi--neutral { background: #2a2a2a; color: #aaa; }
 </style>

@@ -56,11 +56,11 @@ VALID_MODES = ("quick", "deep")
 
 # Backward-compatible mapping: old mode names → new canonical modes
 MODE_MAPPING: Dict[str, str] = {
-    # New canonical modes
-    "chat": "chat",
+    # Canonical modes
     "quick": "quick",
     "deep": "deep",
     # Legacy modes (deprecated but still accepted)
+    "chat": "quick",       # chat removed, maps to quick
     "standard": "quick",   # standard → quick (always includes Intel now)
     "full": "deep",        # full → deep
     "specialist": "deep",  # specialist → deep (auto skill selection)
@@ -1294,6 +1294,55 @@ class AgentOrchestrator:
         if not risk_warning:
             risk_warning = "暂无额外风险提示"
 
+        # --- Inject extended fields from ctx if LLM did not output them ---
+
+        # debate_summary: build from debate_history (bull/bear arguments)
+        if not payload.get("debate_summary"):
+            debate_history = ctx.get_data("debate_history")
+            if debate_history and isinstance(debate_history, list):
+                bull = next((d for d in debate_history if d.get("stance") == "bull"), {})
+                bear = next((d for d in debate_history if d.get("stance") == "bear"), {})
+                if bull or bear:
+                    payload["debate_summary"] = {
+                        "bull_core_thesis": bull.get("conclusion", ""),
+                        "bear_core_thesis": bear.get("conclusion", ""),
+                        "manager_verdict": "参见综合评分",
+                        "confidence_shift": "",
+                    }
+
+        # risk_assessment: build from risk_debate_verdict
+        if not payload.get("risk_assessment"):
+            risk_verdict = ctx.get_data("risk_debate_verdict")
+            if risk_verdict and isinstance(risk_verdict, dict):
+                payload["risk_assessment"] = {
+                    "aggressive_view": risk_verdict.get("aggressive_view", ""),
+                    "conservative_view": risk_verdict.get("conservative_view", ""),
+                    "verdict": risk_verdict.get("rationale", ""),
+                    "max_acceptable_position": f"{risk_verdict.get('position_size_pct', 50)}%",
+                }
+
+        # market_context: from Intel Agent
+        if not payload.get("market_context"):
+            mc = ctx.get_data("market_context")
+            if mc and isinstance(mc, dict):
+                payload["market_context"] = mc
+
+        # skill_opinions: from skill agent opinions in ctx
+        if not payload.get("skill_opinions"):
+            skill_ops = [op for op in ctx.opinions if "skill" in op.agent_name]
+            if skill_ops:
+                payload["skill_opinions"] = [
+                    {
+                        "skill_name": op.agent_name.replace("skill_", ""),
+                        "signal": op.signal,
+                        "confidence": op.confidence,
+                        "key_observation": _truncate_text(op.reasoning or "", 100),
+                    }
+                    for op in skill_ops
+                ]
+
+        # --- End extended fields injection ---
+
         payload["stock_name"] = _first_non_empty_text(payload.get("stock_name"), ctx.stock_name, ctx.stock_code)
         payload["sentiment_score"] = sentiment_score
         payload["trend_prediction"] = trend_prediction
@@ -1407,6 +1456,35 @@ class AgentOrchestrator:
                 "concentration": concentration if concentration is not None else "N/A",
                 "chip_health": chip.get("chip_health", "一般"),
             }
+
+        # Capital flow from Intel Agent
+        intel_opinion = ctx.get_data("intel_opinion")
+        if isinstance(intel_opinion, dict):
+            capital_signal = intel_opinion.get("capital_flow_signal")
+            if capital_signal and capital_signal != "not_available":
+                data_perspective["capital_flow"] = {
+                    "signal": capital_signal,
+                    "label": {"inflow": "主力净流入", "outflow": "主力净流出", "neutral": "资金平衡"}.get(
+                        capital_signal, capital_signal
+                    ),
+                }
+
+        # Technical indicators (MACD / RSI) from trend_result or technical opinion
+        trend_data = trend_dict or tech_raw
+        if trend_data:
+            macd_dif = trend_data.get("macd_dif")
+            rsi_6 = trend_data.get("rsi_6")
+            if macd_dif is not None or rsi_6 is not None:
+                data_perspective["technical_indicators"] = {
+                    "macd_dif": _r(trend_data.get("macd_dif")),
+                    "macd_dea": _r(trend_data.get("macd_dea")),
+                    "macd_bar": _r(trend_data.get("macd_bar")),
+                    "macd_status": trend_data.get("macd_status", "N/A"),
+                    "rsi_6": _r(trend_data.get("rsi_6")),
+                    "rsi_12": _r(trend_data.get("rsi_12")),
+                    "rsi_24": _r(trend_data.get("rsi_24")),
+                    "rsi_status": trend_data.get("rsi_status", "N/A"),
+                }
 
         return data_perspective
 

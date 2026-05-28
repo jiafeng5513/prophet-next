@@ -13,104 +13,119 @@
         </div>
       </div>
       <div class="toolbar-right">
-        <button class="toolbar-btn" title="历史会话" @click="showSessions = !showSessions">☰</button>
-        <button class="toolbar-btn" @click="newChat" title="新对话">🗑️</button>
+        <button class="toolbar-btn" @click="newChat" title="新对话">✨</button>
         <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
       </div>
     </div>
 
-    <!-- 会话列表 -->
-    <SessionList
-      v-if="showSessions"
-      :sessions="sessions"
-      :current-session-id="currentSessionId"
-      @close="showSessions = false"
-      @switch="onSwitchSession"
-      @delete="onDeleteSession"
-    />
-
-    <!-- 主内容区 -->
-    <div class="agent-window__body" ref="bodyRef" v-show="!showSessions">
-      <!-- Agent 进度 (quick/deep 模式) -->
-      <AgentProgress
-        v-if="showProgress"
-        :stages="streamResult.stages"
-        :mode="currentMode"
-      />
-
-      <!-- 消息列表 -->
-      <div class="agent-window__messages">
-        <template v-for="msg in messages" :key="msg.id">
-          <!-- 用户消息 -->
-          <div v-if="msg.role === 'user'" class="aw-msg aw-msg--user">
-            <div class="aw-msg__bubble aw-msg__bubble--user">{{ msg.content }}</div>
-          </div>
-
-          <!-- Assistant 消息 -->
-          <div v-else class="aw-msg aw-msg--assistant">
-            <!-- 思考 -->
-            <ThinkingBlock v-if="msg.metadata?.thinking" :content="msg.metadata.thinking" />
-
-            <!-- 工具调用 -->
-            <ToolCallCard v-for="tool in (msg.metadata?.tools || [])" :key="tool.name" :tool="tool" />
-
-            <!-- 辩论面板 -->
-            <DebatePanel v-if="msg.metadata?.debate" :debate="msg.metadata.debate" />
-
-            <!-- 风险讨论 -->
-            <RiskDebatePanel v-if="msg.metadata?.riskDebate" :risk-debate="msg.metadata.riskDebate" />
-
-            <!-- 正文（dashboard 已有时不重复渲染 JSON） -->
-            <StreamRenderer v-if="!msg.metadata?.dashboard" :content="msg.content" />
-
-            <!-- 结果 Dashboard -->
-            <DashboardResult
-              v-if="msg.metadata?.dashboard"
-              :dashboard="msg.metadata.dashboard"
-              @annotate="onAnnotate(msg)"
-              @chat="onContinueChat"
-            />
-            <!-- 雷达图 & 导出 -->
-            <div v-if="msg.metadata?.dashboard" class="aw-dashboard-extras">
-              <AnalysisRadar
-                v-if="getRadarDimensions(msg.metadata.dashboard).length >= 3"
-                :dimensions="getRadarDimensions(msg.metadata.dashboard)"
-              />
-              <AnalysisExport
-                :dashboard="msg.metadata.dashboard"
-                :stock-code="symbolInput"
-                :stock-name="''"
-              />
-            </div>
-          </div>
-        </template>
-
-        <!-- 流式 (正在生成) -->
-        <div v-if="isStreaming" class="aw-msg aw-msg--assistant aw-msg--streaming">
-          <ThinkingBlock v-if="streamResult.thinking" :content="streamResult.thinking" />
-          <ToolCallCard v-for="tool in streamResult.tools" :key="tool.name" :tool="tool" />
-          <DebatePanel v-if="streamResult.debate" :debate="streamResult.debate" />
-          <RiskDebatePanel v-if="streamResult.riskDebate" :risk-debate="streamResult.riskDebate" />
-          <StreamRenderer :content="streamResult.content" :streaming="true" />
+    <!-- 三栏主体 -->
+    <div class="agent-window__content">
+      <!-- 左栏: 历史会话 -->
+      <aside class="agent-window__sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">历史会话</span>
         </div>
+        <div class="sidebar-sessions">
+          <div
+            v-for="session in sessions"
+            :key="session.id"
+            class="session-item"
+            :class="{ active: session.id === currentSessionId }"
+            @click="onSwitchSession(session.id)"
+          >
+            <span class="session-item__title">{{ session.title || '未命名' }}</span>
+            <button class="session-item__delete" @click.stop="onDeleteSession(session.id)" title="删除">×</button>
+          </div>
+          <div v-if="!sessions.length" class="sidebar-empty">暂无历史</div>
+        </div>
+      </aside>
 
-        <!-- Plan 模式: 等待用户确认 -->
-        <PlanCard
-          v-if="pendingPlan"
-          :plan="pendingPlan"
-          :executing="planExecuting"
-          @execute="onPlanExecute"
-          @modify="onPlanModify"
-          @cancel="onPlanCancel"
+      <!-- 中栏: 对话 + 报告 -->
+      <main class="agent-window__main" ref="bodyRef">
+        <div class="agent-window__messages">
+          <template v-for="msg in messages" :key="msg.id">
+            <!-- 用户消息 -->
+            <div v-if="msg.role === 'user'" class="aw-msg aw-msg--user">
+              <div class="aw-msg__bubble aw-msg__bubble--user">{{ msg.content }}</div>
+            </div>
+
+            <!-- Assistant 消息 -->
+            <div v-else class="aw-msg aw-msg--assistant">
+              <!-- 思考 -->
+              <ThinkingBlock v-if="msg.metadata?.thinking" :content="msg.metadata.thinking" />
+
+              <!-- 辩论面板 -->
+              <DebatePanel v-if="msg.metadata?.debate" :debate="msg.metadata.debate" />
+
+              <!-- 风险讨论 -->
+              <RiskDebatePanel v-if="msg.metadata?.riskDebate" :risk-debate="msg.metadata.riskDebate" />
+
+              <!-- 正文（dashboard 已有时不重复渲染 JSON） -->
+              <StreamRenderer v-if="!msg.metadata?.dashboard" :content="msg.content" />
+
+              <!-- 结果 Dashboard -->
+              <DashboardResult
+                v-if="msg.metadata?.dashboard"
+                :dashboard="msg.metadata.dashboard"
+                @annotate="onAnnotate(msg)"
+              />
+              <!-- 雷达图 & 导出 -->
+              <div v-if="msg.metadata?.dashboard" class="aw-dashboard-extras">
+                <AnalysisRadar
+                  v-if="getRadarDimensions(msg.metadata.dashboard).length >= 3"
+                  :dimensions="getRadarDimensions(msg.metadata.dashboard)"
+                />
+                <AnalysisExport
+                  :dashboard="msg.metadata.dashboard"
+                  :stock-code="symbolInput"
+                  :stock-name="''"
+                />
+              </div>
+            </div>
+          </template>
+
+          <!-- 流式 (正在生成) -->
+          <div v-if="isStreaming" class="aw-msg aw-msg--assistant aw-msg--streaming">
+            <ThinkingBlock v-if="streamResult.thinking" :content="streamResult.thinking" />
+            <DebatePanel v-if="streamResult.debate" :debate="streamResult.debate" />
+            <RiskDebatePanel v-if="streamResult.riskDebate" :risk-debate="streamResult.riskDebate" />
+            <StreamRenderer :content="streamResult.content" :streaming="true" />
+          </div>
+
+          <!-- Plan 模式: 等待用户确认 -->
+          <PlanCard
+            v-if="pendingPlan"
+            :plan="pendingPlan"
+            :executing="planExecuting"
+            @execute="onPlanExecute"
+            @modify="onPlanModify"
+            @cancel="onPlanCancel"
+          />
+
+          <!-- 多股票对比分析 -->
+          <CompareAnalysis
+            v-if="compareItems.length > 1"
+            :items="compareItems"
+            @close="compareItems = []"
+          />
+        </div>
+      </main>
+
+      <!-- 右栏: 分析进度 + 工具调用 -->
+      <aside class="agent-window__panel" v-show="showRightPanel">
+        <!-- Agent 进度 -->
+        <AgentProgress
+          v-if="showProgress"
+          :stages="streamResult.stages"
+          :mode="currentMode"
         />
 
-        <!-- 多股票对比分析 -->
-        <CompareAnalysis
-          v-if="compareItems.length > 1"
-          :items="compareItems"
-          @close="compareItems = []"
-        />
-      </div>
+        <!-- 实时工具调用 -->
+        <div v-if="streamResult.tools.length" class="panel-section">
+          <div class="panel-section__title">工具调用</div>
+          <ToolCallCard v-for="tool in streamResult.tools" :key="tool.name" :tool="tool" />
+        </div>
+      </aside>
     </div>
 
     <!-- 输入区 -->
@@ -142,7 +157,6 @@ import StreamRenderer from './components/agent/StreamRenderer.vue'
 import DashboardResult from './components/agent/DashboardResult.vue'
 import PlanCard from './components/agent/PlanCard.vue'
 import ChatInput from './components/sidebar/ChatInput.vue'
-import SessionList from './components/sidebar/SessionList.vue'
 import AnalysisRadar from './components/analysis/AnalysisRadar.vue'
 import AnalysisExport from './components/analysis/AnalysisExport.vue'
 import CompareAnalysis from './components/analysis/CompareAnalysis.vue'
@@ -151,14 +165,13 @@ import type { ChatMode, ChatMessage } from './service/chatService'
 import { annotateFromDashboard } from './service/annotationService'
 
 const modeLabels: Record<ChatMode, string> = {
-  chat: '💬 对话',
   quick: '⚡ 快速',
   deep: '🔬 深度',
   plan: '📋 计划'
 }
 
-// 浮动助手: 支持对话和快速分析
-const allowedModes: ChatMode[] = ['chat', 'quick', 'deep']
+// 浮动助手: 支持快速和深度分析
+const allowedModes: ChatMode[] = ['quick', 'deep']
 
 const {
   messages,
@@ -178,7 +191,7 @@ const {
   switchSession,
   removeSession
 } = useChat({
-  defaultMode: 'chat',
+  defaultMode: 'quick',
   allowedModes,
   showUpgradeHint: false
 })
@@ -186,7 +199,6 @@ const {
 const bodyRef = ref<HTMLElement | null>(null)
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 const symbolInput = ref('')
-const showSessions = ref(false)
 const compareItems = ref<Array<{ code: string; dashboard: Record<string, unknown> }>>([])
 
 // Plan 模式状态
@@ -197,6 +209,11 @@ const planExecuting = ref(false)
 const showProgress = computed(() =>
   ['quick', 'deep', 'plan'].includes(currentMode.value) &&
   (isStreaming.value || streamResult.value.stages.length > 0)
+)
+
+// 右侧面板: 有进度或工具调用时显示
+const showRightPanel = computed(() =>
+  showProgress.value || streamResult.value.tools.length > 0
 )
 
 // 从 URL 参数获取初始值
@@ -256,7 +273,9 @@ function onSkillToggle(skillId: string) {
 function onAnnotate(msg: ChatMessage) {
   const dashboard = msg.metadata?.dashboard
   if (dashboard) {
-    annotateFromDashboard(symbolInput.value, dashboard, 'current')
+    const symbol = symbolInput.value || (dashboard as Record<string, unknown>).stock_name as string || ''
+    if (!symbol) return
+    annotateFromDashboard(symbol, dashboard, 'current')
   }
 }
 
@@ -299,7 +318,6 @@ function onPlanCancel() {
 // ==================== 会话管理 ====================
 function onSwitchSession(sessionId: string) {
   switchSession(sessionId)
-  showSessions.value = false
 }
 
 function onDeleteSession(sessionId: string) {
@@ -381,14 +399,6 @@ watch(
   color: #e0e0e0;
 }
 
-.mode-select {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #aaa;
-}
-
 .mode-select select {
   background: #1e1e1e;
   border: 1px solid #444;
@@ -426,7 +436,96 @@ watch(
 .status-dot.connected { background: #4ec9b0; }
 .status-dot.disconnected { background: #666; }
 
-.agent-window__body {
+/* ===== 三栏布局 ===== */
+.agent-window__content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 左栏: 历史会话 */
+.agent-window__sidebar {
+  width: 200px;
+  min-width: 160px;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.sidebar-sessions {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #bbb;
+  border-left: 3px solid transparent;
+  transition: background 0.15s;
+}
+
+.session-item:hover {
+  background: #2a2a2a;
+}
+
+.session-item.active {
+  background: #1e3a5f;
+  border-left-color: #4ec9b0;
+  color: #fff;
+}
+
+.session-item__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item__delete {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.session-item:hover .session-item__delete {
+  opacity: 1;
+}
+
+.session-item__delete:hover {
+  color: #f44;
+}
+
+.sidebar-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+/* 中栏: 对话主体 */
+.agent-window__main {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
@@ -440,6 +539,32 @@ watch(
   gap: 12px;
 }
 
+/* 右栏: 进度 + 工具 */
+.agent-window__panel {
+  width: 260px;
+  min-width: 200px;
+  border-left: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #1a1a1a;
+  overflow-y: auto;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+
+.panel-section__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===== 消息样式 ===== */
 .aw-msg--user {
   display: flex;
   justify-content: flex-end;

@@ -111,6 +111,18 @@ export function useChatStream() {
 
       case 'parallel_start':
         state.value = 'executing'
+        // Create stage entries for parallel agents so stage_done can mark them completed
+        if (Array.isArray(event.data.agents)) {
+          for (const name of event.data.agents as string[]) {
+            if (!result.value.stages.find(s => s.stage === name)) {
+              result.value.stages.push({
+                stage: name,
+                status: 'running',
+                message: `Running ${name} analysis...`
+              })
+            }
+          }
+        }
         break
 
       case 'debate_round':
@@ -190,11 +202,17 @@ export function useChatStream() {
     state.value = 'idle'
   }
 
+  function reset() {
+    resetResult()
+    state.value = 'idle'
+  }
+
   return {
     state: readonly(state),
     result: readonly(result),
     error: readonly(error),
     send,
-    abort
+    abort,
+    reset
   }
 }

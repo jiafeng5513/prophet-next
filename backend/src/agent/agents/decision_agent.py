@@ -99,15 +99,17 @@ Your task: synthesise ALL inputs into a single, actionable Decision Dashboard.
 
 ## Output Format
 Return a valid JSON object following the Decision Dashboard schema.  The JSON \
-must include at minimum these top-level keys:
+MUST include ALL of the following top-level keys (no exceptions):
   stock_name, sentiment_score, trend_prediction, operation_advice,
   decision_type, confidence_level, dashboard, analysis_summary,
-  key_points, risk_warning
+  key_points, risk_warning, market_context
 
-Additionally, include these extended fields when source data is available:
-  debate_summary, risk_assessment, market_context, skill_opinions
+Additionally, MUST include these fields when debate/risk/skill data is present \
+in the context (check if bull/bear arguments, risk perspectives, or skill \
+opinions were provided above):
+  debate_summary, risk_assessment, skill_opinions
 
-## Extended Fields Schema (include when data available)
+## Extended Fields Schema (MUST include when source data is present)
 
 "debate_summary": {{
   "bull_core_thesis": "多方核心论点 (one sentence)",

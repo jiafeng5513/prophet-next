@@ -31,6 +31,9 @@ function buildMarkdownReport(): string {
   lines.push(`# ${props.stockCode}${props.stockName ? ' ' + props.stockName : ''} 分析报告`)
   lines.push('')
   lines.push(`**信号**: ${d.signal || '-'} | **置信度**: ${((d.confidence || 0) * 100).toFixed(0)}%`)
+  if (d.sentiment_score != null) {
+    lines.push(`| **综合评分**: ${d.sentiment_score}/100`)
+  }
   lines.push('')
 
   if (d.summary) {
@@ -39,12 +42,41 @@ function buildMarkdownReport(): string {
     lines.push('')
   }
 
+  if (d.key_points?.length) {
+    lines.push(`## 关键要点`)
+    d.key_points.forEach((point: string) => {
+      lines.push(`- ${point}`)
+    })
+    lines.push('')
+  }
+
+  if (d.operation_advice) {
+    lines.push(`## 操作建议`)
+    const oa = d.operation_advice
+    if (typeof oa === 'string') {
+      lines.push(oa)
+    } else {
+      if (oa.no_position) lines.push(`- 空仓: ${oa.no_position}`)
+      if (oa.has_position) lines.push(`- 持仓: ${oa.has_position}`)
+      if (oa.entry_price) lines.push(`- 入场价: ${oa.entry_price}`)
+      if (oa.stop_loss) lines.push(`- 止损: ${oa.stop_loss}`)
+      if (oa.take_profit) lines.push(`- 止盈: ${oa.take_profit}`)
+    }
+    lines.push('')
+  }
+
   if (d.market_context) {
     const mc = d.market_context
     lines.push(`## 市场环境`)
-    if (mc.trend) lines.push(`- 趋势: ${mc.trend}`)
-    if (mc.strength) lines.push(`- 强度: ${mc.strength}`)
-    if (mc.sentiment) lines.push(`- 情绪: ${mc.sentiment}`)
+    if (mc.trend || mc.index_trend) lines.push(`- 趋势: ${mc.trend || mc.index_trend}`)
+    if (mc.strength || mc.sector_strength) lines.push(`- 板块强度: ${mc.strength || mc.sector_strength}`)
+    if (mc.sentiment || mc.market_sentiment) lines.push(`- 情绪: ${mc.sentiment || mc.market_sentiment}`)
+    lines.push('')
+  }
+
+  if (d.risk_warning) {
+    lines.push(`## 风险警告`)
+    lines.push(`⚠️ ${d.risk_warning}`)
     lines.push('')
   }
 
@@ -69,10 +101,40 @@ function buildMarkdownReport(): string {
 
   if (d.skill_opinions?.length) {
     lines.push(`## 策略观点`)
-    d.skill_opinions.forEach(op => {
-      lines.push(`- **${op.skill_name}**: ${op.signal} — ${op.observation || ''}`)
+    d.skill_opinions.forEach((op: any) => {
+      lines.push(`- **${op.skill_name}**: ${op.signal} (${((op.confidence || 0) * 100).toFixed(0)}%) — ${op.key_observation || op.observation || ''}`)
     })
     lines.push('')
+  }
+
+  // Dashboard 子数据
+  const db = d.dashboard
+  if (db) {
+    const dp = db.data_perspective
+    if (dp?.capital_flow) {
+      lines.push(`## 资金流向`)
+      const cf = dp.capital_flow
+      lines.push(`- 方向: ${cf.direction || '-'}`)
+      if (cf.net_inflow != null) lines.push(`- 主力净流入: ${cf.net_inflow}`)
+      lines.push('')
+    }
+    if (dp?.technical_indicators) {
+      const ti = dp.technical_indicators
+      lines.push(`## 技术指标`)
+      if (ti.macd) lines.push(`- MACD: DIF=${ti.macd.dif ?? '-'} DEA=${ti.macd.dea ?? '-'} BAR=${ti.macd.bar ?? '-'} (${ti.macd.status || '-'})`)
+      if (ti.rsi) lines.push(`- RSI: 6日=${ti.rsi.rsi_6 ?? '-'} 12日=${ti.rsi.rsi_12 ?? '-'} 24日=${ti.rsi.rsi_24 ?? '-'} (${ti.rsi.status || '-'})`)
+      lines.push('')
+    }
+    const bp = db.battle_plan
+    if (bp?.sniper_points) {
+      const sp = bp.sniper_points
+      lines.push(`## 关键价位`)
+      if (sp.ideal_buy && sp.ideal_buy !== 'N/A') lines.push(`- 理想买入: ${sp.ideal_buy}`)
+      if (sp.secondary_buy && sp.secondary_buy !== 'N/A') lines.push(`- 备选买入: ${sp.secondary_buy}`)
+      if (sp.stop_loss) lines.push(`- 止损: ${sp.stop_loss}`)
+      if (sp.take_profit && sp.take_profit !== 'N/A') lines.push(`- 止盈: ${sp.take_profit}`)
+      lines.push('')
+    }
   }
 
   // 相关新闻

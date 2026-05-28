@@ -12,7 +12,7 @@
 
 // ==================== 类型定义 ====================
 
-export type ChatMode = 'chat' | 'quick' | 'deep' | 'plan'
+export type ChatMode = 'quick' | 'deep' | 'plan'
 
 export interface ChatMessage {
   id: string
