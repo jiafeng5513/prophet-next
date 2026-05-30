@@ -1,29 +1,17 @@
 <template>
   <div class="agent-window">
-    <!-- 顶部工具栏 -->
-    <div class="agent-window__toolbar">
-      <div class="toolbar-left">
-        <span class="window-title">💬 AI 助手</span>
-        <div class="mode-select">
-          <select v-model="currentMode" @change="setMode(currentMode)">
-            <option v-for="mode in allowedModes" :key="mode" :value="mode">
-              {{ modeLabels[mode] }}
-            </option>
-          </select>
-        </div>
-      </div>
-      <div class="toolbar-right">
-        <button class="toolbar-btn" @click="newChat" title="新对话">✨</button>
-        <span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>
-      </div>
-    </div>
-
     <!-- 三栏主体 -->
     <div class="agent-window__content">
       <!-- 左栏: 历史会话 -->
       <aside class="agent-window__sidebar">
         <div class="sidebar-header">
           <span class="sidebar-title">历史会话</span>
+          <button
+            v-if="sessions.length"
+            class="sidebar-clear-all"
+            @click="onClearAll"
+            title="清除全部"
+          >🗑️</button>
         </div>
         <div class="sidebar-sessions">
           <div
@@ -33,7 +21,10 @@
             :class="{ active: session.id === currentSessionId }"
             @click="onSwitchSession(session.id)"
           >
-            <span class="session-item__title">{{ session.title || '未命名' }}</span>
+            <div class="session-item__info">
+              <span class="session-item__title">{{ session.title || '未命名' }}</span>
+              <span class="session-item__time">{{ formatSessionTime(session.updated_at || session.created_at) }}</span>
+            </div>
             <button class="session-item__delete" @click.stop="onDeleteSession(session.id)" title="删除">×</button>
           </div>
           <div v-if="!sessions.length" class="sidebar-empty">暂无历史</div>
@@ -41,8 +32,8 @@
       </aside>
 
       <!-- 中栏: 对话 + 报告 -->
-      <main class="agent-window__main" ref="bodyRef">
-        <div class="agent-window__messages">
+      <main class="agent-window__main">
+        <div class="agent-window__messages" ref="bodyRef">
           <template v-for="msg in messages" :key="msg.id">
             <!-- 用户消息 -->
             <div v-if="msg.role === 'user'" class="aw-msg aw-msg--user">
@@ -109,6 +100,27 @@
             @close="compareItems = []"
           />
         </div>
+
+      <!-- 输入区 -->
+      <div class="agent-window__input">
+        <ChatInput
+          ref="inputRef"
+          :current-mode="currentMode"
+          :allowed-modes="allowedModes"
+          :skills="skills"
+          :selected-skills="selectedSkills"
+          :is-streaming="isStreaming"
+          @send="onSend"
+          @stop="stopStreaming"
+          @mode-change="setMode"
+          @skill-toggle="onSkillToggle"
+        />
+        <button class="new-chat-btn" @click="newChat" title="新对话">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1v6H2v2h6v6h2V9h6V7H10V1H8z" />
+          </svg>
+        </button>
+      </div>
       </main>
 
       <!-- 右栏: 分析进度 + 工具调用 -->
@@ -128,21 +140,6 @@
       </aside>
     </div>
 
-    <!-- 输入区 -->
-    <div class="agent-window__input">
-      <ChatInput
-        ref="inputRef"
-        :current-mode="currentMode"
-        :allowed-modes="allowedModes"
-        :skills="skills"
-        :selected-skills="selectedSkills"
-        :is-streaming="isStreaming"
-        @send="onSend"
-        @stop="stopStreaming"
-        @mode-change="setMode"
-        @skill-toggle="onSkillToggle"
-      />
-    </div>
   </div>
 </template>
 
@@ -164,12 +161,6 @@ import { useChat } from './composables/useChat'
 import type { ChatMode, ChatMessage } from './service/chatService'
 import { annotateFromDashboard } from './service/annotationService'
 
-const modeLabels: Record<ChatMode, string> = {
-  quick: '⚡ 快速',
-  deep: '🔬 深度',
-  plan: '📋 计划'
-}
-
 // 浮动助手: 支持快速和深度分析
 const allowedModes: ChatMode[] = ['quick', 'deep']
 
@@ -189,7 +180,8 @@ const {
   setMode,
   newChat,
   switchSession,
-  removeSession
+  removeSession,
+  clearAllSessions
 } = useChat({
   defaultMode: 'quick',
   allowedModes,
@@ -324,6 +316,33 @@ function onDeleteSession(sessionId: string) {
   removeSession(sessionId)
 }
 
+function onClearAll() {
+  if (confirm('确定清除全部历史记录？此操作不可撤销。')) {
+    clearAllSessions()
+  }
+}
+
+/** 将 ISO 时间字符串格式化为友好的相对/绝对时间 */
+function formatSessionTime(isoStr: string | undefined): string {
+  if (!isoStr) return ''
+  const date = new Date(isoStr)
+  if (isNaN(date.getTime())) return ''
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHour = Math.floor(diffMs / 3600000)
+  const diffDay = Math.floor(diffMs / 86400000)
+
+  if (diffMin < 1) return '刚刚'
+  if (diffMin < 60) return `${diffMin}分钟前`
+  if (diffHour < 24) return `${diffHour}小时前`
+  if (diffDay < 7) return `${diffDay}天前`
+  // 超过7天显示日期
+  const m = date.getMonth() + 1
+  const d = date.getDate()
+  return `${m}/${d}`
+}
+
 // ==================== 雷达图维度提取 ====================
 function getRadarDimensions(dashboard: Record<string, unknown>) {
   const dims: { key: string; label: string; value: number }[] = []
@@ -377,65 +396,6 @@ watch(
   color: #e0e0e0;
 }
 
-.agent-window__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  background: #252525;
-  border-bottom: 1px solid #333;
-  flex-shrink: 0;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.window-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #e0e0e0;
-}
-
-.mode-select select {
-  background: #1e1e1e;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #e0e0e0;
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.toolbar-btn {
-  background: none;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-}
-
-.toolbar-btn:hover {
-  color: #ccc;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.status-dot.connected { background: #4ec9b0; }
-.status-dot.disconnected { background: #666; }
-
 /* ===== 三栏布局 ===== */
 .agent-window__content {
   flex: 1;
@@ -460,6 +420,23 @@ watch(
   font-weight: 600;
   color: #999;
   border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-clear-all {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.sidebar-clear-all:hover {
+  opacity: 1;
 }
 
 .sidebar-sessions {
@@ -491,11 +468,23 @@ watch(
   color: #fff;
 }
 
-.session-item__title {
+.session-item__info {
   flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-item__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-item__time {
+  font-size: 10px;
+  color: #666;
 }
 
 .session-item__delete {
@@ -527,13 +516,17 @@ watch(
 /* 中栏: 对话主体 */
 .agent-window__main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-window__messages {
+  flex: 1;
   overflow-y: auto;
   padding: 16px;
   scrollbar-width: thin;
   scrollbar-color: #444 transparent;
-}
-
-.agent-window__messages {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -597,6 +590,49 @@ watch(
 
 .agent-window__input {
   flex-shrink: 0;
+  border-top: 1px solid #333;
+  padding: 8px 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 6px 8px;
+}
+
+.agent-window__input > :deep(.chat-input-area) {
+  display: contents;
+  border-top: none;
+  padding: 0;
+}
+
+.agent-window__input > :deep(.chat-input-area) > .chat-input-toolbar {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.agent-window__input > :deep(.chat-input-area) > .chat-input-wrapper {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.new-chat-btn {
+  grid-column: 1;
+  grid-row: 2;
+  aspect-ratio: 1;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.new-chat-btn:hover {
+  color: #4ec9b0;
+  border-color: #4ec9b0;
 }
 
 .aw-dashboard-extras {

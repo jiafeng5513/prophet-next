@@ -1353,6 +1353,10 @@ class AgentOrchestrator:
         payload["key_points"] = key_points
         payload["risk_warning"] = risk_warning
         payload["dashboard"] = dashboard_block
+        # 前端 DashboardResult 期望的字段名映射
+        payload.setdefault("signal", decision_type)
+        payload.setdefault("confidence", confidence)
+        payload.setdefault("summary", analysis_summary)
         return payload
 
     def _collect_key_levels(

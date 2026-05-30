@@ -244,6 +244,14 @@ async def delete_chat_session(session_id: str):
     return {"deleted": count}
 
 
+@router.delete("/chat/sessions")
+async def delete_all_chat_sessions():
+    """清除所有聊天会话"""
+    from src.storage import get_db
+    count = get_db().delete_all_conversation_sessions()
+    return {"deleted": count}
+
+
 class SendChatRequest(BaseModel):
     """Request body for sending chat content to notification channels."""
 

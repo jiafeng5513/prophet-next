@@ -2021,6 +2021,17 @@ class DatabaseManager:
             )
             return result.rowcount
 
+    def delete_all_conversation_sessions(self) -> int:
+        """
+        删除所有会话消息
+
+        Returns:
+            删除的消息数
+        """
+        with self.session_scope() as session:
+            result = session.execute(delete(ConversationMessage))
+            return result.rowcount
+
     # ------------------------------------------------------------------
     # LLM usage tracking
     # ------------------------------------------------------------------

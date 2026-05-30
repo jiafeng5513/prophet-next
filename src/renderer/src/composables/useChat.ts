@@ -11,6 +11,7 @@ import {
   fetchSessions,
   fetchSessionMessages,
   deleteSession,
+  deleteAllSessions,
   fetchSkills,
   checkHealth,
   type ChatMessage,
@@ -67,6 +68,21 @@ export function useChat(options: UseChatOptions = {}) {
         }
       } catch { /* ignore */ }
       await loadSessions()
+    } else {
+      // 后端可能尚未就绪，延迟重试加载会话
+      setTimeout(async () => {
+        connected.value = await checkHealth()
+        if (connected.value) {
+          try {
+            const data = await fetchSkills()
+            skills.value = data.skills
+            if (data.defaultSkillId && !selectedSkills.value.length) {
+              selectedSkills.value = [data.defaultSkillId]
+            }
+          } catch { /* ignore */ }
+          await loadSessions()
+        }
+      }, 3000)
     }
 
     // 监听 Agent Window 同步分析结果
@@ -93,6 +109,9 @@ export function useChat(options: UseChatOptions = {}) {
   }
 
   // ==================== 会话管理 ====================
+  // 内存缓存: 保存当前会话的 messages（含 metadata），避免切换回来时丢失
+  const sessionMessageCache = new Map<string, ChatMessage[]>()
+
   async function loadSessions() {
     try {
       sessions.value = await fetchSessions()
@@ -100,10 +119,24 @@ export function useChat(options: UseChatOptions = {}) {
   }
 
   async function switchSession(sessionId: string) {
+    if (sessionId === currentSessionId.value) return
+
+    // 缓存当前会话的消息（保留 metadata）
+    if (currentSessionId.value && messages.value.length > 0) {
+      sessionMessageCache.set(currentSessionId.value, [...messages.value])
+    }
+
     loading.value = true
     try {
-      const msgs = await fetchSessionMessages(sessionId)
-      messages.value = msgs
+      // 优先从缓存读取（保留 dashboard metadata）
+      const cached = sessionMessageCache.get(sessionId)
+      if (cached && cached.length > 0) {
+        messages.value = cached
+      } else {
+        const msgs = await fetchSessionMessages(sessionId)
+        messages.value = msgs
+        sessionMessageCache.set(sessionId, msgs)
+      }
       currentSessionId.value = sessionId
     } finally {
       loading.value = false
@@ -116,6 +149,12 @@ export function useChat(options: UseChatOptions = {}) {
     if (currentSessionId.value === sessionId) {
       newChat()
     }
+  }
+
+  async function clearAllSessions() {
+    await deleteAllSessions()
+    sessions.value = []
+    newChat()
   }
 
   function newChat() {
@@ -190,7 +229,12 @@ export function useChat(options: UseChatOptions = {}) {
         // 更新 session_id
         if (streamResult.value.sessionId) {
           currentSessionId.value = streamResult.value.sessionId
+          // 更新缓存，保留完整 metadata（dashboard等）
+          sessionMessageCache.set(streamResult.value.sessionId, [...messages.value])
         }
+
+        // 流完成后刷新会话列表，确保历史记录及时更新
+        loadSessions()
 
         // 智能升级提示检测 (仅侧边栏)
         if (showUpgradeHint && newState === 'done') {
@@ -227,6 +271,7 @@ export function useChat(options: UseChatOptions = {}) {
     newChat,
     switchSession,
     removeSession,
+    clearAllSessions,
     loadSessions
   }
 }

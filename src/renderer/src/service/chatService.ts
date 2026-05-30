@@ -163,24 +163,70 @@ export async function fetchSessions(limit = 30): Promise<ChatSession[]> {
   })
   if (!resp.ok) throw new Error(`fetchSessions failed: ${resp.status}`)
   const data = await resp.json()
-  return data.sessions || []
+  // 后端返回 session_id / last_active，映射为前端 ChatSession
+  return (data.sessions || []).map((s: Record<string, unknown>) => ({
+    id: s.session_id || s.id,
+    title: s.title || '未命名',
+    created_at: s.created_at || '',
+    updated_at: s.last_active || s.updated_at || s.created_at || '',
+    message_count: s.message_count || 0
+  })) as ChatSession[]
 }
 
 export async function fetchSessionMessages(sessionId: string): Promise<ChatMessage[]> {
-  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${sessionId}`), {
+  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${encodeURIComponent(sessionId)}`), {
     signal: AbortSignal.timeout(10000)
   })
   if (!resp.ok) throw new Error(`fetchSessionMessages failed: ${resp.status}`)
   const data = await resp.json()
-  return data.messages || []
+  // 后端返回 {id, role, content, created_at}，映射为前端 ChatMessage
+  return (data.messages || []).map((m: Record<string, unknown>) => {
+    const content = String(m.content || '')
+    const role = m.role as ChatMessage['role']
+    let metadata: ChatMessage['metadata'] = undefined
+
+    // assistant 消息: 尝试解析 dashboard JSON（后端存储时 content = JSON.stringify(dashboard)）
+    if (role === 'assistant' && content.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(content)
+        // 判断是否为 dashboard 数据（含常见 dashboard 字段）
+        if (parsed && typeof parsed === 'object' && (
+          parsed.signal || parsed.summary || parsed.confidence != null ||
+          parsed.decision_type || parsed.analysis_summary || parsed.sentiment_score != null ||
+          parsed.confidence_level || parsed.dashboard
+        )) {
+          metadata = { dashboard: parsed as DashboardData }
+        }
+      } catch {
+        // 非 JSON，按普通文本处理
+      }
+    }
+
+    return {
+      id: String(m.id),
+      role,
+      content: metadata?.dashboard ? '' : content,
+      timestamp: m.created_at ? new Date(m.created_at as string).getTime() : Date.now(),
+      mode: undefined,
+      metadata
+    }
+  }) as ChatMessage[]
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${sessionId}`), {
+  const resp = await fetch(getApiUrl(`/api/v1/agent/chat/sessions/${encodeURIComponent(sessionId)}`), {
     method: 'DELETE',
     signal: AbortSignal.timeout(5000)
   })
   if (!resp.ok) throw new Error(`deleteSession failed: ${resp.status}`)
+}
+
+export async function deleteAllSessions(): Promise<void> {
+  const resp = await fetch(getApiUrl('/api/v1/agent/chat/sessions'), {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(10000)
+  })
+  if (!resp.ok) throw new Error(`deleteAllSessions failed: ${resp.status}`)
 }
 
 // ==================== 流式对话 (SSE) ====================
