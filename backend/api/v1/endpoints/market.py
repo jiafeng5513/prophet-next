@@ -34,6 +34,10 @@ from api.v1.schemas.market import (
     WatchlistResponse,
     WatchlistAddRequest,
     WatchlistReorderRequest,
+    BrowserDataItem,
+    BrowserDataResponse,
+    IndexQuoteItem,
+    IndicesResponse,
 )
 from src.services.market_gateway import MarketGateway
 from src.services.watchlist import WatchlistService
@@ -422,3 +426,235 @@ def get_financials(
     except Exception as e:
         logger.error("[Market] 财务数据获取失败 (%s/%s): %s", symbol, type, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"财务数据获取失败: {e}")
+
+
+# ==================== 标的浏览器批量数据 ====================
+
+
+@router.get(
+    "/browser/data",
+    response_model=BrowserDataResponse,
+    summary="标的浏览器批量数据",
+    description="获取标的浏览器所需的批量行情+估值数据，支持排序和筛选",
+)
+def get_browser_data(
+    type: str = Query("crypto", description="市场类型: crypto, cn_stock, hk_stock, us_stock"),
+    sort: str = Query("", description="排序: field:asc/desc (如 total_mv:desc)"),
+    filter: str = Query("", description="筛选: field>value,field<value"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    limit: int = Query(200, ge=1, le=500, description="返回条数"),
+):
+    """标的浏览器批量数据接口"""
+    from datetime import datetime
+
+    gateway = _get_gateway()
+
+    # 获取标的列表
+    raw_symbols = gateway.get_symbols(type, force_refresh=False)
+
+    # 获取实时行情（批量）
+    symbol_codes = [s.get("symbol", "") for s in raw_symbols[:limit + offset]]
+    quotes_map = {}
+    if symbol_codes:
+        try:
+            batch_size = 50
+            for i in range(0, min(len(symbol_codes), offset + limit), batch_size):
+                batch = symbol_codes[i:i + batch_size]
+                raw_quotes = gateway.get_realtime_quotes(batch, type)
+                for q in raw_quotes:
+                    quotes_map[q.get("symbol", "")] = q
+        except Exception as e:
+            logger.warning("[Browser] 批量行情获取部分失败: %s", e)
+
+    # 组装数据
+    items = []
+    for s in raw_symbols:
+        symbol = s.get("symbol", "")
+        name = s.get("name", "")
+        q = quotes_map.get(symbol, {})
+        extra = s.get("extra", {})
+        if isinstance(extra, str):
+            import json as json_mod
+            try:
+                extra = json_mod.loads(extra)
+            except (ValueError, TypeError):
+                extra = {}
+
+        price = q.get("price") or (extra.get("price") if isinstance(extra, dict) else None)
+        change_pct = q.get("change_percent") or (extra.get("change_pct") if isinstance(extra, dict) else None)
+
+        item = BrowserDataItem(
+            symbol=symbol,
+            name=name,
+            price=price,
+            change_pct=change_pct,
+            volume=q.get("volume"),
+            turnover=q.get("turnover"),
+            volume_ratio=q.get("volume_ratio") or (extra.get("volume_ratio") if isinstance(extra, dict) else None),
+            turnover_rate=q.get("turnover_rate") or (extra.get("turnover_rate") if isinstance(extra, dict) else None),
+            amplitude=q.get("amplitude") or (extra.get("amplitude") if isinstance(extra, dict) else None),
+            total_mv=extra.get("total_mv") if isinstance(extra, dict) else None,
+            circ_mv=extra.get("circ_mv") if isinstance(extra, dict) else None,
+            pe_ratio=extra.get("pe_ratio") if isinstance(extra, dict) else None,
+            pb_ratio=extra.get("pb_ratio") if isinstance(extra, dict) else None,
+            high=q.get("high"),
+            low=q.get("low"),
+            open=q.get("open"),
+            prev_close=q.get("prev_close"),
+            high_24h=q.get("high") if type == "crypto" else None,
+            low_24h=q.get("low") if type == "crypto" else None,
+            exchange=s.get("exchange"),
+            data_source=s.get("data_source"),
+        )
+        items.append(item)
+
+    total = len(items)
+
+    # 服务端筛选
+    if filter:
+        for cond in filter.split(","):
+            cond = cond.strip()
+            if not cond:
+                continue
+            try:
+                if ">=" in cond:
+                    field, val = cond.split(">=", 1)
+                    field = field.strip()
+                    val = float(val.strip())
+                    items = [it for it in items if getattr(it, field, None) is not None and getattr(it, field) >= val]
+                elif "<=" in cond:
+                    field, val = cond.split("<=", 1)
+                    field = field.strip()
+                    val = float(val.strip())
+                    items = [it for it in items if getattr(it, field, None) is not None and getattr(it, field) <= val]
+                elif ">" in cond:
+                    field, val = cond.split(">", 1)
+                    field = field.strip()
+                    val = float(val.strip())
+                    items = [it for it in items if getattr(it, field, None) is not None and getattr(it, field) > val]
+                elif "<" in cond:
+                    field, val = cond.split("<", 1)
+                    field = field.strip()
+                    val = float(val.strip())
+                    items = [it for it in items if getattr(it, field, None) is not None and getattr(it, field) < val]
+            except (ValueError, AttributeError):
+                continue
+
+    # 服务端排序
+    if sort:
+        parts = sort.split(":")
+        sort_field = parts[0].strip()
+        sort_dir = parts[1].strip() if len(parts) > 1 else "desc"
+        reverse = sort_dir == "desc"
+        items.sort(
+            key=lambda it: (getattr(it, sort_field, None) is None, getattr(it, sort_field, None) or 0),
+            reverse=reverse,
+        )
+
+    # 分页
+    paged = items[offset:offset + limit]
+
+    return BrowserDataResponse(
+        total=total,
+        data=paged,
+        updated_at=datetime.now().isoformat(),
+    )
+
+
+# ==================== 宏观指数 (首页) ====================
+
+
+@router.get(
+    "/indices",
+    response_model=IndicesResponse,
+    summary="获取宏观指数行情",
+    description="获取首页显示的宏观指数实时行情数据",
+)
+def get_indices(
+    symbols: str = Query("", description="指数代码列表 (逗号分隔)"),
+):
+    """获取宏观指数行情"""
+    gateway = _get_gateway()
+
+    # 默认指数列表
+    default_indices = [
+        ("000001.SH", "上证综指", "cn_stock"),
+        ("399001.SZ", "深证成指", "cn_stock"),
+        ("399006.SZ", "创业板指", "cn_stock"),
+        ("HSI", "恒生指数", "hk_stock"),
+        ("^IXIC", "纳斯达克", "us_stock"),
+        ("^DJI", "道琼斯", "us_stock"),
+        ("BTCUSDT", "BTC/USDT", "crypto"),
+        ("ETHUSDT", "ETH/USDT", "crypto"),
+    ]
+
+    # 需要通过 yfinance 获取的指数 (TickFlow 不支持这些符号)
+    YF_INDEX_MAP = {
+        "HSI": "^HSI",
+        "^IXIC": "^IXIC",
+        "^DJI": "^DJI",
+    }
+
+    if symbols:
+        requested = [s.strip() for s in symbols.split(",") if s.strip()]
+    else:
+        requested = [idx[0] for idx in default_indices]
+
+    quotes = []
+    for symbol, name, market_type in default_indices:
+        if symbol not in requested:
+            continue
+        try:
+            # 对港股/美股指数使用 yfinance 直接获取
+            if symbol in YF_INDEX_MAP:
+                q = _fetch_index_via_yfinance(symbol, name, YF_INDEX_MAP[symbol])
+                if q:
+                    quotes.append(q)
+                else:
+                    quotes.append(IndexQuoteItem(symbol=symbol, name=name))
+            else:
+                raw_quotes = gateway.get_realtime_quotes([symbol], market_type)
+                if raw_quotes:
+                    q = raw_quotes[0]
+                    quotes.append(IndexQuoteItem(
+                        symbol=symbol,
+                        name=name,
+                        price=q.get("price"),
+                        change=q.get("change"),
+                        change_percent=q.get("change_percent"),
+                        sparkline=None,
+                    ))
+                else:
+                    quotes.append(IndexQuoteItem(symbol=symbol, name=name))
+        except Exception as e:
+            logger.warning("[Indices] 获取指数 %s 失败: %s", symbol, e)
+            quotes.append(IndexQuoteItem(symbol=symbol, name=name))
+
+    return IndicesResponse(quotes=quotes)
+
+
+def _fetch_index_via_yfinance(symbol: str, name: str, yf_code: str) -> Optional[IndexQuoteItem]:
+    """通过 yfinance 获取单个指数行情"""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(yf_code)
+        hist = ticker.history(period='2d')
+        if hist.empty:
+            return None
+        today_row = hist.iloc[-1]
+        prev_row = hist.iloc[-2] if len(hist) > 1 else today_row
+        price = float(today_row['Close'])
+        prev_close = float(prev_row['Close'])
+        change = price - prev_close
+        change_pct = (change / prev_close) * 100 if prev_close else 0
+        return IndexQuoteItem(
+            symbol=symbol,
+            name=name,
+            price=price,
+            change=change,
+            change_percent=change_pct,
+            sparkline=None,
+        )
+    except Exception as e:
+        logger.warning("[Indices] yfinance 获取 %s 失败: %s", symbol, e)
+        return None

@@ -19,10 +19,6 @@
           <span class="menu-icon">📈</span>
           <span>在图表中打开</span>
         </div>
-        <div class="menu-item" @click="$emit('market-analyze', symbol)">
-          <span class="menu-icon">🔍</span>
-          <span>市场分析</span>
-        </div>
         <div class="menu-divider"></div>
         <div class="menu-item" @click="$emit('toggle-watchlist', symbol)">
           <span class="menu-icon">{{ inWatchlist ? '⭐' : '☆' }}</span>
@@ -47,7 +43,7 @@ const props = defineProps({
   inWatchlist: { type: Boolean, default: false }
 })
 
-defineEmits(['open-chart', 'market-analyze', 'toggle-watchlist', 'copy-code', 'close'])
+defineEmits(['open-chart', 'toggle-watchlist', 'copy-code', 'close'])
 
 const menuRef = ref(null)
 const adjustedX = ref(props.x)

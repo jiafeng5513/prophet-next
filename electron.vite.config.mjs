@@ -39,6 +39,7 @@ export default defineConfig({
           backtest: resolve(__dirname, 'src/renderer/backtest.html'),
           news: resolve(__dirname, 'src/renderer/news.html'),
           symbolBrowser: resolve(__dirname, 'src/renderer/symbol-browser.html'),
+          marketBrowser: resolve(__dirname, 'src/renderer/market-browser.html'),
           agentWindow: resolve(__dirname, 'src/renderer/agent-window.html')
         }
       }

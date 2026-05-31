@@ -33,7 +33,8 @@ export default defineConfig({
         portfolio: resolve(__dirname, 'src/renderer/portfolio.html'),
         backtest: resolve(__dirname, 'src/renderer/backtest.html'),
         news: resolve(__dirname, 'src/renderer/news.html'),
-        symbolBrowser: resolve(__dirname, 'src/renderer/symbol-browser.html')
+        symbolBrowser: resolve(__dirname, 'src/renderer/symbol-browser.html'),
+        marketBrowser: resolve(__dirname, 'src/renderer/market-browser.html')
       }
     }
   },

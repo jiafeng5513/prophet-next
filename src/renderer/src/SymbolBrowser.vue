@@ -2,35 +2,27 @@
   <div class="symbol-browser">
     <!-- 面板标题栏 -->
     <div class="panel-header">
-      <span class="panel-title">标的浏览</span>
-      <button class="panel-collapse-btn" title="折叠面板" @click="collapsePanel">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M11 1L5 8l6 7V1z"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- 顶部工具栏 -->
-    <div class="toolbar">
-      <MarketTypeSelector
-        :types="marketTypes"
-        :active="activeMarketType"
-        @change="handleMarketTypeChange"
-      />
-      <SymbolSearchBar
-        v-model="searchQuery"
-        :loading="searching"
-        @search="handleSearch"
-        @clear="handleClearSearch"
-      />
+      <span class="panel-title">自选</span>
+      <div class="panel-actions">
+        <button class="panel-action-btn" title="打开标的浏览器" @click="openMarketBrowser">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1a6 6 0 1 1 0 12A6 6 0 0 1 8 2zm-.5 2v3.5H4v1h3.5V12h1V8.5H12v-1H8.5V4h-1z"/>
+          </svg>
+        </button>
+        <button class="panel-collapse-btn" title="折叠面板" @click="collapsePanel">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11 1L5 8l6 7V1z"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- 标的列表 -->
     <SymbolList
-      :symbols="displaySymbols"
+      :symbols="watchlistItems"
       :loading="loading"
-      :active-market-type="activeMarketType"
-      :search-query="searchQuery"
+      active-market-type="watchlist"
+      search-query=""
       @context-menu="handleContextMenu"
       @dblclick="handleDoubleClick"
       @reorder="handleReorder"
@@ -38,7 +30,7 @@
 
     <!-- 底部状态栏 -->
     <div class="status-bar">
-      <span class="status-count">共 {{ displaySymbols.length }} 个标的</span>
+      <span class="status-count">共 {{ watchlistItems.length }} 个标的</span>
       <span v-if="lastUpdateTime" class="status-time">更新于 {{ lastUpdateTime }}</span>
     </div>
 
@@ -48,9 +40,8 @@
       :x="contextMenu.x"
       :y="contextMenu.y"
       :symbol="contextMenu.symbol"
-      :in-watchlist="isInWatchlist(contextMenu.symbol)"
+      :in-watchlist="true"
       @open-chart="handleOpenChart"
-      @market-analyze="handleMarketAnalyze"
       @toggle-watchlist="handleToggleWatchlist"
       @copy-code="handleCopyCode"
       @close="contextMenu.visible = false"
@@ -59,9 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue'
-import MarketTypeSelector from './components/symbol-browser/MarketTypeSelector.vue'
-import SymbolSearchBar from './components/symbol-browser/SymbolSearchBar.vue'
+import { ref, onMounted, onUnmounted, reactive, watch } from 'vue'
 import SymbolList from './components/symbol-browser/SymbolList.vue'
 import SymbolContextMenu from './components/symbol-browser/SymbolContextMenu.vue'
 import { realtimeWS } from './service/realtimeWSClient'
@@ -75,22 +64,22 @@ function collapsePanel() {
   }
 }
 
+// 打开标的浏览器标签页
+function openMarketBrowser() {
+  if (window.electronAPI?.switchToPinnedTab) {
+    window.electronAPI.switchToPinnedTab('market-browser')
+  }
+}
+
 // 状态
-const marketTypes = ref([])
-const activeMarketType = ref('')
-const symbols = ref([])
-const searchResults = ref([])
-const searchQuery = ref('')
 const loading = ref(false)
-const searching = ref(false)
 const lastUpdateTime = ref('')
-const watchlistSymbols = ref(new Set()) // 自选标的代码集合
-const watchlistItems = ref([]) // 自选列表完整数据
+const watchlistItems = ref([])
 
 // 实时行情 WebSocket
 const WS_SUBSCRIPTION_ID = 'symbol-browser'
 let realtimeTimer = null
-const REALTIME_INTERVAL = 8000 // 8秒 (fallback 轮询间隔)
+const REALTIME_INTERVAL = 8000
 
 const contextMenu = reactive({
   visible: false,
@@ -99,145 +88,34 @@ const contextMenu = reactive({
   symbol: null
 })
 
-// 显示的列表：搜索模式用搜索结果，自选模式用自选列表，否则用完整列表
-const displaySymbols = computed(() => {
-  if (searchQuery.value && searchResults.value.length > 0) {
-    return searchResults.value
-  }
-  if (searchQuery.value && searchResults.value.length === 0 && !searching.value) {
-    return []
-  }
-  if (activeMarketType.value === 'watchlist') {
-    return watchlistItems.value
-  }
-  return symbols.value
-})
-
-// 获取市场类型列表
-async function fetchMarketTypes() {
-  try {
-    const res = await fetch(`${API_BASE}/types`)
-    const data = await res.json()
-    if (data.types) {
-      // 在最前面插入"自选"虚拟类型
-      const watchlistType = {
-        type: 'watchlist',
-        name: '自选',
-        description: '自选标的列表',
-        data_source: 'local',
-        icon: '⭐',
-        enabled: true
-      }
-      marketTypes.value = [watchlistType, ...data.types]
-      // 默认选中"自选"
-      activeMarketType.value = 'watchlist'
-    }
-  } catch (e) {
-    console.error('[SymbolBrowser] 获取市场类型失败:', e)
-  }
-}
-
-// 获取标的列表
-async function fetchSymbols(marketType) {
-  if (!marketType) return
-  loading.value = true
-  try {
-    const res = await fetch(`${API_BASE}/symbols?type=${marketType}`)
-    const data = await res.json()
-    if (data.symbols) {
-      symbols.value = data.symbols
-      lastUpdateTime.value = new Date().toLocaleTimeString()
-    }
-  } catch (e) {
-    console.error('[SymbolBrowser] 获取标的列表失败:', e)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 搜索标的
-let searchTimer = null
-async function handleSearch(query) {
-  if (!query || query.trim().length === 0) {
-    searchResults.value = []
-    searching.value = false
-    return
-  }
-  searching.value = true
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(async () => {
-    try {
-      const params = new URLSearchParams({ q: query })
-      if (activeMarketType.value && activeMarketType.value !== 'watchlist') {
-        params.set('type', activeMarketType.value)
-      }
-      const res = await fetch(`${API_BASE}/symbols/search?${params}`)
-      const data = await res.json()
-      if (data.symbols) {
-        searchResults.value = data.symbols
-      }
-    } catch (e) {
-      console.error('[SymbolBrowser] 搜索失败:', e)
-    } finally {
-      searching.value = false
-    }
-  }, 300)
-}
-
-function handleClearSearch() {
-  searchQuery.value = ''
-  searchResults.value = []
-}
-
 // ==================== 自选列表 ====================
 
 async function fetchWatchlist() {
+  loading.value = true
   try {
     const res = await fetch(`${API_BASE}/watchlist`)
     const data = await res.json()
     if (data.symbols) {
       watchlistItems.value = data.symbols
-      watchlistSymbols.value = new Set(data.symbols.map((s) => s.symbol))
     }
   } catch (e) {
     console.error('[SymbolBrowser] 获取自选列表失败:', e)
+  } finally {
+    loading.value = false
   }
-}
-
-function isInWatchlist(symbol) {
-  if (!symbol) return false
-  return watchlistSymbols.value.has(symbol.symbol)
 }
 
 async function handleToggleWatchlist(symbol) {
   contextMenu.visible = false
   if (!symbol) return
 
-  const inList = isInWatchlist(symbol)
   try {
-    if (inList) {
-      await fetch(`${API_BASE}/watchlist/${encodeURIComponent(symbol.symbol)}`, {
-        method: 'DELETE'
-      })
-      watchlistSymbols.value.delete(symbol.symbol)
-      watchlistItems.value = watchlistItems.value.filter((s) => s.symbol !== symbol.symbol)
-    } else {
-      await fetch(`${API_BASE}/watchlist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: symbol.symbol,
-          name: symbol.name,
-          market_type: symbol.market_type,
-          exchange: symbol.exchange,
-          data_source: symbol.data_source
-        })
-      })
-      watchlistSymbols.value.add(symbol.symbol)
-      watchlistItems.value.push({ ...symbol, sort_order: watchlistItems.value.length })
-    }
+    await fetch(`${API_BASE}/watchlist/${encodeURIComponent(symbol.symbol)}`, {
+      method: 'DELETE'
+    })
+    watchlistItems.value = watchlistItems.value.filter((s) => s.symbol !== symbol.symbol)
   } catch (e) {
-    console.error('[SymbolBrowser] 自选操作失败:', e)
+    console.error('[SymbolBrowser] 移除自选失败:', e)
   }
 }
 
@@ -249,7 +127,6 @@ async function handleReorder({ from, to }) {
   list.splice(to, 0, moved)
   watchlistItems.value = list
 
-  // 后端同步排序
   try {
     const orderedSymbols = list.map((s) => s.symbol)
     await fetch(`${API_BASE}/watchlist/reorder`, {
@@ -259,7 +136,6 @@ async function handleReorder({ from, to }) {
     })
   } catch (e) {
     console.error('[SymbolBrowser] 排序失败:', e)
-    // 失败时重新获取
     fetchWatchlist()
   }
 }
@@ -267,10 +143,9 @@ async function handleReorder({ from, to }) {
 // ==================== 实时行情 ====================
 
 async function fetchRealtimeQuotes() {
-  const list = displaySymbols.value
+  const list = watchlistItems.value
   if (!list || list.length === 0) return
 
-  // 按 market_type 分组获取 (最多50个)
   const groups = {}
   let count = 0
   for (const s of list) {
@@ -287,33 +162,17 @@ async function fetchRealtimeQuotes() {
       const res = await fetch(`${API_BASE}/realtime?symbols=${encodeURIComponent(symbolsStr)}&type=${mt}`)
       const data = await res.json()
       if (data.quotes) {
-        // 构建 symbol -> quote 映射
         const quoteMap = {}
         for (const q of data.quotes) {
           quoteMap[q.symbol] = q
         }
-        // 更新列表中的价格 (后端字段: price, change_percent)
-        const updateList = (arr) => {
-          return arr.map((item) => {
-            const q = quoteMap[item.symbol]
-            if (q) {
-              return {
-                ...item,
-                current_price: q.price,
-                change_percent: q.change_percent
-              }
-            }
-            return item
-          })
-        }
-        if (activeMarketType.value === 'watchlist') {
-          watchlistItems.value = updateList(watchlistItems.value)
-        } else if (!searchQuery.value) {
-          symbols.value = updateList(symbols.value)
-        }
-        if (searchQuery.value) {
-          searchResults.value = updateList(searchResults.value)
-        }
+        watchlistItems.value = watchlistItems.value.map((item) => {
+          const q = quoteMap[item.symbol]
+          if (q) {
+            return { ...item, current_price: q.price, change_percent: q.change_percent }
+          }
+          return item
+        })
       }
     } catch (e) {
       console.error('[SymbolBrowser] 获取实时行情失败:', e)
@@ -324,14 +183,11 @@ async function fetchRealtimeQuotes() {
 
 function startRealtimePolling() {
   stopRealtimePolling()
-  // 优先使用 WebSocket 推送
-  const currentSymbols = displaySymbols.value.map((s) => s.symbol).slice(0, 50)
+  const currentSymbols = watchlistItems.value.map((s) => s.symbol).slice(0, 50)
   if (currentSymbols.length > 0) {
     realtimeWS.updateQuotesSubscription(WS_SUBSCRIPTION_ID, currentSymbols, handleWSQuotes)
   }
-  // 仍保留首次 REST 获取 (快速填充初始数据)
   fetchRealtimeQuotes()
-  // Fallback 轮询 (如果 WS 未连通, 后端会进行 REST 轮询推送)
   realtimeTimer = setInterval(fetchRealtimeQuotes, REALTIME_INTERVAL)
 }
 
@@ -345,46 +201,18 @@ function stopRealtimePolling() {
 
 function handleWSQuotes(quotes) {
   if (!quotes || quotes.length === 0) return
-  // 构建 symbol -> quote 映射
   const quoteMap = {}
   for (const q of quotes) {
     quoteMap[q.symbol] = q
   }
-  // 更新列表中的价格
-  const updateList = (arr) => {
-    return arr.map((item) => {
-      const q = quoteMap[item.symbol]
-      if (q) {
-        return {
-          ...item,
-          current_price: q.price,
-          change_percent: q.change_percent
-        }
-      }
-      return item
-    })
-  }
-  if (activeMarketType.value === 'watchlist') {
-    watchlistItems.value = updateList(watchlistItems.value)
-  } else if (!searchQuery.value) {
-    symbols.value = updateList(symbols.value)
-  }
-  if (searchQuery.value) {
-    searchResults.value = updateList(searchResults.value)
-  }
+  watchlistItems.value = watchlistItems.value.map((item) => {
+    const q = quoteMap[item.symbol]
+    if (q) {
+      return { ...item, current_price: q.price, change_percent: q.change_percent }
+    }
+    return item
+  })
   lastUpdateTime.value = new Date().toLocaleTimeString()
-}
-
-// 切换市场类型
-function handleMarketTypeChange(type) {
-  activeMarketType.value = type
-  searchQuery.value = ''
-  searchResults.value = []
-  if (type === 'watchlist') {
-    fetchWatchlist().then(() => startRealtimePolling())
-  } else {
-    fetchSymbols(type).then(() => startRealtimePolling())
-  }
 }
 
 // 右键菜单
@@ -415,23 +243,10 @@ function handleOpenChart(symbol) {
   }
 }
 
-// 市场分析
-function handleMarketAnalyze(symbol) {
-  contextMenu.visible = false
-  if (window.electronAPI?.openSymbolAnalysis) {
-    window.electronAPI.openSymbolAnalysis({
-      symbol: symbol.symbol,
-      name: symbol.name,
-      market_type: symbol.market_type
-    })
-  }
-}
-
 // 复制代码
 function handleCopyCode(symbol) {
   contextMenu.visible = false
   navigator.clipboard.writeText(symbol.symbol).catch(() => {
-    // fallback
     const ta = document.createElement('textarea')
     ta.value = symbol.symbol
     document.body.appendChild(ta)
@@ -446,7 +261,7 @@ function handleClickOutside() {
   contextMenu.visible = false
 }
 
-// 页面可见性: 不可见时停止轮询, 可见时恢复
+// 页面可见性
 function handleVisibility() {
   if (document.hidden) {
     stopRealtimePolling()
@@ -455,13 +270,8 @@ function handleVisibility() {
   }
 }
 
-// 监听搜索输入
-watch(searchQuery, (val) => {
-  handleSearch(val)
-})
-
-// 监听显示列表变化，更新 WS 订阅
-watch(displaySymbols, (list) => {
+// 监听自选列表变化，更新 WS 订阅
+watch(watchlistItems, (list) => {
   const currentSymbols = list.map((s) => s.symbol).slice(0, 50)
   if (currentSymbols.length > 0) {
     realtimeWS.updateQuotesSubscription(WS_SUBSCRIPTION_ID, currentSymbols, handleWSQuotes)
@@ -471,10 +281,7 @@ watch(displaySymbols, (list) => {
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('visibilitychange', handleVisibility)
-  await fetchMarketTypes()
-  // 默认加载自选列表
   await fetchWatchlist()
-  // 启动实时行情轮询
   startRealtimePolling()
 })
 
@@ -497,16 +304,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid #333;
-  background: #252526;
-  flex-shrink: 0;
-}
-
 .panel-header {
   display: flex;
   align-items: center;
@@ -525,6 +322,13 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.panel-action-btn,
 .panel-collapse-btn {
   display: flex;
   align-items: center;
@@ -538,6 +342,7 @@ onUnmounted(() => {
   border-radius: 3px;
 }
 
+.panel-action-btn:hover,
 .panel-collapse-btn:hover {
   background: #3e3e3e;
   color: #fff;

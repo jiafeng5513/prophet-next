@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 标的浏览器操作
   openSymbolInChart: (symbolInfo) => ipcRenderer.send('open-symbol-in-chart', symbolInfo),
   openSymbolAnalysis: (symbolInfo) => ipcRenderer.send('open-symbol-analysis', symbolInfo),
+  switchToPinnedTab: (tabType) => ipcRenderer.send('switch-to-pinned-tab', tabType),
   onLoadSymbol: (callback) => ipcRenderer.on('load-symbol', (event, data) => callback(data)),
   onAnalyzeSymbol: (callback) =>
     ipcRenderer.on('analyze-symbol', (event, data) => callback(data)),

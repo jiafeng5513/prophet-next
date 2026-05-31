@@ -706,7 +706,13 @@ function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
 // 模式管理
 let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'portfolio' | 'backtest' | 'settings'
 const modeState = {
-  trading: { viewIds: new Set(), activeViewId: null },
+  trading: {
+    viewIds: new Set(),
+    activeViewId: null,
+    pinnedViewIds: new Set(),
+    homeViewId: null,
+    marketBrowserViewId: null
+  },
   developing: { viewIds: new Set(), activeViewId: null },
   news: { viewId: null },
   market_analyze: { viewId: null },
@@ -847,6 +853,10 @@ function getDefaultTitle(type) {
       return '正在开发中'
     case 'symbol-browser':
       return '标的浏览器'
+    case 'home':
+      return '首页'
+    case 'market-browser':
+      return '标的浏览器'
     default:
       return ''
   }
@@ -913,7 +923,9 @@ function createView(type, options = {}) {
     portfolio: 'portfolio.html',
     backtest: 'backtest.html',
     news: 'news.html',
-    'symbol-browser': 'symbol-browser.html'
+    'symbol-browser': 'symbol-browser.html',
+    home: 'home.html',
+    'market-browser': 'market-browser.html'
   }
   const htmlFile = htmlFileMap[type]
   if (htmlFile) {
@@ -985,17 +997,45 @@ function switchMode(newMode) {
 
   if (newMode === 'trading') {
     const state = modeState.trading
-    if (state.viewIds.size === 0) {
-      // 首次进入交易模式，创建第一个图表标签页
-      const viewId = createView('chart')
-      state.viewIds.add(viewId)
-      state.activeViewId = viewId
+    // 创建固定标签页（首页和标的浏览器）
+    if (!state.homeViewId) {
+      const homeId = createView('home')
+      state.homeViewId = homeId
+      state.pinnedViewIds.add(homeId)
+      state.viewIds.add(homeId)
+    }
+    if (!state.marketBrowserViewId) {
+      const mbId = createView('market-browser')
+      state.marketBrowserViewId = mbId
+      state.pinnedViewIds.add(mbId)
+      state.viewIds.add(mbId)
     }
     // 创建标的浏览器左面板视图（如果尚未创建）
     createSymbolBrowserView()
-    newActiveViewId = state.activeViewId
-    // 构建标签页信息（仅图表标签页，不含标的浏览器）
+    newActiveViewId = state.homeViewId
+    // 构建标签页信息（固定标签在前，图表标签在后）
+    // 先添加固定标签
+    const homeVd = views.get(state.homeViewId)
+    if (homeVd) {
+      tabs.push({
+        viewId: state.homeViewId,
+        title: '首页',
+        type: 'home',
+        pinned: true
+      })
+    }
+    const mbVd = views.get(state.marketBrowserViewId)
+    if (mbVd) {
+      tabs.push({
+        viewId: state.marketBrowserViewId,
+        title: '标的浏览器',
+        type: 'market-browser',
+        pinned: true
+      })
+    }
+    // 再添加普通标签
     state.viewIds.forEach((vid) => {
+      if (state.pinnedViewIds.has(vid)) return
       const vd = views.get(vid)
       if (vd) tabs.push({ viewId: vid, title: vd.title || '新标签页', type: vd.type })
     })
@@ -1200,9 +1240,25 @@ ipcMain.on('switch-tab', (event, viewId) => {
   setActiveTab(viewId)
 })
 
+// 按标签页类型切换到固定标签页
+ipcMain.on('switch-to-pinned-tab', (event, tabType) => {
+  const state = modeState.trading
+  if (tabType === 'market-browser' && state.marketBrowserViewId) {
+    setActiveTab(state.marketBrowserViewId)
+  } else if (tabType === 'home' && state.homeViewId) {
+    setActiveTab(state.homeViewId)
+  }
+})
+
 ipcMain.on('close-tab', (event, viewId) => {
   const viewData = views.get(viewId)
   if (!viewData) return
+
+  // 不允许关闭固定标签页
+  if (modeState.trading.pinnedViewIds && modeState.trading.pinnedViewIds.has(viewId)) {
+    mainWindow.webContents.send('tab-limit', '固定标签页不可关闭')
+    return
+  }
 
   // 找到该视图所属的模式
   let viewMode = null
@@ -1213,10 +1269,16 @@ ipcMain.on('close-tab', (event, viewId) => {
     }
   }
 
-  // 至少保留1个标签页
-  if (viewMode && modeState[viewMode].viewIds && modeState[viewMode].viewIds.size <= 1) {
-    mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
-    return
+  // 至少保留1个标签页（不含固定标签）
+  if (viewMode && modeState[viewMode].viewIds) {
+    const pinnedCount = modeState[viewMode].pinnedViewIds
+      ? modeState[viewMode].pinnedViewIds.size
+      : 0
+    const closableCount = modeState[viewMode].viewIds.size - pinnedCount
+    if (closableCount <= 1) {
+      mainWindow.webContents.send('tab-limit', '至少需要保留1个标签页')
+      return
+    }
   }
 
   mainWindow.contentView.removeChildView(viewData.view)

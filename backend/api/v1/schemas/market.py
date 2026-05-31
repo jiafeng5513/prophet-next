@@ -216,3 +216,56 @@ class WatchlistReorderRequest(BaseModel):
     """自选排序请求"""
 
     symbols: List[str] = Field(..., description="按顺序排列的标的代码列表")
+
+
+# === 标的浏览器相关 ===
+
+class BrowserDataItem(BaseModel):
+    """标的浏览器数据条目"""
+
+    symbol: str = Field(..., description="标的代码")
+    name: str = Field("", description="标的名称")
+    price: Optional[float] = Field(None, description="最新价")
+    change_pct: Optional[float] = Field(None, description="涨跌幅 (%)")
+    volume: Optional[float] = Field(None, description="成交量")
+    turnover: Optional[float] = Field(None, description="成交额")
+    volume_ratio: Optional[float] = Field(None, description="量比")
+    turnover_rate: Optional[float] = Field(None, description="换手率 (%)")
+    amplitude: Optional[float] = Field(None, description="振幅 (%)")
+    total_mv: Optional[float] = Field(None, description="总市值")
+    circ_mv: Optional[float] = Field(None, description="流通市值")
+    pe_ratio: Optional[float] = Field(None, description="市盈率")
+    pb_ratio: Optional[float] = Field(None, description="市净率")
+    high: Optional[float] = Field(None, description="最高价")
+    low: Optional[float] = Field(None, description="最低价")
+    open: Optional[float] = Field(None, description="开盘价")
+    prev_close: Optional[float] = Field(None, description="昨收价")
+    high_24h: Optional[float] = Field(None, description="24h最高 (加密)")
+    low_24h: Optional[float] = Field(None, description="24h最低 (加密)")
+    exchange: Optional[str] = Field(None, description="交易所")
+    data_source: Optional[str] = Field(None, description="数据源")
+
+
+class BrowserDataResponse(BaseModel):
+    """标的浏览器数据响应"""
+
+    total: int = Field(0, description="标的总数")
+    data: List[BrowserDataItem] = Field(default_factory=list, description="标的数据")
+    updated_at: Optional[str] = Field(None, description="数据更新时间")
+
+
+class IndexQuoteItem(BaseModel):
+    """指数行情条目 (首页用)"""
+
+    symbol: str = Field(..., description="指数代码")
+    name: str = Field("", description="指数名称")
+    price: Optional[float] = Field(None, description="最新价")
+    change: Optional[float] = Field(None, description="涨跌额")
+    change_percent: Optional[float] = Field(None, description="涨跌幅 (%)")
+    sparkline: Optional[List[float]] = Field(None, description="迷你趋势数据")
+
+
+class IndicesResponse(BaseModel):
+    """宏观指数响应 (首页用)"""
+
+    quotes: List[IndexQuoteItem] = Field(default_factory=list, description="指数行情列表")

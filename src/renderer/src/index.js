@@ -31,7 +31,6 @@ const newTabBtn = document.getElementById('new-tab-btn')
 const sidebarTradingBtn = document.getElementById('sidebar-trading-btn')
 const sidebarDevelopingBtn = document.getElementById('sidebar-developing-btn')
 const sidebarNewsBtn = document.getElementById('sidebar-news-btn')
-const sidebarMarketBtn = document.getElementById('sidebar-market-btn')
 const sidebarPortfolioBtn = document.getElementById('sidebar-portfolio-btn')
 const sidebarBacktestBtn = document.getElementById('sidebar-backtest-btn')
 const sidebarSettingsBtn = document.getElementById('sidebar-settings-btn')
@@ -41,6 +40,7 @@ const scrollRightBtn = document.getElementById('scroll-right')
 const toggleAgentBtn = document.getElementById('toggle-agent-btn')
 const toggleDevToolsBtn = document.getElementById('toggle-devtools-btn')
 const openAgentWindowBtn = document.getElementById('open-agent-window-btn')
+const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn')
 const agentPanel = document.getElementById('agent-panel')
 const tabsContainerEl = document.querySelector('.tabs-container')
 const explorerPanel = document.getElementById('explorer-panel')
@@ -172,16 +172,18 @@ sidebarTradingBtn.addEventListener('click', () => {
   }
 })
 
+// 标题栏侧栏切换按钮 (参考 VSCode 主侧栏切换)
+sidebarToggleBtn.addEventListener('click', () => {
+  const isVisible = explorerPanel.classList.contains('visible')
+  window.electronAPI.toggleExplorerPanel(!isVisible)
+})
+
 sidebarDevelopingBtn.addEventListener('click', () => {
   window.electronAPI.switchMode('developing')
 })
 
 sidebarNewsBtn.addEventListener('click', () => {
   window.electronAPI.switchMode('news')
-})
-
-sidebarMarketBtn.addEventListener('click', () => {
-  window.electronAPI.switchMode('market_analyze')
 })
 
 sidebarPortfolioBtn.addEventListener('click', () => {
@@ -222,6 +224,7 @@ window.electronAPI.onModeSwitched((data) => {
   // 显示/隐藏左面板（开发模式:资源管理器, 交易模式:标的浏览器占位）
   const showLeftPanel = data.mode === 'developing' || data.mode === 'trading'
   explorerPanel.classList.toggle('visible', showLeftPanel)
+  sidebarToggleBtn.classList.toggle('sidebar-open', showLeftPanel)
   if (data.mode === 'developing' && explorerTree.children.length === 0) {
     loadExplorerTree()
   }
@@ -313,6 +316,7 @@ window.electronAPI.onTabActivated((viewId) => {
 if (window.electronAPI.onExplorerPanelVisibilityChanged) {
   window.electronAPI.onExplorerPanelVisibilityChanged((visible) => {
     explorerPanel.classList.toggle('visible', visible)
+    sidebarToggleBtn.classList.toggle('sidebar-open', visible)
   })
 }
 
@@ -585,6 +589,13 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'F12') {
     e.preventDefault()
     window.electronAPI.openDevTools()
+  }
+
+  // Ctrl+B / Cmd+B: 切换侧栏
+  if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+    e.preventDefault()
+    const isVisible = explorerPanel.classList.contains('visible')
+    window.electronAPI.toggleExplorerPanel(!isVisible)
   }
 })
 
@@ -1193,9 +1204,6 @@ function updateSidebarActiveState(mode) {
     case 'news':
       sidebarNewsBtn.classList.add('active')
       break
-    case 'market_analyze':
-      sidebarMarketBtn.classList.add('active')
-      break
     case 'portfolio':
       sidebarPortfolioBtn.classList.add('active')
       break
@@ -1230,7 +1238,7 @@ let agentPanelVisible = true
 toggleAgentBtn.addEventListener('click', () => {
   agentPanelVisible = !agentPanelVisible
   agentPanel.classList.toggle('hidden', !agentPanelVisible)
-  toggleAgentBtn.classList.toggle('active', agentPanelVisible)
+  toggleAgentBtn.classList.toggle('sidebar-open', agentPanelVisible)
   // 通知主进程更新 view 尺寸
   window.electronAPI.toggleAgentPanel(agentPanelVisible)
 })
@@ -1635,6 +1643,16 @@ mountChatPanel()
 
   if (terminalToggleBtn) {
     terminalToggleBtn.addEventListener('click', toggleTerminalPanel)
+  }
+
+  // 标题栏终端面板切换按钮
+  const terminalPanelToggleBtn = document.getElementById('terminal-panel-toggle-btn')
+  if (terminalPanelToggleBtn) {
+    terminalPanelToggleBtn.classList.toggle('sidebar-open', terminalPanelVisible)
+    terminalPanelToggleBtn.addEventListener('click', () => {
+      toggleTerminalPanel()
+      terminalPanelToggleBtn.classList.toggle('sidebar-open', terminalPanelVisible)
+    })
   }
 
   if (terminalNewBtn) {
