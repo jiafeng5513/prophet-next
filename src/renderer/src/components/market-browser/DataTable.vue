@@ -8,7 +8,7 @@
           :key="col.key"
           class="header-cell"
           :class="{ sortable: col.sortable, sorted: sortKey === col.key, sticky: col.sticky }"
-          :style="{ width: col.width + 'px', minWidth: col.minWidth + 'px' }"
+          :style="{ width: getColWidth(col.key) + 'px', minWidth: col.minWidth + 'px' }"
           @click="col.sortable && toggleSort(col.key)"
         >
           <span class="header-label">{{ col.label }}</span>
@@ -23,6 +23,10 @@
               <path d="M5 2L8 5H2zM5 8L2 5h6z"/>
             </svg>
           </span>
+          <div
+            class="resize-handle"
+            @mousedown.stop="startResize($event, col)"
+          ></div>
         </div>
       </div>
     </div>
@@ -46,7 +50,7 @@
               :key="col.key"
               class="table-cell"
               :class="[col.align || 'left', getCellClass(col, row), { sticky: col.sticky }]"
-              :style="{ width: col.width + 'px', minWidth: col.minWidth + 'px' }"
+              :style="{ width: getColWidth(col.key) + 'px', minWidth: col.minWidth + 'px' }"
             >
               <template v-if="col.key === 'change_pct'">
                 <span :class="getChangeClass(row[col.key])">{{ formatPercent(row[col.key]) }}</span>
@@ -104,6 +108,52 @@ const scrollTop = ref(0)
 const containerHeight = ref(600)
 
 const visibleColumns = computed(() => props.columns.filter(c => c.visible !== false))
+
+// 响应式列宽（允许拖拽调整）
+const columnWidths = ref({})
+
+watch(() => props.columns, (cols) => {
+  cols.forEach(col => {
+    if (!(col.key in columnWidths.value)) {
+      columnWidths.value[col.key] = col.width
+    }
+  })
+}, { immediate: true })
+
+function getColWidth(key) {
+  return columnWidths.value[key] || props.columns.find(c => c.key === key)?.width || 100
+}
+
+// 列宽拖拽调整
+let resizingCol = null
+let resizeStartX = 0
+let resizeStartWidth = 0
+
+function startResize(event, col) {
+  resizingCol = col
+  resizeStartX = event.clientX
+  resizeStartWidth = getColWidth(col.key)
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function onResizeMove(event) {
+  if (!resizingCol) return
+  const diff = event.clientX - resizeStartX
+  const minW = resizingCol.minWidth || 50
+  const newWidth = Math.max(minW, resizeStartWidth + diff)
+  columnWidths.value[resizingCol.key] = newWidth
+}
+
+function onResizeEnd() {
+  resizingCol = null
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
 
 // 排序后的数据
 const sortedData = computed(() => {
@@ -242,6 +292,7 @@ onUnmounted(() => {
   font-weight: 500;
   user-select: none;
   flex-shrink: 0;
+  position: relative;
 }
 
 .header-cell.sortable {
@@ -266,6 +317,22 @@ onUnmounted(() => {
 .sort-indicator {
   display: flex;
   align-items: center;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 3;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: #4fc3f7;
 }
 
 .table-body {

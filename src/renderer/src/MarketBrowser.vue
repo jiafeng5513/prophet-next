@@ -200,8 +200,14 @@ const contextMenu = ref({ visible: false, x: 0, y: 0, row: null })
 
 function openInChart(row) {
   contextMenu.value.visible = false
-  if (window.electronAPI && window.electronAPI.openChart) {
-    window.electronAPI.openChart(row.symbol, row.name)
+  if (window.electronAPI?.openSymbolInChart) {
+    window.electronAPI.openSymbolInChart({
+      symbol: row.symbol,
+      name: row.name,
+      market_type: activeMarket.value,
+      exchange: row.exchange || '',
+      data_source: row.data_source || ''
+    })
   }
 }
 

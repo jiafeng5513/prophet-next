@@ -412,18 +412,7 @@ Response:
 1. [done]原有的侧边栏标的浏览器没有进行清理，只需保留自选功能
 2. [done]默认打开首页，无需默认打开BTCUSDT的K线图
 3. 市场概览中，恒生指数，纳斯达克，道琼斯这三个指数没有数值更新
-4. 标的浏览器双击跳转打开K线图
-5. 标的浏览器的列宽要能调整
-6. 自选侧栏的展开和关闭参考vscode的主侧栏，可以参考代码：D:\ProjectsSoftware\Node\vscode-main\vscode-main\
-
-D:\ProjectsSoftware\Node\vscode-main\vscode-main\src\vs\sessions\browser\layoutActions.ts
-Lines 24-25
-const sidebarToggleClosedIcon = registerIcon('agent-sidebar-toggle-closed', Codicon.layoutSidebarLeftOff, ...);
-const sidebarToggleOpenIcon = registerIcon('agent-sidebar-toggle-open', Codicon.layoutSidebarLeft, ...);
-动作：workbench.action.agentToggleSidebarVisibility
-菜单：Menus.TitleBarLeftLayout
-
-action mode icon 
-D:\ProjectsSoftware\Node\vscode-main\vscode-main\src\vs\sessions\browser\media
-
-@vscode/codicons 
+4. [done]标的浏览器双击跳转打开K线图
+5. [done]标的浏览器的列宽要能调整
+6. [done]自选侧栏的展开和关闭参考vscode的主侧栏
+7. 清理遗留重复的交互（自选窗口的展开和关闭等）
