@@ -163,11 +163,7 @@ newTabBtn.addEventListener('click', () => {
 
 // 侧边栏: 模式切换按钮
 sidebarTradingBtn.addEventListener('click', () => {
-  if (currentMode === 'trading') {
-    // 已在交易模式，切换面板可见性
-    const isVisible = explorerPanel.classList.contains('visible')
-    window.electronAPI.toggleExplorerPanel(!isVisible)
-  } else {
+  if (currentMode !== 'trading') {
     window.electronAPI.switchMode('trading')
   }
 })
@@ -1354,7 +1350,6 @@ mountChatPanel()
   const terminalResizeHandle = document.getElementById('terminal-resize-handle')
   const terminalToggleBtn = document.getElementById('terminal-toggle-btn')
   const terminalNewBtn = document.getElementById('terminal-new-btn')
-  const statusBarTerminalBtn = document.getElementById('status-bar-terminal-btn')
   const terminalTabsEl = document.getElementById('terminal-tabs')
   const terminalContentEl = document.getElementById('terminal-content')
 
@@ -1637,10 +1632,6 @@ mountChatPanel()
   }
 
   // --- 事件绑定 ---
-  if (statusBarTerminalBtn) {
-    statusBarTerminalBtn.addEventListener('click', toggleTerminalPanel)
-  }
-
   if (terminalToggleBtn) {
     terminalToggleBtn.addEventListener('click', toggleTerminalPanel)
   }

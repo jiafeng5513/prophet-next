@@ -7,7 +7,6 @@
       <div class="header-actions">
         <button class="header-btn" title="历史会话" @click="showSessions = true">☰</button>
         <button class="header-btn" title="新对话" @click="newChat">+</button>
-        <button class="header-btn agent-window-btn" title="AI 深度分析 (Ctrl+Shift+A)" @click="openAgentWindow">🤖</button>
       </div>
     </div>
 
@@ -234,9 +233,5 @@ onMounted(() => {
 .header-btn:hover {
   background: #333;
   color: #fff;
-}
-
-.agent-window-btn {
-  font-size: 16px;
 }
 </style>

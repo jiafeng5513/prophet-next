@@ -1,20 +1,7 @@
 <template>
   <div class="symbol-browser">
-    <!-- 面板标题栏 -->
     <div class="panel-header">
       <span class="panel-title">自选</span>
-      <div class="panel-actions">
-        <button class="panel-action-btn" title="打开标的浏览器" @click="openMarketBrowser">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1a6 6 0 1 1 0 12A6 6 0 0 1 8 2zm-.5 2v3.5H4v1h3.5V12h1V8.5H12v-1H8.5V4h-1z"/>
-          </svg>
-        </button>
-        <button class="panel-collapse-btn" title="折叠面板" @click="collapsePanel">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M11 1L5 8l6 7V1z"/>
-          </svg>
-        </button>
-      </div>
     </div>
 
     <!-- 标的列表 -->
@@ -56,20 +43,6 @@ import SymbolContextMenu from './components/symbol-browser/SymbolContextMenu.vue
 import { realtimeWS } from './service/realtimeWSClient'
 
 const API_BASE = 'http://127.0.0.1:8100/api/v1/market'
-
-// 折叠面板
-function collapsePanel() {
-  if (window.electronAPI && window.electronAPI.toggleExplorerPanel) {
-    window.electronAPI.toggleExplorerPanel(false)
-  }
-}
-
-// 打开标的浏览器标签页
-function openMarketBrowser() {
-  if (window.electronAPI?.switchToPinnedTab) {
-    window.electronAPI.switchToPinnedTab('market-browser')
-  }
-}
 
 // 状态
 const loading = ref(false)
@@ -307,7 +280,6 @@ onUnmounted(() => {
 .panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 4px 8px;
   background: #252526;
   border-bottom: 1px solid #333;
@@ -320,32 +292,6 @@ onUnmounted(() => {
   color: #ccc;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.panel-action-btn,
-.panel-collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  color: #888;
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.panel-action-btn:hover,
-.panel-collapse-btn:hover {
-  background: #3e3e3e;
-  color: #fff;
 }
 
 .status-bar {

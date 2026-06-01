@@ -1070,31 +1070,6 @@
       color: #f48771;
     }
 
-    /* 状态栏终端按钮 */
-    .status-bar-terminal-btn {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 0 8px;
-      height: 22px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.1s;
-      border: none;
-      background: transparent;
-      color: #ffffff;
-      font-size: 12px;
-      font-family: inherit;
-    }
-
-    .status-bar-terminal-btn:hover {
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    .status-bar-terminal-btn svg {
-      width: 14px;
-      height: 14px;
-    }
   </style>
 </head>
 
@@ -1231,10 +1206,6 @@
         </div>
       </div>
       <div class="status-bar-right">
-        <button class="status-bar-terminal-btn" id="status-bar-terminal-btn" title="切换终端面板">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2zm6.5 7.5H13v1H8.5v-1zM3.5 6l2 2-2 2-.7-.7L4.1 8l-1.3-1.3.7-.7z"/></svg>
-          <span>终端</span>
-        </button>
         <div class="status-bar-item" id="status-bar-port" title="服务端口">
           <span id="status-bar-port-label"></span>
         </div>
