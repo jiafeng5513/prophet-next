@@ -12,6 +12,10 @@ backend/**/__pycache__/
 backend/*.pyc
 backend/.env
 backend/data/
+# 运行时 SQLite 缓存（代码默认路径为 backend/src/data/）
+backend/src/data/*.db
+backend/src/data/*.db-wal
+backend/src/data/*.db-shm
 backend/logs/
 doc/api_keys.md
 nul
