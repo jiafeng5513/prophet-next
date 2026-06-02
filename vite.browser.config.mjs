@@ -34,7 +34,8 @@ export default defineConfig({
         backtest: resolve(__dirname, 'src/renderer/backtest.html'),
         news: resolve(__dirname, 'src/renderer/news.html'),
         symbolBrowser: resolve(__dirname, 'src/renderer/symbol-browser.html'),
-        marketBrowser: resolve(__dirname, 'src/renderer/market-browser.html')
+        marketBrowser: resolve(__dirname, 'src/renderer/market-browser.html'),
+        indicatorEditor: resolve(__dirname, 'src/renderer/indicator-editor.html')
       }
     }
   },
@@ -48,7 +49,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    monacoEditorPlugin({ languages: ['python'] }),
+    monacoEditorPlugin({ languages: ['python', 'javascript', 'typescript'] }),
     {
       name: 'browser-mode-plugin',
       config(config) {

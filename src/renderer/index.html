@@ -889,6 +889,18 @@
       cursor: pointer;
     }
 
+    .status-bar-btn {
+      cursor: pointer;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 0 8px;
+    }
+
+    .status-bar-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
     .status-bar-dot {
       width: 7px;
       height: 7px;
@@ -1135,9 +1147,6 @@
           <div class="activity-bar-item active" id="sidebar-trading-btn" title="交易模式">
             <img src="/trading_mode.svg" alt="交易" width="24" height="24">
           </div>
-          <div class="activity-bar-item" id="sidebar-developing-btn" title="开发模式">
-            <img src="/developing_mode.svg" alt="开发" width="24" height="24">
-          </div>
           <div class="activity-bar-item" id="sidebar-news-btn" title="新闻">
             <img src="/news_mode.svg" alt="新闻" width="24" height="24">
           </div>
@@ -1206,6 +1215,9 @@
         </div>
       </div>
       <div class="status-bar-right">
+        <div class="status-bar-item status-bar-btn" id="status-bar-indicator-editor" title="打开指标编辑器 (Ctrl+Shift+E)">
+          <span>&lt;/&gt;</span>
+        </div>
         <div class="status-bar-item" id="status-bar-port" title="服务端口">
           <span id="status-bar-port-label"></span>
         </div>

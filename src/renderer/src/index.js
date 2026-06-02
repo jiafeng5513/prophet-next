@@ -29,7 +29,6 @@ hljs.registerLanguage('css', css)
 const tabsContainer = document.getElementById('tabs')
 const newTabBtn = document.getElementById('new-tab-btn')
 const sidebarTradingBtn = document.getElementById('sidebar-trading-btn')
-const sidebarDevelopingBtn = document.getElementById('sidebar-developing-btn')
 const sidebarNewsBtn = document.getElementById('sidebar-news-btn')
 const sidebarPortfolioBtn = document.getElementById('sidebar-portfolio-btn')
 const sidebarBacktestBtn = document.getElementById('sidebar-backtest-btn')
@@ -55,13 +54,11 @@ let tabDragJustEnded = false
 // 模式管理
 let currentMode = 'trading'
 const modeViews = {
-  trading: new Set(),
-  developing: new Set()
+  trading: new Set()
 }
 // 保存每个模式的标签页 DOM 状态
 const modeSavedTabs = {
-  trading: { elements: [], activeTabId: null },
-  developing: { elements: [], activeTabId: null }
+  trading: { elements: [], activeTabId: null }
 }
 
 // 获取当前模式的 views
@@ -174,9 +171,15 @@ sidebarToggleBtn.addEventListener('click', () => {
   window.electronAPI.toggleExplorerPanel(!isVisible)
 })
 
-sidebarDevelopingBtn.addEventListener('click', () => {
-  window.electronAPI.switchMode('developing')
-})
+// 状态栏指标编辑器按钮
+const indicatorEditorBtn = document.getElementById('status-bar-indicator-editor')
+if (indicatorEditorBtn) {
+  indicatorEditorBtn.addEventListener('click', () => {
+    if (window.electronAPI.toggleIndicatorEditor) {
+      window.electronAPI.toggleIndicatorEditor()
+    }
+  })
+}
 
 sidebarNewsBtn.addEventListener('click', () => {
   window.electronAPI.switchMode('news')
@@ -199,7 +202,7 @@ window.electronAPI.onModeSwitched((data) => {
   const oldMode = currentMode
 
   // 保存旧模式的标签页 DOM 状态
-  if (oldMode === 'trading' || oldMode === 'developing') {
+  if (oldMode === 'trading') {
     const tabElements = Array.from(tabsContainer.querySelectorAll('.tab'))
     modeSavedTabs[oldMode] = {
       elements: tabElements,
@@ -217,13 +220,10 @@ window.electronAPI.onModeSwitched((data) => {
   // 显示/隐藏新建按钮
   newTabBtn.style.display = data.showNewTabBtn ? 'flex' : 'none'
 
-  // 显示/隐藏左面板（开发模式:资源管理器, 交易模式:标的浏览器占位）
-  const showLeftPanel = data.mode === 'developing' || data.mode === 'trading'
+  // 显示/隐藏左面板（交易模式:标的浏览器占位）
+  const showLeftPanel = data.mode === 'trading'
   explorerPanel.classList.toggle('visible', showLeftPanel)
   sidebarToggleBtn.classList.toggle('sidebar-open', showLeftPanel)
-  if (data.mode === 'developing' && explorerTree.children.length === 0) {
-    loadExplorerTree()
-  }
   // 交易模式下隐藏资源管理器内容（由 WebContentsView 覆盖）
   explorerPanel.classList.toggle('trading-mode', data.mode === 'trading')
 
@@ -292,11 +292,11 @@ window.electronAPI.onTabLimit((message) => {
   showToast(message)
 })
 
-// 响应文件打开（开发模式从资源管理器打开文件，主进程创建了新视图）
+// 响应文件打开（资源管理器打开文件，主进程创建了新视图）
 window.electronAPI.onFileOpened((data) => {
   const { viewId, title } = data
-  if (!modeViews.developing) modeViews.developing = new Set()
-  modeViews.developing.add(viewId)
+  if (!modeViews[currentMode]) modeViews[currentMode] = new Set()
+  modeViews[currentMode].add(viewId)
   const tab = createTabElement(viewId, title)
   tabsContainer.insertBefore(tab, newTabBtn)
   setActiveTab(viewId)
@@ -1193,9 +1193,6 @@ function updateSidebarActiveState(mode) {
   switch (mode) {
     case 'trading':
       sidebarTradingBtn.classList.add('active')
-      break
-    case 'developing':
-      sidebarDevelopingBtn.classList.add('active')
       break
     case 'news':
       sidebarNewsBtn.classList.add('active')

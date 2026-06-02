@@ -1,0 +1,7 @@
+{
+  "name": "Vegas Channel",
+  "id": "vegas-channel",
+  "version": "1.0.0",
+  "overlay": true,
+  "description": "5条EMA组成的Vegas趋势通道（EMA12/144/169/576/676）"
+}

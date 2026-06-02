@@ -140,4 +140,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // K 线图标注
   onAnnotationsUpdate: (callback) =>
     ipcRenderer.on('chart:annotations-update', (event, data) => callback(data)),
+
+  // 自定义指标
+  openIndicatorEditor: (options) => ipcRenderer.invoke('indicator:open-editor', options),
+  toggleIndicatorEditor: (options) => ipcRenderer.invoke('indicator:toggle-editor', options),
+  getActiveIndicators: () => ipcRenderer.invoke('indicator:get-active-indicators'),
+  listIndicators: () => ipcRenderer.invoke('indicator:list'),
+  getExternalEditor: () => ipcRenderer.invoke('get-external-editor'),
+  setExternalEditor: (editor) => ipcRenderer.invoke('set-external-editor', editor),
+  onIndicatorCodeUpdated: (callback) =>
+    ipcRenderer.on('indicator:code-updated', (event, data) => callback(data)),
+  onIndicatorRemoved: (callback) =>
+    ipcRenderer.on('indicator:removed', (event, data) => callback(data))
 })

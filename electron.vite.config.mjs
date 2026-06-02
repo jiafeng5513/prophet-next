@@ -15,7 +15,15 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   preload: {
-    build: { outDir: 'out/preload' },
+    build: {
+      outDir: 'out/preload',
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/preload/index.js'),
+          indicatorEditor: resolve(__dirname, 'src/preload/indicatorEditor.js')
+        }
+      }
+    },
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
@@ -40,7 +48,8 @@ export default defineConfig({
           news: resolve(__dirname, 'src/renderer/news.html'),
           symbolBrowser: resolve(__dirname, 'src/renderer/symbol-browser.html'),
           marketBrowser: resolve(__dirname, 'src/renderer/market-browser.html'),
-          agentWindow: resolve(__dirname, 'src/renderer/agent-window.html')
+          agentWindow: resolve(__dirname, 'src/renderer/agent-window.html'),
+          indicatorEditor: resolve(__dirname, 'src/renderer/indicator-editor.html')
         }
       }
     },
@@ -55,7 +64,7 @@ export default defineConfig({
     plugins: [
       vue(),
       // MonacoEditorPlugin({ languages: ['python'] }),
-      monacoEditorPlugin({ languages: ['python'] }),
+      monacoEditorPlugin({ languages: ['python', 'javascript', 'typescript'] }),
       {
         name: 'debug-plugin',
         // 使用更早的钩子

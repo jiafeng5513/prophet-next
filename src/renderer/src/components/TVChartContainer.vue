@@ -2,8 +2,8 @@
 import { onMounted, ref, onUnmounted } from 'vue'
 import { widget, version } from '@tradingview/advanced_charts/charting_library'
 import { UDFCompatibleDatafeed } from '@tradingview/advanced_charts/datafeeds/udf/src/udf-compatible-datafeed'
-import { vegasChannelIndicator } from './indicators/vegas-channel.js'
 import { loadForSymbol } from '../service/annotationService'
+import { loadCustomIndicators, setupHotReload, reportCrash } from '../service/indicatorLoader'
 
 function getLanguageFromURL() {
   const regex = new RegExp('[\\?&]lang=([^&#]*)')
@@ -111,7 +111,7 @@ onMounted(() => {
       theme: 'Dark',
       timezone: 'Asia/Shanghai',
       custom_indicators_getter: function (PineJS) {
-        return Promise.resolve([vegasChannelIndicator(PineJS)])
+        return loadCustomIndicators(PineJS)
       }
     }
     console.log('[TVChartContainer] 创建图表组件，选项:', widgetOptions)
@@ -291,6 +291,65 @@ onMounted(() => {
     } catch (err) {
       console.warn('[TVChartContainer] 加载历史标注失败:', err)
     }
+
+    // ===== 自定义指标热加载 =====
+    setupHotReload(async (id, action) => {
+      console.log(`[TVChartContainer] 指标热加载: ${id} (${action})`)
+      try {
+        const chart = chartWidget.activeChart()
+        const allStudies = chart.getAllStudies()
+
+        if (action === 'remove') {
+          // 移除已删除的指标实例
+          for (const study of allStudies) {
+            if (study.name && study.name.includes(id)) {
+              chart.removeEntity(study.id)
+              console.log(`[TVChartContainer] 已移除指标实例: ${study.name}`)
+            }
+          }
+          return
+        }
+
+        // action === 'update': 重新加载指标
+        // TradingView 的 custom_indicators_getter 只在 widget 创建时调用一次
+        // 热加载需要: 移除旧实例 → 重建 widget 的 custom indicators → 重新添加
+        // 最可靠的方式: 移除旧实例后通知用户重新添加
+        // 或: 使用 widget.remove() + 重建 (体验较差)
+        // 折中方案: 尝试通过 createStudy 重新添加
+
+        // 找到并移除旧实例
+        const removedStudies = []
+        for (const study of allStudies) {
+          if (study.name && study.name.includes(id)) {
+            removedStudies.push(study.name)
+            chart.removeEntity(study.id)
+          }
+        }
+
+        // 如果有旧实例被移除, 尝试重新添加
+        if (removedStudies.length > 0) {
+          // 等待一帧让图表更新
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          // 重新加载所有自定义指标 (这会触发 custom_indicators_getter 的更新)
+          // 注: TradingView 部分版本支持在运行时通过 createStudy 添加自定义指标
+          for (const studyName of removedStudies) {
+            try {
+              chart.createStudy(studyName, false, false)
+              console.log(`[TVChartContainer] 已重新添加指标: ${studyName}`)
+            } catch (e) {
+              console.warn(`[TVChartContainer] 重新添加指标失败 (${studyName}):`, e.message)
+              // 如果 createStudy 失败, 说明需要重建 widget
+              // 记录崩溃并通知用户
+              reportCrash(id)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[TVChartContainer] 热加载处理失败:', err)
+        reportCrash(id)
+      }
+    })
 
     // ===== 右键菜单: AI 分析此标的 =====
     if (window.electronAPI && window.electronAPI.openAgentWindow) {

@@ -26,6 +26,8 @@ import { is, electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/hivelogic_logo.png?asset'
 import terminalManager from './terminalManager'
 import { initAgentWindowIPC, openAgentWindow } from './agentWindow'
+import { initIndicatorManager, destroyIndicatorManager } from './indicatorManager'
+import { initIndicatorEditorIPC } from './indicatorEditorWindow'
 
 // 子进程输出解码：优先 UTF-8，GBK 兜底（中文 Windows 上 uv.exe 输出 GBK）
 function decodeOutput(buffer) {
@@ -704,7 +706,7 @@ function readDirectoryTree(dirPath, depth = 0, maxDepth = 1) {
 }
 
 // 模式管理
-let currentMode = 'trading' // 'trading' | 'developing' | 'news' | 'market_analyze' | 'portfolio' | 'backtest' | 'settings'
+let currentMode = 'trading' // 'trading' | 'news' | 'market_analyze' | 'portfolio' | 'backtest' | 'settings'
 const modeState = {
   trading: {
     viewIds: new Set(),
@@ -836,7 +838,7 @@ function getUUID() {
 
 // 获取动态顶部偏移（根据当前模式是否显示标签栏）
 function getTopOffset() {
-  const showTabBar = currentMode === 'trading' || currentMode === 'developing'
+  const showTabBar = currentMode === 'trading'
   return TITLE_BAR_HEIGHT + (showTabBar ? TAB_BAR_HEIGHT : 0)
 }
 
@@ -976,8 +978,15 @@ function createNewTab() {
 
 // 模式切换
 function switchMode(newMode) {
+  // developing 模式已废弃，改为打开指标编辑器
+  if (newMode === 'developing') {
+    const { toggleIndicatorEditorWindow } = require('./indicatorEditorWindow')
+    toggleIndicatorEditorWindow(mainWindow)
+    return
+  }
+
   // 保存当前模式的活动视图
-  if (currentMode === 'trading' || currentMode === 'developing') {
+  if (currentMode === 'trading') {
     modeState[currentMode].activeViewId = activeViewId
   }
 
@@ -987,9 +996,9 @@ function switchMode(newMode) {
   })
 
   currentMode = newMode
-  // 左面板在开发模式（资源管理器）和交易模式（标的浏览器）下显示
-  explorerPanelVisible = newMode === 'developing' || newMode === 'trading'
-  const showTabBar = newMode === 'trading' || newMode === 'developing'
+  // 左面板在交易模式（标的浏览器）下显示
+  explorerPanelVisible = newMode === 'trading'
+  const showTabBar = newMode === 'trading'
   const showNewTabBtn = newMode === 'trading'
 
   let tabs = []
@@ -1038,22 +1047,6 @@ function switchMode(newMode) {
       if (state.pinnedViewIds.has(vid)) return
       const vd = views.get(vid)
       if (vd) tabs.push({ viewId: vid, title: vd.title || '新标签页', type: vd.type })
-    })
-  } else if (newMode === 'developing') {
-    const state = modeState.developing
-    if (state.viewIds.size === 0) {
-      // 首次进入开发模式，打开示例策略文件
-      const wsPath = getWorkspacePath()
-      const defaultPath = join(wsPath, 'strategy', 'ma_cross_strategy', 'strategy.py')
-      const filePath = existsSync(defaultPath) ? defaultPath : null
-      const viewId = createView('python', { filePath })
-      state.viewIds.add(viewId)
-      state.activeViewId = viewId
-    }
-    newActiveViewId = state.activeViewId
-    state.viewIds.forEach((vid) => {
-      const vd = views.get(vid)
-      if (vd) tabs.push({ viewId: vid, title: vd.title || 'Python 编辑器', type: vd.type })
     })
   } else if (newMode === 'news') {
     const state = modeState.news
@@ -1215,9 +1208,9 @@ function setActiveTab(viewId) {
   })
   activeViewId = viewId
   // 更新当前模式的活动视图
-  if (currentMode === 'trading' || currentMode === 'developing') {
+  if (currentMode === 'trading') {
     const state = modeState[currentMode]
-    if (state.viewIds.has(viewId)) {
+    if (state.viewIds && state.viewIds.has(viewId)) {
       state.activeViewId = viewId
     }
   }
@@ -1369,6 +1362,19 @@ ipcMain.on('set-data-source', (event, dataSource) => {
   currentDataSource = dataSource
 })
 
+// 外部编辑器设置
+ipcMain.handle('get-external-editor', () => {
+  const config = readConfig()
+  return config.externalEditor || 'auto'
+})
+
+ipcMain.handle('set-external-editor', (event, editor) => {
+  const config = readConfig()
+  config.externalEditor = editor
+  writeConfig(config)
+  return true
+})
+
 // 读取文件内容
 ipcMain.handle('read-file', (event, filePath) => {
   // 安全检查：只允许读取工作区目录下的文件
@@ -1386,31 +1392,10 @@ ipcMain.handle('read-file', (event, filePath) => {
   }
 })
 
-// 在开发模式中打开文件
+// 在开发模式中打开文件 (legacy, developing 模式已移除)
 ipcMain.on('open-file', (event, filePath) => {
-  if (currentMode !== 'developing') return
-  const state = modeState.developing
-
-  // 检查是否已有打开此文件的标签页
-  for (const vid of state.viewIds) {
-    const vd = views.get(vid)
-    if (vd && vd.filePath === filePath) {
-      // 已打开，直接切换到此标签页
-      setActiveTab(vid)
-      mainWindow.webContents.send('tab-activated', vid)
-      return
-    }
-  }
-
-  // 创建新的编辑器视图
-  const viewId = createView('python', { filePath })
-  state.viewIds.add(viewId)
-  state.activeViewId = viewId
-
-  const viewData = views.get(viewId)
-  const title = viewData ? viewData.title : 'Python 编辑器'
-  mainWindow.webContents.send('file-opened', { viewId, title })
-  setActiveTab(viewId)
+  // developing 模式已废弃, 此 handler 保留兼容性
+  return
 })
 
 // 监听 Agent 面板切换
@@ -1870,9 +1855,18 @@ app.whenReady().then(() => {
   // 初始化 Agent Window IPC
   initAgentWindowIPC(mainWindow)
 
+  // 初始化自定义指标管理器 + 编辑器窗口 IPC
+  initIndicatorManager(mainWindow, getWorkspacePath())
+  initIndicatorEditorIPC(mainWindow)
+
   // 注册全局快捷键: Ctrl+Shift+A 打开 Agent Window
   globalShortcut.register('CommandOrControl+Shift+A', () => {
     ipcMain.emit('agent:toggle-window')
+  })
+
+  // 注册全局快捷键: Ctrl+Shift+E 打开指标编辑器
+  globalShortcut.register('CommandOrControl+Shift+E', () => {
+    ipcMain.emit('indicator:toggle-editor')
   })
 
   // 自动拉起后端服务
@@ -1896,6 +1890,7 @@ app.whenReady().then(() => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   stopFastApiServer()
+  destroyIndicatorManager()
   if (process.platform !== 'darwin') {
     app.quit()
   }
