@@ -172,7 +172,7 @@ sidebarToggleBtn.addEventListener('click', () => {
 })
 
 // 状态栏指标编辑器按钮
-const indicatorEditorBtn = document.getElementById('status-bar-indicator-editor')
+const indicatorEditorBtn = document.getElementById('titlebar-indicator-editor-btn')
 if (indicatorEditorBtn) {
   indicatorEditorBtn.addEventListener('click', () => {
     if (window.electronAPI.toggleIndicatorEditor) {

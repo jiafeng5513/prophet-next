@@ -889,18 +889,6 @@
       cursor: pointer;
     }
 
-    .status-bar-btn {
-      cursor: pointer;
-      font-family: 'Consolas', 'Courier New', monospace;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 0 8px;
-    }
-
-    .status-bar-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
     .status-bar-dot {
       width: 7px;
       height: 7px;
@@ -1107,6 +1095,11 @@
         <button class="sidebar-toggle-btn agent-window-btn" id="open-agent-window-btn" title="Agent Window (Ctrl+Shift+A)">
           <img src="/sessions-icon.svg" alt="Agent" width="16" height="16">
         </button>
+        <button class="titlebar-btn" id="titlebar-indicator-editor-btn" title="指标编辑器 (Ctrl+Shift+E)">
+          <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#e5a63a">
+            <path d="M4.708 5.578L2.061 8.224l2.647 2.646-.708.708L.293 7.87l.354-.354 3.354-3.354.707.708zm6.584 0l2.647 2.646-2.647 2.646.708.708L15.707 7.87l-.354-.354-3.354-3.354-.707.708zM8.943 2.018l1.105.23-2.07 9.916-1.106-.23 2.07-9.916z"/>
+          </svg>
+        </button>
         <button class="sidebar-toggle-btn sidebar-open" id="sidebar-toggle-btn" title="切换侧栏 (Ctrl+B)">
           <!-- 侧栏打开图标 (layout-sidebar-left) - VS Code codicon -->
           <svg class="icon-open" width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
@@ -1215,9 +1208,6 @@
         </div>
       </div>
       <div class="status-bar-right">
-        <div class="status-bar-item status-bar-btn" id="status-bar-indicator-editor" title="打开指标编辑器 (Ctrl+Shift+E)">
-          <span>&lt;/&gt;</span>
-        </div>
         <div class="status-bar-item" id="status-bar-port" title="服务端口">
           <span id="status-bar-port-label"></span>
         </div>
