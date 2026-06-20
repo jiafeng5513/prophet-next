@@ -118,12 +118,13 @@ function setDsaConfig(dsaConfig) {
 }
 
 function getBackendPath() {
-  // 后端已内置到 backend/ 目录
+  // 服务端代码位于仓库的 server/ 目录（与 client/ 同级）
+  // 注意：这是开发期的临时本地桥接；Phase 1 解耦后改为可配置的远程服务端地址
   if (is.dev) {
-    return join(app.getAppPath(), 'backend')
+    return join(app.getAppPath(), '..', 'server')
   }
-  // 打包后 backend/ 与 exe 同级
-  return join(dirname(app.getPath('exe')), 'backend')
+  // 打包后 server/ 与 exe 同级
+  return join(dirname(app.getPath('exe')), 'server')
 }
 
 // 生成 DSA 的 .env 文件（仅在不存在时创建，避免覆盖后端 API 已保存的配置）

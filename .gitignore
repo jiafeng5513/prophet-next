@@ -5,17 +5,17 @@ out
 .eslintcache
 *.log*
 
-# Python backend
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/*.pyc
-backend/.env
-backend/data/
-# 运行时 SQLite 缓存（代码默认路径为 backend/src/data/）
-backend/src/data/*.db
-backend/src/data/*.db-wal
-backend/src/data/*.db-shm
-backend/logs/
+# Python server (backend)
+server/.venv/
+server/__pycache__/
+server/**/__pycache__/
+server/*.pyc
+server/.env
+server/data/
+# 运行时 SQLite 缓存（代码默认路径为 server/src/data/）
+server/src/data/*.db
+server/src/data/*.db-wal
+server/src/data/*.db-shm
+server/logs/
 doc/api_keys.md
 nul
